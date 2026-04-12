@@ -1,0 +1,98 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Đăng ký thành viên mới | HRM System{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-page auth-page--hrm">
+  <div class="auth-page__header">
+    <div class="auth-page__brand">HRM<span>System</span></div>
+    <a href="#">Hỗ trợ kỹ thuật</a>
+  </div>
+
+  <div class="auth auth--split">
+    <section class="auth__hero auth__hero--hrm">
+      <h3>Hệ thống Quản trị Nhân sự</h3>
+      <h2>Kết nối & Phát triển</h2>
+
+      <p>
+        HRM System là nền tảng quản lý nguồn nhân lực hiện đại, 
+        giúp doanh nghiệp tối ưu hóa quy trình quản lý hồ sơ, 
+        chấm công và tính lương.
+      </p>
+
+      <ul class="auth__hero-features">
+        <li><i class="fas fa-check-circle"></i> Quản lý hồ sơ nhân viên tập trung</li>
+        <li><i class="fas fa-check-circle"></i> Hệ thống chấm công & nghỉ phép thông minh</li>
+        <li><i class="fas fa-check-circle"></i> Tra cứu bảng lương trực tuyến</li>
+      </ul>
+
+      <p class="auth__hero-footer">
+        Dự án tốt nghiệp - Khoa CNTT - Đại học Kinh doanh và Công nghệ Hà Nội (HUBT).
+      </p>
+    </section>
+
+    <section class="auth__container">
+      <h2 class="auth__title">Đăng ký tài khoản nhân sự</h2>
+      
+      {% if errors %}
+        {% for error in errors %}
+          <div class="alert alert--error">{{ error }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="POST" class="auth__form">
+        <div class="form-group">
+          <label>Thông tin cơ bản</label>
+          <input name="full_name" placeholder="Họ và tên nhân viên" value="{{ data.full_name if data else '' }}" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <input name="email" type="email" placeholder="Email công ty" value="{{ data.email if data else '' }}" required>
+          </div>
+          <div class="form-group">
+            <input name="phone" placeholder="Số điện thoại" value="{{ data.phone if data else '' }}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Thông tin công tác</label>
+          <input name="position" placeholder="Vị trí công việc (Vd: Developer, Tester...)" value="{{ data.position if data else '' }}" required>
+        </div>
+
+        <div class="form-group">
+          <select name="department_id" required>
+            <option value="" disabled selected>Chọn phòng ban</option>
+            <option value="1" {% if data and data.department_id == '1' %}selected{% endif %}>Phòng Kỹ thuật</option>
+            <option value="2" {% if data and data.department_id == '2' %}selected{% endif %}>Phòng Nhân sự</option>
+            <option value="3" {% if data and data.department_id == '3' %}selected{% endif %}>Phòng Kế toán</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Mật khẩu hệ thống</label>
+          <input type="password" name="password" placeholder="Mật khẩu (tối thiểu 8 ký tự)" required>
+        </div>
+        
+        <div class="form-group">
+          <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block">HOÀN TẤT ĐĂNG KÝ</button>
+      </form>
+
+      <div class="auth__links">
+        Bằng việc đăng ký, bạn xác nhận tuân thủ các Điều khoản bảo mật dữ liệu nhân sự nội bộ.
+      </div>
+
+      <div class="auth__links">
+        Bạn đã có tài khoản? <a href="{{ url_for('auth.login') }}">Đăng nhập ngay</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

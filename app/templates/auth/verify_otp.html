@@ -1,0 +1,73 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Xác thực mã OTP | HRM System{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-page auth-page--verify">
+  <div class="auth-page__header">
+    <div class="auth-page__brand">HRM <span>Portal</span></div>
+    <a href="{{ url_for('auth.login') }}">Quay lại đăng nhập</a>
+  </div>
+
+  <div class="auth auth--center">
+    <section class="auth__container">
+      <div class="auth__icon-header">
+        <i class="fas fa-shield-alt"></i>
+      </div>
+      
+      <h2 class="auth__title">Xác thực mã OTP</h2>
+      <p class="auth__subtitle">Lớp bảo vệ bổ sung để đảm bảo an toàn cho tài khoản nhân viên.</p>
+
+      {% if error %}
+        <div class="alert alert--error">
+          <i class="fas fa-exclamation-circle"></i> {{ error }}
+        </div>
+      {% endif %}
+
+      <div class="auth__status-msg">
+        Vui lòng kiểm tra mã xác thực đã được gửi tới thông tin liên hệ của bạn.
+      </div>
+
+      <form method="POST" class="auth__form">
+        <input type="hidden" name="identifier" value="{{ identifier }}">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="otp_type">Phương thức</label>
+            <select name="otp_type" id="otp_type" required>
+              <option value="email">Email công ty</option>
+              <option value="sms">Tin nhắn SMS</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="otp_code">Mã OTP</label>
+            <input type="text" name="otp_code" id="otp_code" 
+                   placeholder="6 chữ số" maxlength="6" required autofocus>
+          </div>
+        </div>
+
+        <div class="form-divider"><span>Thông tin bảo mật mới</span></div>
+
+        <div class="form-group">
+          <label for="new_password">Mật khẩu mới</label>
+          <input type="password" name="new_password" id="new_password" 
+                 placeholder="Thiết lập mật khẩu mới" minlength="8" required>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block">
+          XÁC NHẬN & ĐẶT LẠI MẬT KHẨU
+        </button>
+      </form>
+
+      <div class="auth__footer">
+        <p>Mã OTP có hiệu lực trong vòng 5 phút.</p>
+        <a href="{{ url_for('auth.forgot_password') }}" class="btn-text">Gửi lại mã mới</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

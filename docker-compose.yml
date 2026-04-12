@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hrm-postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: hrm_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - hrm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hrm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    container_name: hrm-redis
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    container_name: hrm-app-backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env.docker
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./:/app
+
+volumes:
+  hrm_postgres_data:

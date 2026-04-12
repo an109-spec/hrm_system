@@ -1,0 +1,71 @@
+{% extends "layouts/base.html" %}
+{% block title %}Đăng nhập hệ thống | HRM System{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-page auth-page--hrm">
+  <div class="auth-page__header">
+    <div class="auth-page__brand">HRM <span>Portal</span></div>
+    <a href="{{ url_for('home.support_page') }}">Hỗ trợ kỹ thuật</a>
+  </div>
+
+  <div class="auth auth--split">
+    <section class="auth__hero auth__hero--login">
+      <div class="auth__hero-logo">HRM<span>System</span></div>
+      <p>Giải pháp quản trị nhân sự toàn diện cho doanh nghiệp.</p>
+      
+      <div class="auth__hero-info">
+        <div class="info-item">
+            <i class="fas fa-shield-alt"></i>
+            <span>Bảo mật dữ liệu nội bộ</span>
+        </div>
+        <div class="info-item">
+            <i class="fas fa-bolt"></i>
+            <span>Tự động hóa quy trình nhân sự</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="auth__container">
+      <h2 class="auth__title">Đăng nhập</h2>
+      <p class="auth__subtitle">Sử dụng tài khoản nhân viên để truy cập hệ thống</p>
+
+      {% if error %}
+        <div class="alert alert--error">
+            <i class="fas fa-exclamation-circle"></i> {{ error }}
+        </div>
+      {% endif %}
+
+      <form method="POST" class="auth__form">
+        <input type="hidden" name="next" value="{{ next_url or '' }}">
+        
+        <div class="form-group">
+          <label for="identifier">Tài khoản</label>
+          <input name="identifier" id="identifier" placeholder="Email hoặc Số điện thoại" required autofocus>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Mật khẩu</label>
+          <input type="password" name="password" id="password" placeholder="Nhập mật khẩu" required>
+        </div>
+
+        <div class="auth__actions">
+            <label class="remember-me">
+                <input type="checkbox" name="remember"> Duy trì đăng nhập
+            </label>
+            <a href="{{ url_for('auth.forgot_password') }}" class="forgot-link">Quên mật khẩu?</a>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block">ĐĂNG NHẬP HỆ THỐNG</button>
+      </form>
+
+      <div class="auth__footer-links">
+        <span>Chưa có tài khoản nhân viên? <a href="{{ url_for('auth.register') }}">Đăng ký tại đây</a></span>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
