@@ -40,6 +40,7 @@ class Employee(BaseModel):
 
     # Relationships
     # Mối quan hệ với người quản lý và nhân viên cấp dưới
+    user = relationship('User', back_populates='employee_profile')
     subordinates = relationship('Employee', backref=db.backref('manager', remote_side='Employee.id'))
     
     # Các liên kết tới các bảng nghiệp vụ khác (sẽ định nghĩa sau)

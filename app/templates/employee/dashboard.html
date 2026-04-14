@@ -1,0 +1,48 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Dashboard nhân viên{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block content %}
+{% if not employee %}<p>Chưa có hồ sơ nhân viên.</p>{% else %}
+<div class="grid two">
+  <section class="card">
+    <h3>👤 Hồ sơ nhanh</h3>
+    <p><strong>{{ employee.full_name }}</strong> (Mã NV: #{{ employee.id }})</p>
+    <p>Trạng thái: {{ '🟢 Đang làm việc' if employee.working_status == 'working' else '⚪ Đã hết ca' }}</p>
+  </section>
+  <section class="card center">
+    <h3>🕒 Chấm công hôm nay</h3>
+    <p>{{ now.strftime('%H:%M:%S - %A, %d/%m/%Y') }}</p>
+    {% if not attendance %}
+      <button class="btn green" onclick="submitAttendance()">🔳 QUÉT QR CHECK-IN</button>
+      <p>Chúc bạn một ngày làm việc hiệu quả!</p>
+    {% elif attendance.check_in and not attendance.check_out %}
+      <button class="btn orange" onclick="submitAttendance()">🔳 QUÉT QR CHECK-OUT</button>
+      <p>Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}.</p>
+    {% else %}
+      <button class="btn" disabled>✅ ĐÃ HOÀN THÀNH CÔNG VIỆC</button>
+      <p>Tổng giờ: {{ attendance.working_hours }}h</p>
+    {% endif %}
+    <small>☕ Nghỉ trưa: 12:00 - 13:00 (tự động trừ)</small>
+  </section>
+</div>
+<div class="grid three">
+  <section class="card"><h4>Công hôm nay</h4><p>{{ attendance.working_hours if attendance and attendance.working_hours else 0 }}h</p></section>
+  <section class="card"><h4>Số ngày phép còn lại</h4><p>{{ leave_balance.remaining_days if leave_balance else 0 }} ngày</p></section>
+  <section class="card"><h4>Lương tháng gần nhất</h4><p>{{ '{:,.0f}'.format(latest_salary.net_salary) if latest_salary else 0 }} VND</p></section>
+</div>
+<section class="card">
+  <h3>🔔 THÔNG BÁO MỚI NHẤT</h3>
+  {% for n in notifications %}
+    <p class="{{ 'new' if not n.is_read else '' }}">{{ n.title }} - {{ n.content }} ({{ n.created_at.strftime('%H:%M %d/%m/%Y') }})</p>
+  {% else %}<p>Không có thông báo.</p>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+async function submitAttendance(){
+  const res = await fetch("{{ url_for('employee.check_in_out') }}", {method:'POST'});
+  if(res.ok){ location.reload(); }
+}
+</script>
+{% endblock %}

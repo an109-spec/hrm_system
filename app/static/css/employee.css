@@ -1,0 +1,8 @@
+.card {background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:16px}.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:repeat(3,1fr)}
+.center{text-align:center}.btn{padding:10px 14px;border:none;border-radius:8px;background:#94a3b8;color:#fff;cursor:pointer}
+.btn.green{background:#16a34a}.btn.orange{background:#f97316}
+.form-grid{display:grid;gap:10px}.form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px}
+.new{font-weight:700;color:#0f172a}
+table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+@media (max-width:900px){.grid.two,.grid.three{grid-template-columns:1fr}}

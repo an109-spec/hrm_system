@@ -1,0 +1,13 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Bảng lương{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>💰 Bảng lương của tôi - {{ year }}</h2>
+  <table><tr><th>Tháng/Năm</th><th>Công chuẩn</th><th>Công thực tế</th><th>Thực nhận</th><th>Trạng thái</th></tr>
+  {% for s in salary_records %}
+  <tr><td>{{ '%02d'|format(s.month) }}/{{ s.year }}</td><td>{{ s.standard_work_days }}</td><td>{{ s.total_work_days }}</td><td>{{ '{:,.0f}'.format(s.net_salary) }}</td><td>{{ s.status }}</td></tr>
+  {% else %}<tr><td colspan="5">Chưa có dữ liệu lương.</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

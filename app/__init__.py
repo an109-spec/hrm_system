@@ -13,6 +13,7 @@ from flask_mail import Mail
 
 # --- IMPORT BLUEPRINTS HRM ---
 from app.modules.auth import auth_bp
+from app.modules.employee import employee_bp
 # Dự kiến các module mới cho HRM
 # from app.modules.employee import employee_bp 
 # from app.modules.payroll import payroll_bp
@@ -116,7 +117,7 @@ def ensure_default_admin(app):
 
 def register_blueprints(app):
     app.register_blueprint(auth_bp) # Đăng nhập/Đăng ký
-   
+    app.register_blueprint(employee_bp) # Nhân viên
  
     # Duy An sẽ bổ sung các Blueprint dưới đây khi code xong module tương ứng:
     # app.register_blueprint(employee_bp, url_prefix='/employees')

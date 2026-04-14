@@ -16,52 +16,16 @@
   <div class="header-top">
     <div class="container header-top-inner">
       <div class="top-left">
-        {% if current_user %}
-            {% if current_user.role == 'admin' %}
-                <a href="{{ url_for('admin.dashboard') }}"><i class="fas fa-user-shield"></i> Quản trị hệ thống</a>
-            {% elif current_user.role == 'manager' %}
-                <a href="{{ url_for('manager.dashboard') }}"><i class="fas fa-users-cog"></i> Quản lý phòng ban</a>
-            {% endif %}
-            <span>|</span>
-            <a href="{{ url_for('employee.profile') }}">Cổng nhân viên</a>
-        {% endif %}
+        {% if current_user %}<a href="{{ url_for('employee.dashboard') }}">Cổng nhân viên</a>{% endif %}
       </div>
 
       <div class="top-right">
         {% if current_user %}
-          <details class="notify-menu">
-            <summary>🔔 Thông báo {% if unread_notifications %}({{ unread_notifications }}){% endif %}</summary>
-            <div class="notify-dropdown">
-              {% if header_notifications %}
-                {% for n in header_notifications %}
-                  <div class="notify-item{% if not n.is_read %} notify-item--new{% endif %}">
-                    <strong>{{ n.title }}</strong>
-                    <p>{{ n.content }}</p> <small>{{ n.created_at.strftime('%H:%M %d/%m/%Y') }}</small>
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="notify-item">Không có thông báo mới</div>
-              {% endif %}
-            </div>
-          </details>
+          <a href="{{ url_for('employee.notifications') }}">🔔 Thông báo {% if unread_notifications %}({{ unread_notifications }}){% endif %}</a>
           <span>|</span>
-          <a href="{{ url_for('chat.internal_chat') }}">💬 Chat nội bộ</a>
+          <a href="{{ url_for('employee.profile') }}"><i class="fas fa-user-circle"></i> {{ current_user.username }}</a>
           <span>|</span>
-          
-          <div class="account-menu">
-            <button class="account-menu__trigger" type="button">
-                <i class="fas fa-user-circle"></i> {{ current_user.full_name or current_user.username }}
-            </button>
-            <div class="account-menu__dropdown">
-              <a href="{{ url_for('employee.profile') }}">Hồ sơ cá nhân</a>
-              <a href="{{ url_for('employee.leave_request') }}">Đăng ký nghỉ phép</a>
-              <a href="{{ url_for('employee.payslip') }}">Phiếu lương</a>
-              <hr>
-              <form action="{{ url_for('auth.logout') }}" method="post">
-                <button type="submit" class="btn-logout">Đăng Xuất</button>
-              </form>
-            </div>
-          </div>
+          <form action="{{ url_for('auth.logout') }}" method="post" style="display:inline;"><button type="submit" class="btn-logout">Đăng Xuất</button></form>
         {% else %}
           <a href="{{ url_for('auth.register') }}">Đăng Ký</a>
           <span>|</span>
@@ -73,50 +37,22 @@
 
   <div class="header-main">
     <div class="container header-main-inner">
-      <div class="logo">
-        <a href="{{ url_for('home.home_page') }}">HRM<span>System</span></a>
-      </div>
+      <div class="logo"><a href="{{ url_for('employee.dashboard') }}">HRM<span>System</span></a></div>
 
       <div class="search-box">
         <form action="{{ url_for('employee.search') }}" method="get">
-          <input type="text" name="q" placeholder="Tìm kiếm nhân viên, mã nhân sự..." autocomplete="off">
+          <input type="text" name="q" placeholder="Tìm kiếm nhân viên..." autocomplete="off">
           <button type="submit"><i class="fas fa-search"></i></button>
         </form>
       </div>
 
-      <div class="quick-actions">
-        <a href="{{ url_for('timekeeping.check_in') }}" class="btn-checkin">
-          <i class="fas fa-clock"></i> Chấm công
-        </a>
-      </div>
+      <div class="quick-actions"><a href="{{ url_for('employee.attendance') }}" class="btn-checkin"><i class="fas fa-clock"></i> Chấm công</a></div>
     </div>
   </div>
 </header>
 
-<main class="app-main">
-  <div class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-container">
-          {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    {% block content %}{% endblock %}
-  </div>
-</main>
-
-<footer class="app-footer">
- <div class="container">
-     <div class="footer-content">
-         <p>© {{ current_year or 2026 }} - Hệ thống Quản trị Nhân sự HRM</p>
-         <small>Phát triển bởi Duy An - HUBT</small>
-     </div>
- </div>
-</footer>
+<main class="app-main"><div class="container">{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-container">{% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}{% block content %}{% endblock %}</div></main>
+<footer class="app-footer"><div class="container"><div class="footer-content"><p>© {{ current_year or 2026 }} - Hệ thống Quản trị Nhân sự HRM</p></div></div></footer>
 
 <script src="{{ url_for('static', filename='js/base.js') }}"></script>
 {% block scripts %}{% endblock %}

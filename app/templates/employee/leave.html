@@ -1,0 +1,22 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Nghỉ phép{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>🏖️ Đăng ký nghỉ phép</h2>
+  <p>Tổng phép: {{ usage.total_days if usage else 0 }} | Đã dùng: {{ usage.used_days if usage else 0 }} | Còn lại: {{ usage.remaining_days if usage else 0 }}</p>
+  <form method="post" class="form-grid">
+    <label>Loại nghỉ<select name="leave_type_id">{% for t in leave_types %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+    <label>Từ ngày<input type="date" name="from_date" required></label>
+    <label>Đến ngày<input type="date" name="to_date" required></label>
+    <label>Lý do<textarea name="reason"></textarea></label>
+    <button class="btn green" type="submit">📤 Gửi đơn xin nghỉ</button>
+  </form>
+</section>
+<section class="card">
+  <h3>Lịch sử yêu cầu</h3>
+  <table><tr><th>Ngày tạo</th><th>Loại nghỉ</th><th>Trạng thái</th></tr>
+  {% for r in requests %}<tr><td>{{ r.created_at.strftime('%d/%m/%Y') }}</td><td>{{ r.leave_type.name if r.leave_type else '-' }}</td><td>{{ r.status }}</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

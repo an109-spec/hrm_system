@@ -1,0 +1,8 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Thông báo{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block content %}
+<section class="card"><h2>🔔 Danh sách thông báo</h2>
+{% for n in notifications %}<p class="{{ 'new' if not n.is_read else '' }}">[{{ n.type }}] {{ n.title }} - {{ n.content }}</p>{% else %}<p>Không có thông báo.</p>{% endfor %}
+</section>
+{% endblock %}

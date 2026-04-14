@@ -57,7 +57,7 @@ def register():
     try:
         user = AuthService.register(dto)
         session["user_id"] = user.id
-        return redirect(url_for("home.home_page"))
+        return redirect(url_for("employee.dashboard"))
 
     except ConflictError as e:
         return render_template("auth/register.html", errors=[str(e)], data=data)
@@ -85,14 +85,7 @@ def login():
         
         session["user_id"] = user.id
 
-        # Điều hướng dựa trên vai trò thực tế trong HRM
-        if user.role == "admin":
-            return redirect(url_for("admin.dashboard"))
-        elif user.role == "manager":
-            return redirect(url_for("manager.dashboard"))
-        
-        # Mặc định về trang cá nhân của nhân viên
-        return redirect(next_url or url_for("employee.profile"))
+        return redirect(next_url or url_for("employee.dashboard"))
 
     except (ValidationError, UnauthorizedError) as e:
         return render_template(

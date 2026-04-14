@@ -1,0 +1,19 @@
+{% extends 'layouts/base.html' %}
+{% block title %}Chấm công{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block content %}
+<section class="card center">
+  <h2>🕒 Chấm công</h2>
+  <p>{{ now.strftime('%H:%M:%S %d/%m/%Y') }}</p>
+  <button class="btn {{ 'green' if not today or (today and not today.check_out) else '' }}" onclick="submitAttendance()">🔳 QUÉT MÃ QR</button>
+  <p>Trạng thái: {{ 'Hoàn thành' if today and today.check_out else 'Đang trong ca' }}</p>
+</section>
+<section class="card">
+  <h3>Lịch sử gần đây</h3>
+  <table><tr><th>Ngày</th><th>Vào</th><th>Ra</th><th>Giờ làm</th></tr>
+  {% for row in history %}
+  <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td>{{ row.check_in or '-' }}</td><td>{{ row.check_out or '-' }}</td><td>{{ row.working_hours }}</td></tr>
+  {% endfor %}</table>
+</section>
+<script>async function submitAttendance(){const r=await fetch("{{ url_for('employee.check_in_out') }}",{method:'POST'});if(r.ok)location.reload();}</script>
+{% endblock %}

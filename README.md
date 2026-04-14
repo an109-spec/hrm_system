@@ -5500,3 +5500,79 @@ HRM_TOTNGHIEP
       └─ slugify.exe
 
 ```
+```
+HRM_TOTNGHIEP
+├─ .dockerignore
+├─ app
+│  ├─ cli.py
+│  ├─ common
+│  │  ├─ constants.py
+│  │  ├─ exceptions.py
+│  │  ├─ security
+│  │  │  ├─ decorators.py
+│  │  │  ├─ otp.py
+│  │  │  ├─ password.py
+│  │  │  └─ __init__.py
+│  │  └─ __init__.py
+│  ├─ config
+│  │  ├─ config.py
+│  │  └─ __init__.py
+│  ├─ extensions
+│  │  ├─ db.py
+│  │  ├─ jwt.py
+│  │  ├─ mail.py
+│  │  ├─ socketio.py
+│  │  └─ __init__.py
+│  ├─ models
+│  │  ├─ allowance.py
+│  │  ├─ attendance.py
+│  │  ├─ base.py
+│  │  ├─ contract.py
+│  │  ├─ department.py
+│  │  ├─ employee.py
+│  │  ├─ leave.py
+│  │  ├─ leave_usage.py
+│  │  ├─ notification.py
+│  │  ├─ otp.py
+│  │  ├─ position.py
+│  │  ├─ role.py
+│  │  ├─ salary.py
+│  │  ├─ system.py
+│  │  ├─ user.py
+│  │  └─ __init__.py
+│  ├─ modules
+│  │  └─ auth
+│  │     ├─ dto.py
+│  │     ├─ mail_service.py
+│  │     ├─ otp_service.py
+│  │     ├─ routes.py
+│  │     ├─ service.py
+│  │     ├─ sms_service.py
+│  │     ├─ validators.py
+│  │     └─ __init__.py
+│  ├─ static
+│  │  ├─ css
+│  │  │  ├─ auth.css
+│  │  │  └─ base.css
+│  │  └─ js
+│  │     ├─ auth.js
+│  │     └─ base.js
+│  ├─ templates
+│  │  ├─ auth
+│  │  │  ├─ forgot_password.html
+│  │  │  ├─ login.html
+│  │  │  ├─ register.html
+│  │  │  ├─ reset_password.html
+│  │  │  └─ verify_otp.html
+│  │  └─ layouts
+│  │     └─ base.html
+│  ├─ utils
+│  │  └─ time.py
+│  └─ __init__.py
+├─ docker-compose.yml
+├─ Dockerfile
+├─ README.md
+├─ requirements.txt
+└─ run.py
+
+```
