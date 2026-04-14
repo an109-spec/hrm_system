@@ -88,32 +88,41 @@ def create_app():
 
 def ensure_default_admin(app):
     """Khởi tạo tài khoản quản trị hệ thống mặc định nếu chưa có"""
-    from app.models import User
     from sqlalchemy import text 
     with app.app_context():
-        inspector = inspect(db.engine)
-        if not inspector.has_table("users"):
-            return
-        
-        exists = db.session.execute(text("SELECT 1 FROM users WHERE username = 'admin'")).first()
-        
-        if exists:
-            return
-            
         try:
-            default_admin = User(
-                username="admin",
-                email="admin@hrm.local", # Đổi email local sang HRM
-                password_hash=generate_password_hash("admin123"),
-                role="admin",
-                full_name="System Administrator" # Thêm tên đầy đủ cho chuyên nghiệp
+            inspector = inspect(db.engine)
+            if not inspector.has_table("users"):
+                return
+
+            exists = db.session.execute(
+                text("SELECT 1 FROM users WHERE username = 'admin'")
+            ).first()
+            if exists:
+                return
+
+            db.session.execute(
+                text(
+                    """
+                    INSERT INTO users (username, email, password_hash)
+                    VALUES (:username, :email, :password_hash)
+                    """
+                ),
+                {
+                    "username": "admin",
+                    "email": "admin@hrm.local",
+                    "password_hash": generate_password_hash("admin123"),
+                },
             )
-            db.session.add(default_admin)
             db.session.commit()
             print("--- Đã tạo tài khoản Admin mặc định thành công! ---")
         except Exception as e:
             db.session.rollback()
-            print(f"Lỗi khi tạo admin: {e}")
+            print(
+                "Không thể khởi tạo admin mặc định ở bước startup. "
+                "Kiểm tra kết nối DB/schema (SQLALCHEMY_DATABASE_URI, APP_DB_NAME) hoặc chạy flask init-db. "
+                f"Chi tiết: {e}"
+            )
 
 def register_blueprints(app):
     app.register_blueprint(auth_bp) # Đăng nhập/Đăng ký

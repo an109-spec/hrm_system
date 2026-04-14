@@ -17,7 +17,7 @@ class BaseConfig:
     DB_NAME = os.getenv("APP_DB_NAME")
     DB_HOST = os.getenv("DB_HOST", "localhost")
     DB_PORT = os.getenv("DB_PORT", "5432")
-
+ 
     # Build URI nếu đủ biến
     _BUILT_URI = None
     if all([DB_USER, DB_PASSWORD, DB_NAME]):
