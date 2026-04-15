@@ -45,9 +45,22 @@ class Employee(BaseModel):
     
     # Các liên kết tới các bảng nghiệp vụ khác (sẽ định nghĩa sau)
     attendance_records = relationship('Attendance', backref='employee', lazy='dynamic')
-    salary_records = relationship('Salary', backref='employee', lazy='dynamic')
-    contracts = relationship('Contract', backref='employee', lazy='dynamic')
-    leave_requests = relationship('LeaveRequest', backref='employee', lazy='dynamic')
+    salary_records = relationship(
+    'Salary',
+    back_populates='employee',
+    lazy='dynamic'
+)
+    contracts = relationship(
+    'Contract',
+    back_populates='employee',
+    lazy='dynamic'
+)
+    leave_requests = relationship(
+    'LeaveRequest',
+    foreign_keys='LeaveRequest.employee_id',
+    back_populates='employee',
+    lazy='dynamic'
+)
 
     def __repr__(self):
         return f"<Employee {self.full_name} - {self.phone}>"

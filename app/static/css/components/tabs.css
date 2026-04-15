@@ -1,0 +1,18 @@
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 10px;
+}
+
+.tab {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+}
+
+.tab.active {
+  border-bottom: 2px solid #4a90e2;
+  color: #4a90e2;
+  font-weight: 600;
+}

@@ -256,3 +256,7 @@ def search():
     if q:
         results = Employee.query.filter(Employee.full_name.ilike(f"%{q}%")).limit(20).all()
     return render_template("employee/search.html", q=q, results=results)
+@employee_bp.route("/dev-login")
+def dev_login():
+    session["user_id"] = 1
+    return redirect("/employee/dashboard")

@@ -1,0 +1,16 @@
+.attendance-box {
+  text-align: center;
+  padding: 30px;
+}
+
+.attendance-time {
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.qr-btn {
+  padding: 14px 20px;
+  font-size: 16px;
+  border-radius: 10px;
+}

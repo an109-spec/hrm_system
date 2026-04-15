@@ -1,8 +1,17 @@
-{% extends 'layouts/base.html' %}
-{% block title %}Thông báo{% endblock %}
-{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% extends "layouts/base.html" %}
+
 {% block content %}
-<section class="card"><h2>🔔 Danh sách thông báo</h2>
-{% for n in notifications %}<p class="{{ 'new' if not n.is_read else '' }}">[{{ n.type }}] {{ n.title }} - {{ n.content }}</p>{% else %}<p>Không có thông báo.</p>{% endfor %}
-</section>
+<div class="container">
+
+  <h3>Thông báo</h3>
+
+  {% for n in notifications %}
+    <div class="card p-2 mb-2 {% if not n.is_read %}border-primary{% endif %}">
+      <b>{{ n.title }}</b>
+      <div>{{ n.content }}</div>
+      <small>{{ n.created_at }}</small>
+    </div>
+  {% endfor %}
+
+</div>
 {% endblock %}

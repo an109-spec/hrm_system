@@ -1,0 +1,19 @@
+.salary-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 10px;
+}
+
+.salary-header {
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.salary-status-paid {
+  color: #2ecc71;
+}
+
+.salary-status-pending {
+  color: #f39c12;
+}

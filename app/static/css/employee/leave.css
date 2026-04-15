@@ -1,0 +1,24 @@
+.leave-summary {
+  display: flex;
+  gap: 15px;
+}
+
+.leave-box {
+  flex: 1;
+  background: #fff;
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.leave-progress {
+  height: 8px;
+  background: #eee;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.leave-progress-bar {
+  height: 100%;
+  background: #2ecc71;
+}

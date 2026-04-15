@@ -1,19 +1,46 @@
-{% extends 'layouts/base.html' %}
-{% block title %}Hồ sơ nhân viên{% endblock %}
-{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% extends "layouts/base.html" %}
+
 {% block content %}
-<section class="card">
-  <h2>👤 My Profile</h2>
-  <form method="post" class="form-grid">
-    <label>Họ và tên <input name="full_name" value="{{ employee.full_name if employee else '' }}"></label>
-    <label>Email <input name="email" value="{{ user.email if user else '' }}"></label>
-    <label>Số điện thoại <input name="phone" value="{{ employee.phone if employee else '' }}"></label>
-    <label>Địa chỉ <input name="address" value="{{ employee.address if employee else '' }}"></label>
-    <button class="btn green" type="submit">Lưu thay đổi</button>
-  </form>
-</section>
-<section class="card">
-  <h3>🔔 Nhật ký thông báo</h3>
-  {% for n in notifications %}<p>{{ n.title }} - {{ n.created_at.strftime('%H:%M %d/%m/%Y') }}</p>{% else %}<p>Không có dữ liệu.</p>{% endfor %}
-</section>
+<div class="container">
+
+  <div class="row">
+
+    <!-- LEFT -->
+    <div class="col-md-4">
+      <div class="card p-3 text-center">
+        <img src="{{ employee.avatar }}" class="rounded-circle mx-auto" width="120">
+
+        <h5 class="mt-2">{{ employee.full_name }}</h5>
+        <div>{{ user.role.name }}</div>
+        <div>{{ employee.email }}</div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col-md-8">
+
+      <div class="card">
+        <div class="card-body">
+
+          <ul class="nav nav-tabs">
+            <li class="nav-item"><a class="nav-link active">Thông tin</a></li>
+            <li class="nav-item"><a class="nav-link">Công việc</a></li>
+            <li class="nav-item"><a class="nav-link">Tài khoản</a></li>
+          </ul>
+
+          <div class="mt-3">
+            <p>Họ tên: {{ employee.full_name }}</p>
+            <p>SĐT: {{ employee.phone }}</p>
+            <p>Địa chỉ: {{ employee.address }}</p>
+            <p>Tuổi: {{ employee.age }}</p>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
 {% endblock %}

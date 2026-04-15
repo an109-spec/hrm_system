@@ -1,22 +1,39 @@
-{% extends 'layouts/base.html' %}
-{% block title %}Nghỉ phép{% endblock %}
-{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% extends "layouts/base.html" %}
+
 {% block content %}
-<section class="card">
-  <h2>🏖️ Đăng ký nghỉ phép</h2>
-  <p>Tổng phép: {{ usage.total_days if usage else 0 }} | Đã dùng: {{ usage.used_days if usage else 0 }} | Còn lại: {{ usage.remaining_days if usage else 0 }}</p>
-  <form method="post" class="form-grid">
-    <label>Loại nghỉ<select name="leave_type_id">{% for t in leave_types %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
-    <label>Từ ngày<input type="date" name="from_date" required></label>
-    <label>Đến ngày<input type="date" name="to_date" required></label>
-    <label>Lý do<textarea name="reason"></textarea></label>
-    <button class="btn green" type="submit">📤 Gửi đơn xin nghỉ</button>
-  </form>
-</section>
-<section class="card">
-  <h3>Lịch sử yêu cầu</h3>
-  <table><tr><th>Ngày tạo</th><th>Loại nghỉ</th><th>Trạng thái</th></tr>
-  {% for r in requests %}<tr><td>{{ r.created_at.strftime('%d/%m/%Y') }}</td><td>{{ r.leave_type.name if r.leave_type else '-' }}</td><td>{{ r.status }}</td></tr>{% endfor %}
-  </table>
-</section>
+<div class="container">
+
+  <h3>Nghỉ phép</h3>
+
+  <div class="card p-3 mb-3">
+    <form method="post">
+
+      <select class="form-control">
+        {% for t in leave_types %}
+          <option>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+
+      <input type="date" class="form-control mt-2">
+      <input type="date" class="form-control mt-2">
+
+      <textarea class="form-control mt-2"></textarea>
+
+      <button class="btn btn-primary mt-2">
+        Gửi đơn
+      </button>
+
+    </form>
+  </div>
+
+  <h5>Lịch sử</h5>
+
+  {% for r in requests %}
+    <div class="border p-2 mb-2">
+      {{ r.from_date }} → {{ r.to_date }}
+      <span>{{ r.status }}</span>
+    </div>
+  {% endfor %}
+
+</div>
 {% endblock %}

@@ -46,9 +46,16 @@ class LeaveRequest(BaseModel):
 
     # Relationships
     # Liên kết với thông tin nhân viên xin nghỉ
-    employee = relationship('Employee', foreign_keys=[employee_id], backref='my_leave_requests')
-    # Liên kết với thông tin người duyệt
-    approver = relationship('Employee', foreign_keys=[approved_by], backref='approved_leaves')
+    employee = relationship(
+        'Employee',
+        foreign_keys=[employee_id],
+        back_populates='leave_requests'
+    )
+
+    approver = relationship(
+        'Employee',
+        foreign_keys=[approved_by]
+    )
 
     def __repr__(self):
         return f"<LeaveRequest Emp:{self.employee_id} From:{self.from_date} To:{self.to_date}>"

@@ -1,7 +1,17 @@
-{% extends 'layouts/base.html' %}
-{% block title %}Tìm kiếm{% endblock %}
+{% extends "layouts/base.html" %}
+
 {% block content %}
-<section class="card"><h2>Kết quả tìm kiếm: {{ q }}</h2>
-{% for e in results %}<p>{{ e.full_name }} - #{{ e.id }}</p>{% else %}<p>Không có kết quả.</p>{% endfor %}
-</section>
+<div class="container">
+
+  <h3>Tìm kiếm</h3>
+
+  <input class="form-control" placeholder="Search...">
+
+  {% for e in results %}
+    <div class="card p-2 mt-2">
+      {{ e.full_name }} - {{ e.position.job_title }}
+    </div>
+  {% endfor %}
+
+</div>
 {% endblock %}

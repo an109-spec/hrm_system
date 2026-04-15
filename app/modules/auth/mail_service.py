@@ -17,7 +17,7 @@ class MailService:
 
         try:
             # 1. Chế độ Test/Development: Không gửi mail thật để tiết kiệm quota/tránh spam
-            if current_app.config.get("DEBUG") or current_app.config.get("ENV") == "development":
+            if current_app.debug:
                 logger.info(f"--- [DEV MODE EMAIL] ---")
                 logger.info(f"To: {to_email}")
                 logger.info(f"Subject: Mã OTP đặt lại mật khẩu HRM")

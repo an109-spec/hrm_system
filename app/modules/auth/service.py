@@ -39,7 +39,16 @@ class AuthService:
 
     @staticmethod
     def _get_user_by_identifier(identifier: str) -> User | None:
-        return User.query.filter(or_(User.email == identifier, User.phone == identifier)).first()
+        from app.models.employee import Employee
+
+        employee = Employee.query.filter(
+            or_(
+                Employee.phone == identifier,
+                Employee.user.has(User.email == identifier)
+            )
+        ).first()
+
+        return employee.user if employee else None
 
     @staticmethod
     def _generate_username(email: str | None, phone: str | None) -> str:
@@ -71,9 +80,8 @@ class AuthService:
         user = User(
             username=AuthService._generate_username(email, phone),
             email=email,
-            phone=phone,
             password_hash=generate_password_hash(dto.password),
-            role_id=3 # Giả sử 3 là nhân viên (Employee)
+            role_id=3
         )
 
         try:
@@ -85,8 +93,9 @@ class AuthService:
             employee = Employee(
                 user_id=user.id,
                 full_name=dto.full_name.strip(),
-                status='active', # Trạng thái đang làm việc
-                join_date=datetime.now(timezone.utc).date()
+                phone=phone,
+                working_status='working',
+                hire_date=datetime.now(timezone.utc).date()
             )
             
             db.session.add(employee)
@@ -144,7 +153,7 @@ class AuthService:
                 otp_preview=None,
             )
 
-        is_internal_phone_email = bool(user.email and user.email.endswith("@phone.local"))
+        is_internal_phone_email = bool(user.email and user.email.endswith("@hrm.local"))
         # Chỉ gửi OTP qua email thật
         if user.email and not is_internal_phone_email:
             email_code = OTPService.create_otp(user, otp_type="email")

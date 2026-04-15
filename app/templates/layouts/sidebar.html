@@ -1,0 +1,84 @@
+<!-- SIDEBAR -->
+<div class="bg-dark text-white vh-100 p-3" style="width: 260px;">
+
+  <!-- PROFILE MINI -->
+  <div class="text-center mb-4">
+    <img
+      src="{{ employee.avatar }}"
+      class="rounded-circle mb-2"
+      width="70"
+      height="70"
+    />
+
+    <div class="fw-bold">
+      {{ employee.full_name }}
+    </div>
+
+    <small class="text-muted">
+      {{ employee.position.job_title }}
+    </small>
+
+    <div class="mt-2">
+      <span class="badge bg-success">
+        {{ employee.working_status }}
+      </span>
+    </div>
+  </div>
+
+  <hr class="text-secondary">
+
+  <!-- MENU -->
+  <ul class="nav flex-column">
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/dashboard">
+        📊 Dashboard
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/profile">
+        👤 Hồ sơ
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/attendance">
+        🕒 Chấm công
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/leave">
+        🏖 Nghỉ phép
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/payslip">
+        💰 Lương
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/notifications">
+        🔔 Thông báo
+      </a>
+    </li>
+
+    <li class="nav-item mb-1">
+      <a class="nav-link text-white" href="/employee/search">
+        🔍 Tìm kiếm
+      </a>
+    </li>
+
+  </ul>
+
+  <hr class="text-secondary">
+
+  <!-- FOOTER -->
+  <div class="small text-muted text-center">
+    HRM v1.0
+  </div>
+
+</div>

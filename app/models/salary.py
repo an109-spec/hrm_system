@@ -38,7 +38,10 @@ class Salary(BaseModel):
 
     # Relationship
     # Liên kết với nhân viên để lấy thông tin họ tên khi in phiếu lương
-    employee = relationship('Employee', backref=db.backref('salaries', lazy='dynamic'))
+    employee = relationship(
+    'Employee',
+    back_populates='salary_records'
+)
 
     def __repr__(self):
         return f"<Salary Emp:{self.employee_id} - {self.month}/{self.year} - Net:{self.net_salary}>"

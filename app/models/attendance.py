@@ -26,8 +26,8 @@ class Attendance(BaseModel):
     date = db.Column(db.Date, nullable=False, index=True) # Ngày chấm công
     
     # Thời gian vào/ra thực tế
-    check_in = db.Column(db.Time, nullable=True)
-    check_out = db.Column(db.Time, nullable=True)
+    check_in = db.Column(db.DateTime(timezone=True), nullable=True)
+    check_out = db.Column(db.DateTime(timezone=True), nullable=True)
     
     # Tổng giờ làm việc (Dùng Numeric để tính toán chính xác số thập phân)
     working_hours = db.Column(db.Numeric(4, 2), default=0)
