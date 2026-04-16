@@ -1,105 +1,46 @@
-from flask import request, jsonify
-from flask_login import login_required
-
-from . import leave_type_bp
-from .service import LeaveTypeService
+from app.models import LeaveType
+from app.extensions.db import db
 
 
-# =========================
-# GET ALL (dropdown UI)
-# =========================
-@leave_type_bp.route("/", methods=["GET"])
-@login_required
-def get_all():
-    items = LeaveTypeService.get_all()
+class LeaveTypeService:
 
-    return jsonify([
-        {
-            "id": i.id,
-            "name": i.name,
-            "is_paid": i.is_paid
-        }
-        for i in items
-    ])
+    @staticmethod
+    def get_all():
+        return LeaveType.query.all()
 
+    @staticmethod
+    def get_by_id(type_id):
+        return LeaveType.query.get(type_id)
 
-# =========================
-# GET DETAIL
-# =========================
-@leave_type_bp.route("/<int:type_id>", methods=["GET"])
-@login_required
-def get_one(type_id):
-    item = LeaveTypeService.get_by_id(type_id)
-
-    if not item:
-        return jsonify({"error": "Not found"}), 404
-
-    return jsonify({
-        "id": item.id,
-        "name": item.name,
-        "is_paid": item.is_paid
-    })
-
-
-# =========================
-# CREATE
-# =========================
-@leave_type_bp.route("/", methods=["POST"])
-@login_required
-def create():
-    data = request.json
-
-    try:
-        item = LeaveTypeService.create(
-            name=data["name"],
-            is_paid=data.get("is_paid", True)
+    @staticmethod
+    def create(name, is_paid=True):
+        item = LeaveType(
+            name=name,
+            is_paid=is_paid
         )
+        db.session.add(item)
+        db.session.commit()
+        return item
 
-        return jsonify({
-            "id": item.id,
-            "message": "Created successfully"
-        })
+    @staticmethod
+    def update(type_id, name=None, is_paid=None):
+        item = LeaveType.query.get(type_id)
+        if not item:
+            raise Exception("Not found")
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        if name is not None:
+            item.name = name
+        if is_paid is not None:
+            item.is_paid = is_paid
 
+        db.session.commit()
+        return item
 
-# =========================
-# UPDATE
-# =========================
-@leave_type_bp.route("/<int:type_id>", methods=["PUT"])
-@login_required
-def update(type_id):
-    data = request.json
+    @staticmethod
+    def delete(type_id):
+        item = LeaveType.query.get(type_id)
+        if not item:
+            raise Exception("Not found")
 
-    try:
-        item = LeaveTypeService.update(
-            type_id=type_id,
-            name=data.get("name"),
-            is_paid=data.get("is_paid")
-        )
-
-        return jsonify({
-            "id": item.id,
-            "message": "Updated successfully"
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-# =========================
-# DELETE
-# =========================
-@leave_type_bp.route("/<int:type_id>", methods=["DELETE"])
-@login_required
-def delete(type_id):
-    try:
-        LeaveTypeService.delete(type_id)
-
-        return jsonify({
-            "message": "Deleted successfully"
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        db.session.delete(item)
+        db.session.commit()

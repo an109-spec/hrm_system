@@ -1,0 +1,27 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chấm công{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/attendance.css') }}">
+{% endblock %}
+{% block content %}
+<h2>🕒 Chấm công hôm nay</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Tên</th>
+      <th>Check-in</th>
+      <th>Check-out</th>
+      <th>Trạng thái</th>
+    </tr>
+  </thead>
+  <tbody id="attendance-body"></tbody>
+</table>
+
+<button onclick="sendReminder()">🔔 Gửi nhắc nhở</button>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager/attendance.js') }}"></script>
+{% endblock %}

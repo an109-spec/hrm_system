@@ -1,0 +1,46 @@
+select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+}
+
+th {
+  background: #f9fafc;
+}
+
+button {
+  border: none;
+  padding: 6px 10px;
+  margin: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* approve */
+button:nth-child(1) {
+  background: #2ecc71;
+  color: #fff;
+}
+
+/* reject */
+button:nth-child(2) {
+  background: #e74c3c;
+  color: #fff;
+}
+
+button:hover {
+  opacity: 0.85;
+}

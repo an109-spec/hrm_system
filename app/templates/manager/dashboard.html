@@ -1,0 +1,24 @@
+{% extends "layouts/base.html" %}
+{% block title %}Manager Dashboard{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2>📊 Dashboard phòng ban</h2>
+
+<div class="stats">
+  <div>👥 Tổng: <span id="total"></span></div>
+  <div>🟢 Đang làm: <span id="working"></span></div>
+  <div>🌴 Nghỉ: <span id="on_leave"></span></div>
+  <div>🟡 Đi muộn: <span id="late"></span></div>
+  <div>🔴 Vắng: <span id="absent"></span></div>
+  <div>📄 Đơn chờ duyệt: <span id="pending"></span></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager/dashboard.js') }}"></script>
+{% endblock %}

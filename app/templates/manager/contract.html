@@ -1,0 +1,62 @@
+{% extends "layouts/base.html" %}
+{% block title %}Hợp đồng{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/contract.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="page-title">📄 Hợp đồng sắp hết hạn</h2>
+
+<div class="contract-warning">
+  <h3>⚠️ Sắp hết hạn (&lt; 30 ngày)</h3>
+  <ul id="contract-list"></ul>
+</div>
+
+<!-- BUTTON mở modal -->
+<button class="btn-primary" onclick="openModal()">📑 Gia hạn hợp đồng</button>
+
+<!-- MODAL -->
+<div id="contract-modal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+
+    <h3>📝 Gia hạn hợp đồng</h3>
+
+    <div class="form-group">
+      <label>Employee ID</label>
+      <input id="emp_id">
+    </div>
+
+    <div class="form-group">
+      <label>Mã hợp đồng</label>
+      <input id="code">
+    </div>
+
+    <div class="form-group">
+      <label>Lương cơ bản</label>
+      <input id="salary">
+    </div>
+
+    <div class="form-group">
+      <label>Ngày bắt đầu</label>
+      <input type="date" id="start">
+    </div>
+
+    <div class="form-group">
+      <label>Ngày kết thúc</label>
+      <input type="date" id="end">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-success" onclick="renew()">✅ Xác nhận</button>
+      <button class="btn-danger" onclick="closeModal()">❌ Hủy</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager/contract.js') }}"></script>
+{% endblock %}

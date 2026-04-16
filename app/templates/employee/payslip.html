@@ -1,17 +1,100 @@
 {% extends "layouts/base.html" %}
-
+{% block title %}Bảng lương của tôi{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+{% endblock %}
 {% block content %}
-<div class="container">
+<section class="emp-card">
+  <div class="row-between">
+    <h3>💰 Bảng lương của tôi</h3>
+    <form method="get" class="inline-form">
+      <label>Năm:
+        <input type="number" name="year" value="{{ year }}" min="2020" max="2100">
+      </label>
+      <button class="btn btn-secondary" type="submit">Lọc</button>
+    </form>
+  </div>
 
-  <h3>Bảng lương</h3>
+  <table class="emp-table">
+    <thead>
+      <tr>
+        <th>Tháng/Năm</th>
+        <th>Công chuẩn</th>
+        <th>Công thực tế</th>
+        <th>Phụ cấp/Thưởng</th>
+        <th>Thực nhận</th>
+        <th>Trạng thái</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in salary_records %}
+      <tr>
+        <td>{{ '%02d/%d'|format(s.month, s.year) }}</td>
+        <td>{{ s.standard_work_days }}</td>
+        <td>{{ s.total_work_days }}</td>
+        <td>{{ '{:,.0f}'.format((s.total_allowance or 0) + (s.bonus or 0)) }} VND</td>
+        <td><strong>{{ '{:,.0f}'.format(s.net_salary) }} VND</strong></td>
+        <td>
+          <span class="pill {{ 'pill-warning' if s.status == 'pending' else ('pill-success' if s.status == 'paid' else 'pill-muted') }}">
+            {{ s.status|upper }}
+          </span>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="6">
+          <details>
+            <summary>🧾 Xem chi tiết phiếu lương tháng {{ '%02d/%d'|format(s.month, s.year) }}</summary>
+            <div class="payslip-detail">
+              <p>- Nhân viên: {{ employee.full_name }}</p>
+              <p>- Lương cơ bản: {{ '{:,.0f}'.format(s.basic_salary) }} VND</p>
+              <p>- Công chuẩn: {{ s.standard_work_days }} ngày</p>
+              <p>- Công thực tế: {{ s.total_work_days }} ngày</p>
+              <p>- Phụ cấp: +{{ '{:,.0f}'.format(s.total_allowance or 0) }} VND</p>
+              <p>- Thưởng: +{{ '{:,.0f}'.format(s.bonus or 0) }} VND</p>
+              <p>- Khấu trừ: -{{ '{:,.0f}'.format(s.penalty or 0) }} VND</p>
+              <p><strong>💰 Tổng thực nhận: {{ '{:,.0f}'.format(s.net_salary) }} VND</strong></p>
 
-  {% for s in salaries %}
-    <div class="card p-2 mb-2">
-      <div>Tháng: {{ s.month }}/{{ s.year }}</div>
-      <div>Lương: {{ s.net_salary }}</div>
-      <div>Trạng thái: {{ s.status }}</div>
+              <form method="post" class="emp-form-grid dispute-form">
+                <input type="hidden" name="salary_id" value="{{ s.id }}">
+                <label>⚠️ Báo cáo sai sót
+                  <select name="issue_type" required>
+                    <option value="attendance_issue">Sai số ngày công / Chấm công</option>
+                    <option value="allowance_issue">Thiếu/Sai phụ cấp, thưởng</option>
+                    <option value="salary_issue">Sai mức lương cơ bản</option>
+                    <option value="other">Khác</option>
+                  </select>
+                </label>
+                <label>Mô tả chi tiết
+                  <textarea name="description" rows="3" required placeholder="Mô tả vấn đề bạn gặp phải..."></textarea>
+                </label>
+                <button class="btn btn-danger" type="submit">📤 Gửi báo cáo</button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">Chưa có dữ liệu lương năm {{ year }}.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="emp-card">
+  <h3>📌 Khiếu nại lương gần đây</h3>
+  {% for d in disputes %}
+  <article class="row-between complaint-item">
+    <div>
+      <p><strong>{{ d.title }}</strong></p>
+      <small>{{ d.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
     </div>
+        <span class="pill {{ 'pill-warning' if d.status in ['pending', 'in_progress'] else 'pill-success' }}">
+      {{ '⏳ Đang xử lý' if d.status in ['pending', 'in_progress'] else '✅ Đã giải quyết' }}
+    </span>
+  </article>
+  {% else %}
+  <p>Chưa có khiếu nại lương.</p>
   {% endfor %}
 
-</div>
+</section>
 {% endblock %}

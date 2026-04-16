@@ -1,39 +1,84 @@
 {% extends "layouts/base.html" %}
+{% block title %}Nghỉ phép{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="container">
+<section class="emp-card">
+  <h3>🏖️ Tổng quan hạn mức phép năm {{ usage.year if usage else current_year }}</h3>
+  <div class="emp-grid emp-grid-3">
+    <div>
+      <h4>Tổng phép</h4>
+      <p class="number">{{ usage.total_days if usage else 0 }}</p>
+    </div>
+    <div>
+      <h4>Đã dùng</h4>
+      <p class="number">{{ usage.used_days if usage else 0 }}</p>
+    </div>
+    <div>
+      <h4>Còn lại</h4>
+      <p class="number">{{ usage.remaining_days if usage else 0 }}</p>
+    </div>
+  </div>
+  {% if usage %}
+  <div class="progress-wrap">
+    <div class="progress-bar" style="width: {{ (usage.used_days / usage.total_days * 100) if usage.total_days else 0 }}%"></div>
+  </div>
+  <small>Đã dùng {{ usage.used_days }}/{{ usage.total_days }} ngày.</small>
+  {% endif %}
+</section>
 
-  <h3>Nghỉ phép</h3>
-
-  <div class="card p-3 mb-3">
-    <form method="post">
-
-      <select class="form-control">
+<section class="emp-card">
+  <h3>📤 Đăng ký nghỉ phép mới</h3>
+  <form method="post" class="emp-form-grid">
+    <label>Loại nghỉ
+      <select name="leave_type_id" required>
+        <option value="">-- Chọn loại nghỉ --</option>
         {% for t in leave_types %}
-          <option>{{ t.name }}</option>
+          <option value="{{ t.id }}">{{ t.name }}</option>
         {% endfor %}
       </select>
-
-      <input type="date" class="form-control mt-2">
-      <input type="date" class="form-control mt-2">
-
-      <textarea class="form-control mt-2"></textarea>
-
-      <button class="btn btn-primary mt-2">
-        Gửi đơn
-      </button>
-
-    </form>
-  </div>
-
-  <h5>Lịch sử</h5>
-
-  {% for r in requests %}
-    <div class="border p-2 mb-2">
-      {{ r.from_date }} → {{ r.to_date }}
-      <span>{{ r.status }}</span>
-    </div>
-  {% endfor %}
-
-</div>
+    </label>
+    <label>Từ ngày
+      <input type="date" name="from_date" required>
+    </label>
+    <label>Đến ngày
+      <input type="date" name="to_date" required>
+    </label>
+    <label>Lý do
+      <textarea name="reason" rows="3" required></textarea>
+    </label>
+    <p>Người duyệt: {{ employee.manager.full_name if employee.manager else 'Chưa có quản lý trực tiếp' }}</p>
+    <button class="btn btn-primary" type="submit">📤 Gửi đơn xin nghỉ</button>
+  </form>
+</section>
+<section class="emp-card">
+  <h3>📋 Lịch sử yêu cầu</h3>
+  <table class="emp-table">
+    <thead>
+      <tr>
+        <th>Ngày tạo</th>
+        <th>Loại nghỉ</th>
+        <th>Số ngày</th>
+        <th>Người duyệt</th>
+        <th>Trạng thái</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in requests %}
+      {% set icon, label = status_badge(r.status) %}
+      <tr>
+        <td>{{ r.created_at.strftime('%d/%m/%Y') }}</td>
+        <td>{{ r.leave_type.name if r.leave_type else 'N/A' }}</td>
+        <td>{{ (r.to_date - r.from_date).days + 1 }}</td>
+        <td>{{ r.approver.full_name if r.approver else 'Chưa duyệt' }}</td>
+        <td><span class="pill {{ 'pill-warning' if r.status == 'pending' else ('pill-success' if r.status == 'approved' else 'pill-danger') }}">{{ icon }} {{ label }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">Chưa có đơn nghỉ nào.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endblock %}

@@ -1,48 +1,113 @@
 {% extends 'layouts/base.html' %}
 {% block title %}Dashboard nhân viên{% endblock %}
-{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/employee.css') }}">{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+{% endblock %}
+
 {% block content %}
-{% if not employee %}<p>Chưa có hồ sơ nhân viên.</p>{% else %}
-<div class="grid two">
-  <section class="card">
+{% if not employee %}
+<div class="emp-card"><p>Chưa có hồ sơ nhân viên.</p></div>
+{% else %}
+<div class="emp-grid emp-grid-2">
+  <section class="emp-card">
     <h3>👤 Hồ sơ nhanh</h3>
-    <p><strong>{{ employee.full_name }}</strong> (Mã NV: #{{ employee.id }})</p>
-    <p>Trạng thái: {{ '🟢 Đang làm việc' if employee.working_status == 'working' else '⚪ Đã hết ca' }}</p>
+    <div class="quick-profile">
+      <div class="avatar-shell {{ 'online' if employee.working_status == 'working' else '' }}">
+        {% if employee.avatar %}
+        <img src="{{ employee.avatar }}" alt="{{ employee.full_name }}">
+        {% else %}
+        <div class="avatar-fallback">{{ employee.full_name[0] }}</div>
+        {% endif %}
+      </div>
+      <div>
+        <p><strong>{{ employee.full_name }}</strong> (Mã NV: #{{ employee.id }})</p>
+        <p>Vị trí: {{ employee.position.job_title if employee.position else 'Chưa cập nhật' }}</p>
+        <p class="status-row">Trạng thái:
+          <span class="pill {{ 'pill-success' if employee.working_status == 'working' else 'pill-muted' }}">
+            {{ '🟢 Đang làm việc' if employee.working_status == 'working' else '⚪ Đã hết ca' }}
+          </span>
+        </p>
+      </div>
+    </div>
   </section>
-  <section class="card center">
+  <section class="emp-card emp-center">
     <h3>🕒 Chấm công hôm nay</h3>
     <p>{{ now.strftime('%H:%M:%S - %A, %d/%m/%Y') }}</p>
     {% if not attendance %}
-      <button class="btn green" onclick="submitAttendance()">🔳 QUÉT QR CHECK-IN</button>
-      <p>Chúc bạn một ngày làm việc hiệu quả!</p>
+      <button id="attendanceBtn" class="btn btn-primary" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>
+      <p id="attendanceHint">Chúc bạn một ngày làm việc hiệu quả!</p>
     {% elif attendance.check_in and not attendance.check_out %}
-      <button class="btn orange" onclick="submitAttendance()">🔳 QUÉT QR CHECK-OUT</button>
-      <p>Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}.</p>
+      <button id="attendanceBtn" class="btn btn-warning" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
+      <p id="attendanceHint">Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}. Bạn đang trong ca.</p>
     {% else %}
-      <button class="btn" disabled>✅ ĐÃ HOÀN THÀNH CÔNG VIỆC</button>
-      <p>Tổng giờ: {{ attendance.working_hours }}h</p>
+      <button class="btn btn-disabled" disabled>✅ ĐÃ HOÀN THÀNH CÔNG VIỆC</button>
+      <p>Tổng giờ làm hôm nay: {{ attendance.working_hours }}h</p>
     {% endif %}
-    <small>☕ Nghỉ trưa: 12:00 - 13:00 (tự động trừ)</small>
+
+    <small>📍 Địa điểm: Văn phòng (Hợp lệ ✅)</small>
+    <small>☕ Nghỉ trưa: 12:00 - 13:00 (Tự động trừ)</small>
   </section>
 </div>
-<div class="grid three">
-  <section class="card"><h4>Công hôm nay</h4><p>{{ attendance.working_hours if attendance and attendance.working_hours else 0 }}h</p></section>
-  <section class="card"><h4>Số ngày phép còn lại</h4><p>{{ leave_balance.remaining_days if leave_balance else 0 }} ngày</p></section>
-  <section class="card"><h4>Lương tháng gần nhất</h4><p>{{ '{:,.0f}'.format(latest_salary.net_salary) if latest_salary else 0 }} VND</p></section>
+
+<div class="emp-grid emp-grid-3">
+  <section class="emp-card">
+    <h4>Công hôm nay</h4>
+    <p class="number">{{ attendance.working_hours if attendance and attendance.working_hours else 0 }}h</p>
+    <small>Dự kiến: 8.0h</small>
+  </section>
+  <section class="emp-card">
+    <h4>Số ngày phép còn lại</h4>
+    <p class="number">{{ leave_balance.remaining_days if leave_balance else 0 }} ngày</p>
+    <small>Hạn mức: {{ leave_balance.total_days if leave_balance else 12 }} ngày/năm</small>
+  </section>
+  <section class="emp-card">
+    <h4>Lương tháng gần nhất</h4>
+    <p class="number">{{ '{:,.0f}'.format(latest_salary.net_salary) if latest_salary else 0 }} VND</p>
+    <small>Tháng {{ '%02d/%d'|format(latest_salary.month, latest_salary.year) if latest_salary else '—' }}</small>
+  </section>
 </div>
-<section class="card">
+<div class="quick-links">
+  <a class="btn btn-secondary" href="{{ url_for('employee.attendance') }}">📈 Chi tiết công</a>
+  <a class="btn btn-secondary" href="{{ url_for('employee.leave_request') }}">📋 Gửi đơn nghỉ</a>
+  <a class="btn btn-secondary" href="{{ url_for('employee.payslip') }}">👁️ Xem phiếu lương</a>
+</div>
+<section class="emp-card">
   <h3>🔔 THÔNG BÁO MỚI NHẤT</h3>
-  {% for n in notifications %}
-    <p class="{{ 'new' if not n.is_read else '' }}">{{ n.title }} - {{ n.content }} ({{ n.created_at.strftime('%H:%M %d/%m/%Y') }})</p>
-  {% else %}<p>Không có thông báo.</p>{% endfor %}
+  <div class="notification-list">
+    {% for n in notifications %}
+      <article class="notification-item {{ 'notification-item--new' if not n.is_read else '' }}">
+        <p><strong>{{ n.title }}</strong> — {{ n.content }}</p>
+        <small>{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
+      </article>
+    {% else %}
+      <p>Không có thông báo.</p>
+    {% endfor %}
+  </div>
 </section>
 {% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
-async function submitAttendance(){
-  const res = await fetch("{{ url_for('employee.check_in_out') }}", {method:'POST'});
-  if(res.ok){ location.reload(); }
+async function submitAttendance(button){
+  const originalText = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '⏳ Đang xử lý...';
+
+  try {
+    const res = await fetch("{{ url_for('employee.check_in_out') }}", { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Có lỗi khi chấm công');
+    }
+
+    alert(data.message || '✅ Thành công');
+    window.location.reload();
+  } catch (error) {
+    alert(`❌ ${error.message}`);
+    button.disabled = false;
+    button.innerHTML = originalText;
+  }
 }
 </script>
 {% endblock %}

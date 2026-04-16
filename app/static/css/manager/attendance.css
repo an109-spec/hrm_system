@@ -1,0 +1,77 @@
+.page-title {
+  margin-bottom: 20px;
+}
+
+.attendance-wrapper {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.attendance-table th,
+.attendance-table td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+}
+
+.attendance-table th {
+  background: #f5f6fa;
+}
+
+.attendance-table tr:hover {
+  background: #fafafa;
+}
+
+/* STATUS BADGE */
+.status {
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.status.ON_TIME {
+  background: #eafaf1;
+  color: #27ae60;
+}
+
+.status.LATE {
+  background: #fef5e7;
+  color: #f39c12;
+}
+
+.status.ABSENT {
+  background: #fdecea;
+  color: #e74c3c;
+}
+
+.status.LEAVE {
+  background: #e8f6f3;
+  color: #16a085;
+}
+
+/* button */
+.actions {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.btn-reminder {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #3498db;
+  color: white;
+  cursor: pointer;
+}
+
+.btn-reminder:hover {
+  background: #2980b9;
+}

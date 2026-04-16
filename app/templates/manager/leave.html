@@ -1,0 +1,28 @@
+{% extends "layouts/base.html" %}
+{% block title %}Duyệt nghỉ phép{% endblock %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/leave.css') }}">
+{% block content %}
+<h2>📂 Đơn nghỉ phép</h2>
+
+<select id="statusFilter" onchange="loadLeaves()">
+  <option value="">Tất cả</option>
+  <option value="pending">Chờ duyệt</option>
+  <option value="approved">Đã duyệt</option>
+  <option value="rejected">Từ chối</option>
+</select>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Thao tác</th>
+    </tr>
+  </thead>
+  <tbody id="leave-body"></tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager/leave.js') }}"></script>
+{% endblock %}

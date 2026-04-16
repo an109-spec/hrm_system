@@ -1,17 +1,42 @@
 {% extends "layouts/base.html" %}
-
+{% block title %}Thông báo{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+{% endblock %}
 {% block content %}
-<div class="container">
+<section class="emp-card">
+  <h3>🔔 Thông báo của tôi</h3>
+  <div class="notification-list">
+    {% for n in notifications %}
+      <article class="notification-item {{ 'notification-item--new' if not n.is_read else '' }}" data-id="{{ n.id }}">
+        <div class="row-between">
+          <p><strong>{{ n.title }}</strong></p>
+          {% if not n.is_read %}<span class="dot-red"></span>{% endif %}
+        </div>
+        <p>{{ n.content }}</p>
+        <small>{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
+        {% if not n.is_read %}
+        <div>
+          <button class="btn btn-secondary btn-sm" onclick="markRead({{ n.id }}, this)">Đánh dấu đã đọc</button>
+        </div>
+        {% endif %}
+      </article>
+    {% else %}
+      <p>Không có thông báo.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
 
-  <h3>Thông báo</h3>
-
-  {% for n in notifications %}
-    <div class="card p-2 mb-2 {% if not n.is_read %}border-primary{% endif %}">
-      <b>{{ n.title }}</b>
-      <div>{{ n.content }}</div>
-      <small>{{ n.created_at }}</small>
-    </div>
-  {% endfor %}
-
-</div>
+{% block scripts %}
+<script>
+async function markRead(id, button){
+  button.disabled = true;
+  const res = await fetch(`/employee/notifications/${id}/read`, { method: 'POST' });
+  if(res.ok){
+    window.location.reload();
+  }
+  button.disabled = false;
+}
+</script>
 {% endblock %}

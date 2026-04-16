@@ -1,7 +1,8 @@
 from app.models.base import BaseModel, db
 from sqlalchemy.orm import relationship
+from flask_login import UserMixin   
 
-class User(BaseModel):
+class User(BaseModel, UserMixin):   
     """
     Model quản lý tài khoản đăng nhập hệ thống.
     Kết nối 1-1 với thông tin nhân viên (Employee).

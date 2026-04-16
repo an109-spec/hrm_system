@@ -1,5 +1,5 @@
 import os
-from flask import Flask, app
+from flask import Flask
 from datetime import datetime
 from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
@@ -10,11 +10,22 @@ from app.extensions.jwt import jwt
 from app.extensions.socketio import socketio
 from flask_migrate import Migrate
 from flask_mail import Mail
-
+from app.modules.jobs import register_jobs
+from apscheduler.schedulers.background import BackgroundScheduler
 # --- IMPORT BLUEPRINTS HRM ---
 from app.modules.auth import auth_bp
 from app.modules.employee import employee_bp
 from app.modules.home import home_bp
+from app.modules.notification import notification_bp
+from app.modules.complaint import complaint_bp
+from app.modules.leave import leave_bp
+from app.modules.attendance import attendance_bp
+from app.modules.dashboard import dashboard_bp  
+from app.modules.history import history_bp
+from app.modules.leave_type import leave_type_bp
+from app.modules.salary import salary_bp
+from app.modules.upload import upload_bp
+
 # Dự kiến các module mới cho HRM
 # from app.modules.employee import employee_bp 
 # from app.modules.payroll import payroll_bp
@@ -83,7 +94,14 @@ def create_app():
             "unread_notifications": unread_notifications,
             "system_name": "HRM System"
         }
+    # ======================
+    # Scheduler jobs
+    # ======================
+    scheduler = BackgroundScheduler()
+    register_jobs(scheduler)
 
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        scheduler.start()
     return app
 
 def ensure_default_admin(app):
@@ -121,6 +139,12 @@ def register_blueprints(app):
     app.register_blueprint(auth_bp) # Đăng nhập/Đăng ký
     app.register_blueprint(employee_bp) # Nhân viên
     app.register_blueprint(home_bp)
-    # Duy An sẽ bổ sung các Blueprint dưới đây khi code xong module tương ứng:
-    # app.register_blueprint(employee_bp, url_prefix='/employees')
-    # app.register_blueprint(payroll_bp, url_prefix='/payroll')
+    app.register_blueprint(notification_bp)
+    app.register_blueprint(complaint_bp)
+    app.register_blueprint(leave_bp)
+    app.register_blueprint(attendance_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(history_bp)
+    app.register_blueprint(leave_type_bp)
+    app.register_blueprint(salary_bp)
+    app.register_blueprint(upload_bp)

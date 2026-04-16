@@ -1,0 +1,38 @@
+h2 {
+    margin-bottom: 20px;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.stats div {
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: 0.2s;
+}
+
+.stats div:hover {
+    transform: translateY(-3px);
+}
+
+.stats span {
+    font-size: 22px;
+    font-weight: bold;
+    display: block;
+    margin-top: 5px;
+}
+
+/* màu riêng từng loại */
+.stats div:nth-child(1) { border-left: 5px solid #3498db; }
+.stats div:nth-child(2) { border-left: 5px solid #2ecc71; }
+.stats div:nth-child(3) { border-left: 5px solid #27ae60; }
+.stats div:nth-child(4) { border-left: 5px solid #f1c40f; }
+.stats div:nth-child(5) { border-left: 5px solid #e74c3c; }
+.stats div:nth-child(6) { border-left: 5px solid #9b59b6; }

@@ -1,0 +1,66 @@
+h2 {
+    margin-bottom: 20px;
+}
+
+.filter {
+    margin-bottom: 15px;
+}
+
+.filter input {
+    padding: 8px;
+    margin-right: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.filter button {
+    padding: 8px 14px;
+    background: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.filter button:hover {
+    background: #2980b9;
+}
+
+/* table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+th, td {
+    padding: 12px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+}
+
+th {
+    background: #2c3e50;
+    color: #fff;
+}
+
+tr:hover {
+    background: #f9f9f9;
+}
+
+/* trạng thái */
+.status {
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+.paid {
+    background: #d4edda;
+    color: #2ecc71;
+}
+
+.pending {
+    background: #fff3cd;
+    color: #f39c12;
+}

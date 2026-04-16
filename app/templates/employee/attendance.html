@@ -1,38 +1,80 @@
 {% extends "layouts/base.html" %}
+{% block title %}Chấm công{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="emp-card emp-center">
+  <h3>🕒 Chấm công</h3>
+  {% if employee %}
+    <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
+  {% endif %}
+  <p>{{ now.strftime('%A, %d/%m/%Y') }}</p>
+  <p class="clock">{{ now.strftime('%H:%M:%S') }}</p>
+  <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
 
-  <h3>Chấm công</h3>
-
-  <div class="card p-3 text-center">
-    <h4>{{ now }}</h4>
-
-    <div class="my-3">
-      <button class="btn btn-success btn-lg">
-        🔳 CHECK-IN
-      </button>
-
-      <button class="btn btn-warning btn-lg">
-        🔳 CHECK-OUT
-      </button>
-    </div>
-
-    <div>
-      Trạng thái: {{ today.status }}
-    </div>
-
-  </div>
-
-  <hr>
-
-  <h5>Lịch sử</h5>
-
-  {% for a in history %}
-    <div>
-      {{ a.date }} | {{ a.check_in }} → {{ a.check_out }}
-    </div>
-  {% endfor %}
-
+  {% if not today %}
+    <button id="attendanceBtn" class="btn btn-primary" onclick="submitAttendance(this)">🔳 QUÉT MÃ QR CHECK-IN</button>
+    <p id="statusText">Trạng thái hiện tại: 🟡 Chưa vào ca</p>
+  {% elif today.check_in and not today.check_out %}
+    <button id="attendanceBtn" class="btn btn-warning" onclick="submitAttendance(this)">🔳 QUÉT MÃ QR CHECK-OUT</button>
+    <p id="statusText">Trạng thái hiện tại: 🟡 Đang trong ca — Bạn vào lúc {{ today.check_in.strftime('%H:%M') }}</p>
+  {% else %}
+    <button class="btn btn-disabled" disabled>✅ ĐÃ HOÀN THÀNH CÔNG VIỆC</button>
+    <p>Trạng thái hiện tại: ⚪ Hết ca</p>
+    <p>Tổng giờ làm hôm nay: {{ today.working_hours }}h</p>
+  {% endif %}
 </div>
+
+<section class="emp-card">
+  <h3>Lịch sử gần đây</h3>
+  <table class="emp-table">
+    <thead>
+      <tr>
+        <th>Ngày</th>
+        <th>Giờ vào</th>
+        <th>Giờ ra</th>
+        <th>Giờ thực làm</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in history %}
+      <tr>
+        <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
+        <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
+        <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
+        <td>{{ a.working_hours if a.working_hours else 0 }}h</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Chưa có dữ liệu chấm công.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function submitAttendance(button){
+  const originalText = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '⏳ Đang xử lý...';
+
+  try {
+    const res = await fetch("{{ url_for('employee.check_in_out') }}", { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Có lỗi xảy ra khi chấm công');
+    }
+
+    alert(data.message || '✅ Thành công');
+    window.location.reload();
+  } catch (error) {
+    alert(`❌ ${error.message}`);
+    button.disabled = false;
+    button.innerHTML = originalText;
+  }
+}
+</script>
 {% endblock %}

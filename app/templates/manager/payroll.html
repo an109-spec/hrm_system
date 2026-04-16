@@ -1,0 +1,34 @@
+{% extends "layouts/base.html" %}
+{% block title %}Lương{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2>💰 Lương phòng ban</h2>
+
+<div class="filter">
+    <input id="month" placeholder="Tháng (VD: 4)">
+    <input id="year" placeholder="Năm (VD: 2026)">
+    <button onclick="loadSalary()">Xem</button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Tên</th>
+            <th>Lương cơ bản</th>
+            <th>Phụ cấp</th>
+            <th>Thực nhận</th>
+            <th>Trạng thái</th>
+        </tr>
+    </thead>
+    <tbody id="salary-body"></tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager/payroll.js') }}"></script>
+{% endblock %}
