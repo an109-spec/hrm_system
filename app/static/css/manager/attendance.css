@@ -1,77 +1,23 @@
-.page-title {
-  margin-bottom: 20px;
+:root {
+  --primary: #2C3E50;
+  --success: #2E7D32;
+  --warning: #F9A825;
+  --danger: #C62828;
+  --info: #1565C0;
+  --bg: #FFFFFF;
+  --border: #E0E0E0;
 }
-
-.attendance-wrapper {
-  background: #fff;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.attendance-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.attendance-table th,
-.attendance-table td {
-  padding: 12px;
-  border-bottom: 1px solid #eee;
-  text-align: center;
-}
-
-.attendance-table th {
-  background: #f5f6fa;
-}
-
-.attendance-table tr:hover {
-  background: #fafafa;
-}
-
-/* STATUS BADGE */
-.status {
-  padding: 5px 10px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: bold;
-}
-
-.status.ON_TIME {
-  background: #eafaf1;
-  color: #27ae60;
-}
-
-.status.LATE {
-  background: #fef5e7;
-  color: #f39c12;
-}
-
-.status.ABSENT {
-  background: #fdecea;
-  color: #e74c3c;
-}
-
-.status.LEAVE {
-  background: #e8f6f3;
-  color: #16a085;
-}
-
-/* button */
-.actions {
-  margin-top: 20px;
-  text-align: right;
-}
-
-.btn-reminder {
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  background: #3498db;
-  color: white;
-  cursor: pointer;
-}
-
-.btn-reminder:hover {
-  background: #2980b9;
-}
+.alert-box { border:1px solid var(--warning); background:#fff8e1; color:#7a5a00; padding:10px; margin-bottom:12px; border-radius:8px; }
+.filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.filters button { border:1px solid var(--border); background:var(--bg); padding:6px 10px; border-radius:6px; cursor:pointer; }
+.filters .active { border-color: var(--info); color: var(--info); }
+.attendance-table { width:100%; border-collapse:collapse; background:var(--bg); }
+.attendance-table th,.attendance-table td { border:1px solid var(--border); padding:10px; text-align:center; }
+.attendance-table th { background:var(--primary); color:#fff; }
+.status { border-radius:999px; padding:4px 10px; font-size:12px; font-weight:600; }
+.status.ON_TIME,.status.PRESENT { color:var(--success); background:#edf7ee; }
+.status.LATE { color:#8a6500; background:#fff8e1; }
+.status.ABSENT { color:var(--danger); background:#fdecea; }
+.status.LEAVE { color:var(--info); background:#e8f2fc; }
+.actions { margin-top:12px; }
+.btn-reminder { background:var(--info); color:#fff; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; }

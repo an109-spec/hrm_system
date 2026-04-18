@@ -7,18 +7,31 @@
 
 {% block content %}
 <h2>📊 Dashboard phòng ban</h2>
-
+<nav class="manager-nav">
+  <a href="/manager/attendance">Chấm công</a>
+  <a href="/manager/leave-management">Nghỉ phép</a>
+  <a href="/manager/contracts">Hợp đồng</a>
+  <a href="/manager/payroll">Lương</a>
+  <a href="/manager/profile">Hồ sơ cá nhân</a>
+  <a href="/manager/notifications">Thông báo</a>
+</nav>
+<div id="dashboard-error" class="state error" hidden></div>
 <div class="stats">
-  <div>👥 Tổng: <span id="total"></span></div>
-  <div>🟢 Đang làm: <span id="working"></span></div>
-  <div>🌴 Nghỉ: <span id="on_leave"></span></div>
-  <div>🟡 Đi muộn: <span id="late"></span></div>
-  <div>🔴 Vắng: <span id="absent"></span></div>
-  <div>📄 Đơn chờ duyệt: <span id="pending"></span></div>
+  <div class="card"><label>👥 Tổng nhân sự</label><span id="total">0</span></div>
+  <div class="card"><label>🟢 Đang làm việc</label><span id="working">0</span></div>
+  <div class="card"><label>🌴 Nghỉ hôm nay</label><span id="on_leave">0</span></div>
+  <div class="card"><label>🟡 Đi muộn</label><span id="late">0</span></div>
+  <div class="card"><label>🔴 Vắng mặt</label><span id="absent">0</span></div>
+  <div class="card"><label>📄 Đơn chờ duyệt</label><span id="pending">0</span></div>
+</div>
+<div class="charts">
+  <section class="chart-box"><h3>📊 Chấm công 7 ngày gần nhất</h3><p>Biểu đồ sẽ tích hợp ở bản tiếp theo.</p></section>
+  <section class="chart-box"><h3>🥧 Phân bổ loại nghỉ phép</h3><p>Biểu đồ sẽ tích hợp ở bản tiếp theo.</p></section>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/manager/dashboard.js') }}"></script>
 {% endblock %}

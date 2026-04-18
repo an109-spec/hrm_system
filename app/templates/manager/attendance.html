@@ -4,24 +4,29 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/manager/attendance.css') }}">
 {% endblock %}
 {% block content %}
-<h2>🕒 Chấm công hôm nay</h2>
-
-<table>
+<h2 class="page-title">🕒 Theo dõi chấm công hôm nay</h2>
+<div id="attendance-alert" class="alert-box" hidden></div>
+<div class="filters">
+  <button data-filter="ALL" class="active">Tất cả</button>
+  <button data-filter="ON_TIME">🟢 Đúng giờ</button>
+  <button data-filter="LATE">🟡 Muộn</button>
+  <button data-filter="ABSENT">🔴 Vắng mặt</button>
+  <button data-filter="LEAVE">🌴 Nghỉ phép</button>
+</div>
+<table class="attendance-table">
   <thead>
-    <tr>
-      <th>Tên</th>
-      <th>Check-in</th>
-      <th>Check-out</th>
-      <th>Trạng thái</th>
-    </tr>
+    <tr><th>STT</th><th>Nhân viên</th><th>Chức danh</th><th>Giờ vào</th><th>Giờ ra</th><th>Trạng thái</th></tr>
   </thead>
   <tbody id="attendance-body"></tbody>
 </table>
 
-<button onclick="sendReminder()">🔔 Gửi nhắc nhở</button>
+<div class="actions">
+  <button id="send-reminder" class="btn-reminder">🔔 Gửi nhắc nhở</button>
+</div>
 
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/manager/attendance.js') }}"></script>
 {% endblock %}

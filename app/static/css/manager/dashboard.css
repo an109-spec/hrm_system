@@ -1,38 +1,22 @@
-h2 {
-    margin-bottom: 20px;
+:root {
+  --primary: #2C3E50;
+  --success: #2E7D32;
+  --warning: #F9A825;
+  --danger: #C62828;
+  --info: #1565C0;
+  --bg: #FFFFFF;
+  --border: #E0E0E0;
 }
 
-.stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-}
-
-.stats div {
-    background: #fff;
-    padding: 20px;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    transition: 0.2s;
-}
-
-.stats div:hover {
-    transform: translateY(-3px);
-}
-
-.stats span {
-    font-size: 22px;
-    font-weight: bold;
-    display: block;
-    margin-top: 5px;
-}
-
-/* màu riêng từng loại */
-.stats div:nth-child(1) { border-left: 5px solid #3498db; }
-.stats div:nth-child(2) { border-left: 5px solid #2ecc71; }
-.stats div:nth-child(3) { border-left: 5px solid #27ae60; }
-.stats div:nth-child(4) { border-left: 5px solid #f1c40f; }
-.stats div:nth-child(5) { border-left: 5px solid #e74c3c; }
-.stats div:nth-child(6) { border-left: 5px solid #9b59b6; }
+.manager-nav { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.manager-nav a { color: var(--info); text-decoration:none; border:1px solid var(--border); padding:6px 10px; border-radius:8px; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.card { background:var(--bg); border:1px solid var(--border); border-top:4px solid var(--primary); border-radius:10px; padding:14px; }
+.card:nth-child(2){ border-top-color: var(--success); }
+.card:nth-child(4),.card:nth-child(6){ border-top-color: var(--warning); }
+.card:nth-child(5){ border-top-color: var(--danger); }
+.card label { display:block; color: var(--primary); font-size:14px; }
+.card span { font-weight:700; font-size:24px; }
+.charts { margin-top:16px; display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+.chart-box { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:14px; }
+.state.error { color: var(--danger); margin-bottom: 10px; }

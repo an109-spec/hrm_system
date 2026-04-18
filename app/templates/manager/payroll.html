@@ -9,26 +9,19 @@
 <h2>💰 Lương phòng ban</h2>
 
 <div class="filter">
-    <input id="month" placeholder="Tháng (VD: 4)">
-    <input id="year" placeholder="Năm (VD: 2026)">
-    <button onclick="loadSalary()">Xem</button>
+  <input id="month" placeholder="Tháng" type="number" min="1" max="12">
+  <input id="year" placeholder="Năm" type="number" min="2020" max="2100">
+  <button id="salary-view">Xem</button>
 </div>
 
 <table>
-    <thead>
-        <tr>
-            <th>Tên</th>
-            <th>Lương cơ bản</th>
-            <th>Phụ cấp</th>
-            <th>Thực nhận</th>
-            <th>Trạng thái</th>
-        </tr>
-    </thead>
-    <tbody id="salary-body"></tbody>
+  <thead><tr><th>Tên</th><th>Lương cơ bản</th><th>Phụ cấp</th><th>Thực nhận</th><th>Trạng thái</th></tr></thead>
+  <tbody id="salary-body"></tbody>
 </table>
 
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/manager/payroll.js') }}"></script>
 {% endblock %}

@@ -1,37 +1,57 @@
-const API = {
-  dashboard: () => fetch('/manager/dashboard').then(r => r.json()),
-  attendance: () => fetch('/manager/attendance/today').then(r => r.json()),
-  leaves: (status) => fetch(`/manager/leave?status=${status || ''}`).then(r => r.json()),
+async function parseJsonResponse(response) {
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch (e) {
+    payload = null
+  }
 
-  approve: (id, note) =>
+  if (!response.ok) {
+    const message = payload?.error || payload?.message || 'Request failed'
+    throw new Error(message)
+  }
+  return payload
+}
+
+window.ManagerAPI = {
+  dashboard: () => fetch('/manager/dashboard').then(parseJsonResponse),
+  attendanceToday: () => fetch('/manager/attendance/today').then(parseJsonResponse),
+  attendanceMonth: (month, year) =>
+    fetch(`/manager/attendance/month?month=${month}&year=${year}`).then(parseJsonResponse),
+
+  leaves: (status = 'pending') =>
+    fetch(`/manager/leave?status=${encodeURIComponent(status)}`).then(parseJsonResponse),
+
+  approveLeave: (id, note) =>
     fetch(`/manager/leave/${id}/approve`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({note})
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: note || '' })
+    }).then(parseJsonResponse),
 
-  reject: (id, note) =>
+  rejectLeave: (id, note) =>
     fetch(`/manager/leave/${id}/reject`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({note})
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: note || '' })
+    }).then(parseJsonResponse),
 
-  reminder: (ids) =>
-    fetch(`/manager/reminder`, {
+  reminder: (employeeIds, message) =>
+    fetch('/manager/reminder', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({employee_ids: ids})
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_ids: employeeIds, message })
+    }).then(parseJsonResponse),
 
-  contracts: () => fetch('/manager/contracts/expiring').then(r => r.json()),
+  contractsExpiring: () => fetch('/manager/contracts/expiring').then(parseJsonResponse),
 
-  renew: (data) =>
+  renewContract: (payload) =>
     fetch('/manager/contracts/renew', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(parseJsonResponse),
 
-  salary: (m,y) => fetch(`/manager/salary?month=${m}&year=${y}`).then(r => r.json())
+  salary: (month, year) =>
+    fetch(`/manager/salary?month=${month}&year=${year}`).then(parseJsonResponse)
 }

@@ -25,7 +25,7 @@ from app.modules.history import history_bp
 from app.modules.leave_type import leave_type_bp
 from app.modules.salary import salary_bp
 from app.modules.upload import upload_bp
-
+from app.modules.manager import manager_bp
 # Dự kiến các module mới cho HRM
 # from app.modules.employee import employee_bp 
 # from app.modules.payroll import payroll_bp
@@ -148,3 +148,4 @@ def register_blueprints(app):
     app.register_blueprint(leave_type_bp)
     app.register_blueprint(salary_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(manager_bp)

@@ -1,92 +1,171 @@
-from flask import request, jsonify, g
+from __future__ import annotations
 
-from app.common.security.permissions import permission_required
+from flask import jsonify, render_template, request, session, redirect, url_for
+from app.models.employee import Employee
 from . import manager_bp
 from .service import ManagerService
 
 
-# =========================
-# DASHBOARD
-# =========================
-@manager_bp.route("/dashboard")
-@permission_required("employee:view_team")
-def dashboard():
-    data = ManagerService.get_dashboard(g.employee.id)
-    return jsonify(data)
+def _current_manager() -> Employee | None:
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    return Employee.query.filter_by(user_id=user_id).first()
+
+def _guard_login():
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login", next=request.url))
+    return None
+
+@manager_bp.route("/")
+def dashboard_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/dashboard.html", employee=manager)
 
 
-# =========================
-# ATTENDANCE TODAY
-# =========================
-@manager_bp.route("/attendance/today")
-def attendance_today():
-    data = ManagerService.get_today_attendance(g.employee.id)
-    return jsonify(data)
+@manager_bp.route("/attendance")
+def attendance_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/attendance.html", employee=manager)
 
 
-# =========================
-# LEAVE LIST
-# =========================
-@manager_bp.route("/leave")
-def leave_list():
-    status = request.args.get("status")
-    data = ManagerService.get_leave_requests(g.employee.id, status)
-    return jsonify([l.id for l in data])
+@manager_bp.route("/leave-management")
+def leave_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/leave.html", employee=manager)
 
 
-# =========================
-# APPROVE
-# =========================
+@manager_bp.route("/contracts")
+def contracts_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/contract.html", employee=manager)
+
+
+@manager_bp.route("/payroll")
+def payroll_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/payroll.html", employee=manager)
+
+
+@manager_bp.route("/profile")
+def profile_page():
+    return redirect(url_for("employee.profile"))
+
+
+@manager_bp.route("/notifications")
+def notifications_page():
+    return redirect(url_for("employee.notifications"))
+
+
+@manager_bp.route("/dashboard", methods=["GET"])
+def dashboard_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_dashboard(manager.id))
+
+
+@manager_bp.route("/attendance/today", methods=["GET"])
+def attendance_today_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_today_attendance(manager.id))
+
+
+@manager_bp.route("/attendance/month", methods=["GET"])
+def attendance_month_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    if not month or not year:
+        return jsonify({"error": "month và year là bắt buộc"}), 400
+
+    return jsonify(ManagerService.get_month_attendance_summary(manager.id, month, year))
+
+
+@manager_bp.route("/leave", methods=["GET"])
+def leave_list_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+
+    status = request.args.get("status") or None
+    return jsonify(ManagerService.get_leave_requests(manager.id, status))
+
 @manager_bp.route("/leave/<int:leave_id>/approve", methods=["POST"])
-def approve_leave(leave_id):
-    data = request.json or {}
-    leave = ManagerService.approve_leave(g.employee.id, leave_id, data.get("note"))
+def approve_leave_api(leave_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    leave = ManagerService.approve_leave(manager.id, leave_id, data.get("note"))
     return jsonify({"message": "Approved", "id": leave.id})
 
 
-# =========================
-# REJECT
-# =========================
 @manager_bp.route("/leave/<int:leave_id>/reject", methods=["POST"])
-def reject_leave(leave_id):
-    data = request.json or {}
-    leave = ManagerService.reject_leave(g.employee.id, leave_id, data.get("note"))
+def reject_leave_api(leave_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    leave = ManagerService.reject_leave(manager.id, leave_id, data.get("note"))
     return jsonify({"message": "Rejected", "id": leave.id})
 
-
-# =========================
-# REMINDER
-# =========================
 @manager_bp.route("/reminder", methods=["POST"])
-def reminder():
-    data = request.json
-    ManagerService.send_reminder(data.get("employee_ids"), data.get("message"))
+def reminder_api():
+    data = request.get_json(silent=True) or {}
+    employee_ids = data.get("employee_ids") or []
+    ManagerService.send_reminder(employee_ids, data.get("message"))
     return jsonify({"message": "Sent"})
 
 
-# =========================
-# CONTRACT
-# =========================
-@manager_bp.route("/contracts/expiring")
-def contract_expiring():
-    data = ManagerService.get_contract_expiring(g.employee.id)
-    return jsonify([c.contract_code for c in data])
+@manager_bp.route("/contracts/expiring", methods=["GET"])
+def contract_expiring_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+
+    return jsonify(ManagerService.get_contract_expiring(manager.id))
 
 
 @manager_bp.route("/contracts/renew", methods=["POST"])
-def renew_contract():
-    data = request.json
+def renew_contract_api():
+    data = request.get_json(silent=True) or {}
     contract = ManagerService.renew_contract(data)
-    return jsonify({"id": contract.id})
+    return jsonify({"id": contract.id, "message": "Renewed"})
 
 
-# =========================
-# SALARY
-# =========================
-@manager_bp.route("/salary")
-def salary():
-    month = int(request.args.get("month"))
-    year = int(request.args.get("year"))
+@manager_bp.route("/salary", methods=["GET"])
+def salary_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
 
-    data = ManagerService.get_department_salary(g.employee.id, month, year)
-    return jsonify([s.id for s in data])
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    if not month or not year:
+        return jsonify({"error": "month và year là bắt buộc"}), 400
+
+
+    return jsonify(ManagerService.get_department_salary(manager.id, month, year))

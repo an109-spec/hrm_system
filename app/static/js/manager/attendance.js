@@ -1,36 +1,85 @@
-API.attendance().then(data => {
+let allRows = []
+let activeFilter = 'ALL'
+
+function formatStatus(status) {
+  const map = {
+    ON_TIME: '🟢 Đúng giờ',
+    PRESENT: '🟢 Đúng giờ',
+    LATE: '🟡 Đi muộn',
+    ABSENT: '🔴 Vắng mặt',
+    LEAVE: '🌴 Nghỉ phép'
+  }
+  return map[status] || status
+}
+
+function getReminderTargets() {
+  return allRows.filter((r) => r.status === 'ABSENT').map((r) => r.employee_id)
+}
+function renderRows() {
   const body = document.getElementById('attendance-body')
-  body.innerHTML = ''
-
-  data.forEach(e => {
-    body.innerHTML += `
+  const rows = activeFilter === 'ALL' ? allRows : allRows.filter((r) => r.status === activeFilter)
+  body.innerHTML = rows
+    .map((row, idx) => `
       <tr>
-        <td>${e.name}</td>
-        <td>${e.check_in || '--'}</td>
-        <td>${e.check_out || '--'}</td>
-        <td>
-          <span class="status ${e.status}">
-            ${formatStatus(e.status)}
-          </span>
-        </td>
+              <td>${idx + 1}</td>
+        <td>${row.name}</td>
+        <td>${row.position || '--'}</td>
+        <td>${row.check_in || '--:--'}</td>
+        <td>${row.check_out || '--:--'}</td>
+        <td><span class="status ${row.status}">${formatStatus(row.status)}</span></td>
       </tr>
-    `
-  })
-})
+          `)
+    .join('')
+}
+function updateAlertBox() {
+  const alertBox = document.getElementById('attendance-alert')
+  const now = new Date()
+  const hour = now.getHours()
+  const minute = now.getMinutes()
+  const absentRows = allRows.filter((row) => row.status === 'ABSENT')
 
-function formatStatus(status){
-  switch(status){
-    case "ON_TIME": return "🟢 Đúng giờ"
-    case "LATE": return "🟡 Đi muộn"
-    case "ABSENT": return "🔴 Vắng"
-    case "LEAVE": return "🌴 Nghỉ phép"
-    default: return status
+  if ((hour > 9 || (hour === 9 && minute > 0)) && absentRows.length) {
+    alertBox.hidden = false
+    alertBox.innerHTML = `⚠️ Cảnh báo: có ${absentRows.length} nhân viên chưa check-in sau 09:00.`
+  } else {
+    alertBox.hidden = true
+  }
+}
+async function loadAttendance() {
+  const sendBtn = document.getElementById('send-reminder')
+  sendBtn.disabled = true
+  try {
+    allRows = await ManagerAPI.attendanceToday()
+    renderRows()
+    updateAlertBox()
+    sendBtn.disabled = getReminderTargets().length === 0
+  } catch (err) {
+    document.getElementById('attendance-alert').hidden = false
+    document.getElementById('attendance-alert').textContent = `Lỗi tải dữ liệu: ${err.message}`
   }
 }
 
-function sendReminder(){
-  API.attendance().then(data=>{
-    const ids = data.map(e => e.employee_id)
-    API.reminder(ids).then(()=>alert("Đã gửi nhắc nhở"))
+document.querySelectorAll('.filters button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filters button').forEach((node) => node.classList.remove('active'))
+    btn.classList.add('active')
+    activeFilter = btn.dataset.filter
+    renderRows()
   })
-}
+  })
+
+document.getElementById('send-reminder').addEventListener('click', async () => {
+  const ids = getReminderTargets()
+  if (!ids.length) {
+    alert('Không có nhân viên vắng để nhắc nhở.')
+    return
+  }
+
+  await ManagerAPI.reminder(
+    ids,
+    'Chào bạn, bạn chưa thực hiện chấm công check-in hôm nay. Vui lòng kiểm tra lại thiết bị hoặc báo quản lý nếu có sai sót.'
+  )
+  alert('Đã gửi nhắc nhở')
+})
+
+loadAttendance()
