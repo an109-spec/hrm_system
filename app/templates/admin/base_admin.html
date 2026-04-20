@@ -1,0 +1,24 @@
+{% extends "layouts/base.html" %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/admin.css') }}">
+{% block admin_styles %}{% endblock %}
+{% endblock %}
+{% block content %}
+<div class="admin-wrap">
+  <aside class="admin-sidebar">
+    <a href="/admin/dashboard">Tổng quan hệ thống</a>
+    <a href="/admin/employees">Quản lý nhân viên</a>
+    <a href="/admin/departments">Quản lý phòng ban</a>
+    <a href="/admin/positions">Quản lý chức danh</a>
+    <a href="/admin/attendance">Chấm công</a>
+    <a href="/admin/salary">Lương</a>
+  </aside>
+  <section class="admin-main">
+    {% block admin_content %}{% endblock %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin/admin.js') }}"></script>
+{% block admin_scripts %}{% endblock %}
+{% endblock %}

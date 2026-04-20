@@ -26,6 +26,7 @@ from app.models.salary import Salary
 from app.models.notification import Notification
 
 from app.models.complaint import Complaint
+from app.models.history import HistoryLog
 # Danh sách Export để dễ dàng quản lý
 __all__ = [
     'db',
@@ -46,5 +47,6 @@ __all__ = [
     'Salary',
     'Notification',
     'SystemSetting',
-    'Complaint'
+    'Complaint',
+    'HistoryLog'
 ]

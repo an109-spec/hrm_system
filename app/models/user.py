@@ -19,7 +19,10 @@ class User(BaseModel, UserMixin):
     
     # Trạng thái tài khoản (Cho phép hoặc khóa truy cập)
     is_active = db.Column(db.Boolean, default=True, server_default='true')
-
+    lock_reason = db.Column(db.Text, nullable=True)
+    locked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    locked_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
     # Relationships
     # Mối quan hệ 1-1 với Employee (uselist=False đảm bảo tính duy nhất)
     # back_populates giúp truy cập ngược từ employee.user

@@ -1,6 +1,8 @@
 import os
 from datetime import timedelta
 
+import psycopg2
+
 PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
 class BaseConfig:
@@ -67,11 +69,8 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
-    #MAIL_SUPPRESS_SEND = True
-
-    # Nếu không set PostgreSQL thì fallback SQLite (DEV ONLY)
-    if not BaseConfig.SQLALCHEMY_DATABASE_URI:
-        SQLALCHEMY_DATABASE_URI = "sqlite:///hrm_db.db"
+    # Thêm dấu nháy kép bao quanh toàn bộ địa chỉ URI
+    SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://postgres:123456@localhost:5432/hrm_db"
 
 
 class ProductionConfig(BaseConfig):

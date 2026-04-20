@@ -1,216 +1,98 @@
-/* --- RESET & CHUNG --- */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
 :root {
-  --primary-color: #1e40af; /* Xanh dương đậm chuyên nghiệp */
-  --secondary-color: #3b82f6;
-  --accent-color: #10b981;  /* Màu xanh lá cho nút Chấm công/Thành công */
-  --text-color: #1f2937;
-  --bg-color: #f3f4f6;
-  --white: #ffffff;
-  --border-color: #e5e7eb;
+    /* Bảng màu độ tương phản cao, không bị nhòe */
+    --primary-color: #000000;    /* Đen thuần cho text chính để in cực nét */
+    --brand-blue: #1a56db;      /* Xanh đậm chuyên nghiệp */
+    --success-green: #057a55;
+    --warning-orange: #c2410c;
+    --gray-dark: #374151;
+    --gray-light: #f9fafb;
+    --border-strong: #1f2937;   /* Đường kẻ đậm màu hơn để in rõ */
+    --white: #ffffff;
 }
 
 body {
-  font-family: 'Inter', Roboto, Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-color);
-  background: var(--bg-color);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased; /* Làm sắc nét font chữ */
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f3f4f6;
+    color: var(--primary-color);
 }
 
-.container {
-  max-width: 1240px;
-  margin: auto;
-  padding: 0 20px;
+/* Các thẻ Card sắc nét */
+.emp-card {
+    background: var(--white);
+    border: 1.5px solid #e5e7eb; /* Đường viền dày hơn một chút để in rõ */
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: none; /* Bỏ đổ bóng nhòe khi in, dùng border để phân cách */
+    margin-bottom: 20px;
 }
 
-/* --- HEADER HRM --- */
-.hrm-header {
-  background: var(--white);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+/* Button thiết kế phẳng (Flat) để không bị nhòe viền */
+.btn-action {
+    border: none;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 28px;
+    border-radius: 8px;
+    transition: transform 0.1s;
 }
 
-/* Thanh top bar (Chứa điều hướng vai trò) */
-.header-top {
-  background: var(--primary-color);
-  color: var(--white);
-  font-size: 13px;
-  padding: 8px 0;
+.btn-checkin-main { background-color: var(--success-green); color: white; }
+.btn-checkout-main { background-color: var(--warning-orange); color: white; }
+
+/* CSS cho bản in (Print) */
+@media print {
+    body { background: white; }
+    .emp-card { border: 1pt solid black; break-inside: avoid; }
+    .btn, #sidebarToggle, .search-box { display: none !important; } /* Ẩn các nút khi in */
+    .number { color: black !important; font-weight: bold; }
 }
 
-.header-top-inner, .header-main-inner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* ===== HEADER MỚI ===== */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: #ffffff;
+    border-bottom: 1px solid #ddd;
 }
 
-.header-top a {
-  color: rgba(255,255,255,0.9);
-  text-decoration: none;
-  transition: color 0.2s;
+.header-left .brand {
+    font-weight: 600;
+    font-size: 16px;
 }
 
-.header-top a:hover {
-  color: var(--white);
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
 }
 
-/* Thanh chính (Logo & Search) */
-.header-main {
-  padding: 15px 0;
-  border-bottom: 1px solid var(--border-color);
+.header-link {
+    text-decoration: none;
+    color: #333;
+    font-size: 14px;
 }
 
-.logo a {
-  text-decoration: none;
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--primary-color);
+.header-link .badge {
+    background: #dc3545;
+    color: #fff;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 11px;
 }
 
-.logo a span {
-  color: var(--secondary-color);
-}
-
-/* Ô tìm kiếm nhân sự */
-.search-box {
-  flex: 0 1 500px;
-  margin: 0 20px;
-}
-
-.search-box form {
-  display: flex;
-  background: var(--bg-color);
-  border-radius: 8px;
-  padding: 4px;
-  border: 1px solid var(--border-color);
-}
-
-.search-box input {
-  border: none;
-  background: transparent;
-  width: 100%;
-  padding: 8px 12px;
-  outline: none;
-}
-
-.search-box button {
-  border: none;
-  background: var(--primary-color);
-  color: var(--white);
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-/* Nút Chấm công nhanh */
-.btn-checkin {
-  background: var(--accent-color);
-  color: var(--white);
-  padding: 10px 20px;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: opacity 0.2s;
-}
-
-.btn-checkin:hover {
-  opacity: 0.9;
-}
-
-/* --- MENU TÀI KHOẢN & DROPDOWN --- */
-.account-menu {
-  position: relative;
-}
-
-.account-menu__trigger {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  padding: 6px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.account-menu__dropdown {
-  display: none;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  background: var(--white);
-  min-width: 200px;
-  border-radius: 8px;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-  border: 1px solid var(--border-color);
-  z-index: 1000;
-  overflow: hidden;
-}
-
-.account-menu:hover .account-menu__dropdown {
-  display: block;
-}
-
-.account-menu__dropdown a, .account-menu__dropdown button {
-  padding: 12px 16px;
-  display: block;
-  text-decoration: none;
-  color: var(--text-color);
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
-.account-menu__dropdown a:hover {
-  background: var(--bg-color);
-  color: var(--primary-color);
+.username {
+    font-size: 14px;
 }
 
 .btn-logout {
-  color: #dc2626 !important;
-  font-weight: 600;
+    background: none;
+    border: 1px solid #ccc;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
 }
-
-/* --- THÔNG BÁO --- */
-.notify-dropdown {
-  width: 320px;
-  padding: 0;
-}
-
-.notify-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.notify-item--new {
-  background: #eff6ff;
-  border-left: 3px solid var(--primary-color);
-}
-
-/* --- FOOTER --- */
-.app-footer {
-  margin-top: 50px;
-  padding: 40px 0;
-  background: var(--white);
-  border-top: 1px solid var(--border-color);
-  text-align: center;
-}
-
-/* --- ALERT & TOAST --- */
-.alert {
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-.alert-success { background: #d1fae5; color: #065f46; }
-.alert-danger { background: #fee2e2; color: #991b1b; }

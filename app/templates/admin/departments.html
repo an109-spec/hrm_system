@@ -1,0 +1,5 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<div class="card"><h3>Phòng ban</h3><button onclick="createDepartmentPrompt()">+ Thêm phòng ban</button><table><thead><tr><th>Mã</th><th>Tên</th><th>Trưởng phòng</th><th>Số NV</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="departmentRows"></tbody></table></div>
+{% endblock %}
+{% block admin_scripts %}<script>window.ADMIN_PAGE='departments';</script>{% endblock %}

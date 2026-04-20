@@ -1,15 +1,172 @@
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+/* ===== DASHBOARD BASE ===== */
+.dashboard-wrapper {
+    padding: 20px;
+    background: #f1f5f9; 
+    min-height: 100vh;
 }
 
-.summary-card {
-  text-align: center;
-  padding: 20px;
+.dashboard-grid-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
 }
 
-.summary-card h3 {
-  margin: 10px 0 0;
-  font-size: 22px;
+.dashboard-grid-summary {
+    display: grid;
+    grid-template-columns: 1fr; 
+    gap: 20px;
+}
+
+/* ===== CARD ===== */
+.card {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 20px; /* Tăng nhẹ padding card tổng thể */
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Thêm đổ bóng nhẹ cho sang */
+}
+
+/* ===== PROFILE ===== */
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+.card-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+}
+.avatar-lg {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.name {
+    font-weight: 700;
+    font-size: 20px; /* Tăng từ 16px lên 20px */
+}
+
+
+.meta {
+    font-size: 15px; /* Tăng từ 13px lên 15px */
+    color: #666;
+}
+
+.profile-info p {
+    margin: 5px 0;
+    font-size: 20px;
+}
+
+/* ===== STATUS ===== */
+.status.online {
+    color: #198754;
+    font-weight: 500;
+}
+
+.status.offline {
+    color: #6c757d;
+}
+
+/* ===== ATTENDANCE ===== */
+.timer {
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.btn-green {
+    background: #1e3a8a;
+    color: white;
+    border: none;
+    padding: 10px;
+    width: 100%;
+}
+
+.btn-orange {
+    background: #334155;
+    color: white;
+    border: none;
+    padding: 14px 24px; /* Tăng độ dày nút bấm */
+    font-size: 16px;    /* Chữ trong nút to hơn */
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: background 0.3s;
+}
+.btn-orange:hover {
+    background: #004d00; /* Hiệu ứng khi di chuột vào */
+}
+/* ===== SUMMARY ===== */
+.summary-item {
+    background: #fff;
+    padding: 12px 20px; /* Giảm padding trên dưới để bớt trống trải */
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    text-align: left; /* Đổi sang căn trái nhìn sẽ chuyên nghiệp hơn khi thẻ dài */
+    display: flex; /* Dùng flex để đưa tiêu đề và giá trị nằm trên hàng hoặc bố cục tốt hơn */
+    flex-direction: column;
+    justify-content: center;
+}
+
+.summary-item h4 {
+    font-size: 16px; /* Tăng từ 14px lên 16px */
+    color: #666;
+    margin: 0 0 5px 0;
+    font-weight: 500;
+}
+
+.value {
+    font-size: 28px; /* Tăng mạnh từ 20px lên 28px để nổi bật số liệu */
+    font-weight: 800; /* Làm chữ đậm hơn */
+    color: #1e3a8a;
+    margin: 0;
+}
+
+.link {
+    font-size: 13px;
+    text-decoration: none;
+    color: #0d6efd;
+}
+
+/* ===== HEADER AVATAR ===== */
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.timer h4, .timer b {
+    font-size: 22px; /* Tăng kích thước tiêu đề */
+    font-weight: 700;
+    color: #007BFF;
+}
+
+/* Dòng thời gian: 18:31:23 - Monday, 20/04/2026 */
+.timer p, .timer span {
+    font-size: 18px; /* Tăng cỡ chữ lớn hơn để dễ đọc */
+    color: #007BFF;  /* Đổi sang màu xanh dương nổi bật */
+    font-weight: 600;
+    margin: 10px 0;  /* Tạo khoảng cách thông thoáng */
+}
+
+/* Dòng "Giờ vào: 12:38" */
+.attendance-info { 
+    font-size: 16px; 
+    color: #555;
+    font-weight: 500;
+    margin-top: 10px;
 }

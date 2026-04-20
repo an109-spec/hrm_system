@@ -10,9 +10,11 @@
     <div class="quick-profile">
       <div class="avatar-shell online">
         {% if employee.avatar %}
-        <img src="{{ employee.avatar }}" alt="{{ employee.full_name }}">
+        <img src="{{ employee.avatar }}" class="rounded-circle mb-2" width="70" height="70" />
         {% else %}
-        <div class="avatar-fallback">{{ employee.full_name[0] }}</div>
+        <div class="avatar-lg mx-auto mb-2">
+            {{ employee.full_name[0] }}
+        </div>
         {% endif %}
       </div>
       <div>

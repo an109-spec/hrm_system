@@ -1,0 +1,5 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<div class="card"><h3>Nhân viên (khóa tài khoản & phân quyền)</h3><table><thead><tr><th>ID</th><th>Tên</th><th>User</th><th>Role</th><th>Tài khoản</th><th>Hành động</th></tr></thead><tbody id="employeeRows"></tbody></table></div>
+{% endblock %}
+{% block admin_scripts %}<script>window.ADMIN_PAGE='employees';</script>{% endblock %}

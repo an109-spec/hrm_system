@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
+from app.models.employee import Employee
 from app.modules.dashboard.service import DashboardService
 from app.common.exceptions import ValidationError, UnauthorizedError
 
@@ -166,3 +167,19 @@ def attendance_chart():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@dashboard_bp.route("/employee", methods=["GET"])
+def employee_dashboard():
+    # Giả sử bạn dùng Flask-Login hoặc JWT để lấy current_user
+    # Ở đây tôi lấy tạm từ args theo cấu trúc file cũ của bạn
+    user_id = request.args.get("user_id", type=int)
+    if not user_id:
+        return "Unauthorized", 401
+    
+    # Tìm employee tương ứng với user_id
+    employee = Employee.query.filter_by(user_id=user_id).first()
+    if not employee:
+        return render_template('employee/dashboard.html', employee=None)
+
+    data = DashboardService.get_employee_dashboard_data(employee.id)
+    return render_template('employee/dashboard.html', **data)

@@ -1,0 +1,7 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<div class="filters"><input id="month" type="number" min="1" max="12"><input id="year" type="number" min="2000" max="2100"><select id="groupBy"><option value="department">department</option><option value="position">position</option><option value="role">role</option></select><button onclick="loadSalaryAggregate()">Lọc</button><button onclick="lockSalary()">🔒 Chốt lương</button><button onclick="unlockSalary()">🔓 Mở chốt</button></div>
+<div class="card"><h3 id="salaryStatus"></h3><table><thead><tr><th>Nhóm</th><th>Số NV</th><th>Tổng lương</th><th>TB lương</th></tr></thead><tbody id="salaryRows"></tbody></table></div>
+<div class="card"><h3>Audit lương</h3><ul id="salaryAudit"></ul></div>
+{% endblock %}
+{% block admin_scripts %}<script>window.ADMIN_PAGE='salary';</script>{% endblock %}

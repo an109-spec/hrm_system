@@ -1,69 +1,32 @@
-<!-- HEADER TOP BAR -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-3">
+<nav class="navbar navbar-light bg-white border-bottom px-4 sticky-top d-flex justify-content-between">
 
-  <!-- LEFT: Toggle / Brand -->
-  <div class="d-flex align-items-center">
-    <button class="btn btn-outline-secondary btn-sm me-2" id="sidebarToggle">
-      ☰
-    </button>
-
-    <span class="fw-bold">
-      HRM SYSTEM
-    </span>
+  <!-- LEFT -->
+  <div class="d-flex align-items-center gap-3">
+    <button class="btn btn-sm" id="sidebarToggle">☰</button>
+    <span class="fw-bold fs-5">Cổng nhân viên</span>
   </div>
 
-  <!-- CENTER: Search -->
-  <div class="mx-auto w-50">
-    <form method="GET" action="/employee/search">
-      <input
-        type="text"
-        name="q"
-        class="form-control form-control-sm"
-        placeholder="Tìm kiếm nhân viên, phòng ban..."
-      />
-    </form>
-  </div>
-
-  <!-- RIGHT: Notifications + User -->
+  <!-- RIGHT -->
   <div class="d-flex align-items-center gap-3">
 
-    <!-- Notifications -->
+    <!-- NOTIFICATION -->
     <div class="dropdown">
-      <button class="btn btn-light position-relative" data-bs-toggle="dropdown">
+      <button class="btn position-relative" data-bs-toggle="dropdown">
         🔔
         {% if unread_notifications_count > 0 %}
-        <span class="position-absolute top-0 start-100 translate-middle badge bg-danger">
+        <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
           {{ unread_notifications_count }}
         </span>
         {% endif %}
       </button>
-
-      <div class="dropdown-menu dropdown-menu-end p-2" style="width: 320px;">
-        <h6 class="px-2">Thông báo</h6>
-
-        {% for n in notifications[:5] %}
-        <div class="border-bottom py-1">
-          <strong>{{ n.title }}</strong>
-          <div class="small text-muted">{{ n.created_at }}</div>
-        </div>
-        {% endfor %}
-
-        <a href="/employee/notifications" class="btn btn-sm btn-link">
-          Xem tất cả
-        </a>
-      </div>
     </div>
 
-    <!-- User -->
-    <div class="dropdown">
-      <button class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown">
-        👤 {{ current_user.username }}
-      </button>
-
-      <div class="dropdown-menu dropdown-menu-end">
-        <a class="dropdown-item" href="/employee/profile">Hồ sơ</a>
-        <a class="dropdown-item" href="/auth/logout">Đăng xuất</a>
+    <!-- USER -->
+    <div class="d-flex align-items-center gap-2">
+      <div class="avatar-sm">
+        {{ current_user.username[0]|upper }}
       </div>
+      <a href="/auth/logout" class="btn btn-outline-dark btn-sm">Đăng xuất</a>
     </div>
 
   </div>

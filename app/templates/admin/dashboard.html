@@ -1,0 +1,12 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<div class="filters">
+  <input id="month" type="number" min="1" max="12" placeholder="Month">
+  <input id="year" type="number" min="2000" max="2100" placeholder="Year">
+  <select id="department"></select>
+  <button onclick="loadDashboard()">Lọc</button>
+</div>
+<div id="overview" class="grid"></div>
+<div class="card"><h3>Hoạt động gần đây</h3><ul id="activities"></ul></div>
+{% endblock %}
+{% block admin_scripts %}<script>window.ADMIN_PAGE='dashboard';</script>{% endblock %}

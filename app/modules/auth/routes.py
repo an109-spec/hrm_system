@@ -1,13 +1,10 @@
 from flask import request, render_template, redirect, url_for, session, current_app
-
-from app.common.exceptions import (
-    UnauthorizedError,
-    ValidationError,
-    ConflictError,
-)
+from flask_jwt_extended import create_access_token, set_access_cookies
+from app.common.exceptions import UnauthorizedError, ValidationError, ConflictError
 
 from . import auth_bp
 from .validators import validate_login, validate_register
+# CHỈ import các Class cần thiết, KHÔNG import module 'dto' trùng tên
 from .dto import (
     LoginDTO,
     RegisterDTO,
@@ -20,80 +17,90 @@ def _mask_identifier(identifier: str) -> str:
     identifier = (identifier or "").strip()
     if "@" in identifier:
         local, domain = identifier.split("@", 1)
-        if len(local) <= 2:
-            masked_local = local[0] + "*" if local else "*"
-        else:
-            masked_local = local[:2] + "*" * (len(local) - 2)
+        masked_local = local[:2] + "*" * (len(local) - 2) if len(local) > 2 else local + "*"
         return f"{masked_local}@{domain}"
-
-    if len(identifier) <= 4:
-        return "*" * len(identifier)
-
-    return f"{identifier[:2]}{'*' * (len(identifier) - 4)}{identifier[-2:]}"
-
-# ======================================================
-# REGISTER
-# ======================================================
-
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "GET":
-        # Duy An có thể truyền danh sách phòng ban sang để user chọn
-        # departments = Department.query.all()
-        return render_template("auth/register.html")
-
-    data = request.form.to_dict()
-    # Check mật khẩu khớp... (giữ nguyên)
-    
-    dto = RegisterDTO(
-        email=data.get("email") or None,
-        phone=data.get("phone") or None,
-        password=data["password"],
-        full_name=data["full_name"],
-        position=data.get("position"), # Lấy từ form
-        department_id=data.get("department_id") # Lấy từ form
-    )
-
-    try:
-        user = AuthService.register(dto)
-        session["user_id"] = user.id
-        return redirect(url_for("employee.dashboard"))
-
-    except ConflictError as e:
-        return render_template("auth/register.html", errors=[str(e)], data=data)
-
+    return f"{identifier[:2]}{'*' * (len(identifier) - 4)}{identifier[-2:]}" if len(identifier) > 4 else "*" * len(identifier)
 
 # ======================================================
 # LOGIN
 # ======================================================
-
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template(
-            "auth/login.html",
-            next_url=request.args.get("next")
-        )
+        return render_template("auth/login.html", next_url=request.args.get("next"))
 
     data = request.form.to_dict()
     next_url = data.get("next") or request.args.get("next")
     
     try:
+        # 1. Validate dữ liệu đầu vào
         validate_login(data)
-        dto = LoginDTO(identifier=data["identifier"], password=data["password"])
-        user = AuthService.login(dto)
         
-        session["user_id"] = user.id
+        # 2. Khởi tạo đối tượng DTO từ dữ liệu form (Đặt tên là auth_dto để tránh trùng)
+        auth_dto = LoginDTO(
+            identifier=data.get("identifier"),
+            password=data.get("password")
+        )
+        
+        # 3. Gọi service xử lý logic login
+        user = AuthService.login(auth_dto)
+        
+        # 4. Tạo JWT Token
+        access_token = create_access_token(identity=str(user.id))
 
-        return redirect(next_url or url_for("employee.dashboard"))
+        # 5. Tạo response redirect về Dashboard
+        response = redirect(next_url or url_for("employee.dashboard"))
+
+        # 6. Đính Token vào Cookie (Quan trọng để @jwt_required đọc được)
+        set_access_cookies(response, access_token)
+        
+        # Lưu session song song nếu cần dùng cho inject_globals
+        session["user_id"] = user.id
+        
+        return response
 
     except (ValidationError, UnauthorizedError) as e:
         return render_template(
             "auth/login.html",
             error=str(e),
-            locked_until=getattr(e, "locked_until", None),
             next_url=next_url
         )
+
+# ======================================================
+# REGISTER
+# ======================================================
+@auth_bp.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "GET":
+        return render_template("auth/register.html")
+
+    data = request.form.to_dict()
+    
+    # Tạo DTO để truyền vào Service
+    reg_dto = RegisterDTO(
+        email=data.get("email"),
+        phone=data.get("phone"),
+        password=data.get("password"),
+        full_name=data.get("full_name"),
+        position=data.get("position"),
+        department_id=data.get("department_id")
+    )
+
+    try:
+        user = AuthService.register(reg_dto)
+        
+        # Sau khi đăng ký, tạo luôn token để user vào thẳng dashboard
+        access_token = create_access_token(identity=str(user.id))
+        response = redirect(url_for("employee.dashboard"))
+        set_access_cookies(response, access_token)
+        
+        session["user_id"] = user.id
+        return response
+
+    except ConflictError as e:
+        return render_template("auth/register.html", error=str(e), data=data)
+
+# ... Các hàm Logout, Forgot Password giữ nguyên ...
 
 # ======================================================
 # LOGOUT

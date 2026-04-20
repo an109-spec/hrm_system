@@ -5,7 +5,7 @@ from app.extensions.db import db
 class BaseModel(db.Model):
     __abstract__ = True
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     
     # ✅ Dùng lambda để đảm bảo lấy thời gian tại thời điểm tạo record
     # ✅ Sử dụng timezone=True để tương thích với PostgreSQL timestamptz

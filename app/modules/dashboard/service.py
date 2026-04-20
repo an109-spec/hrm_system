@@ -1,7 +1,7 @@
 # app/modules/dashboard/service.py
 
 from sqlalchemy import func
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.extensions.db import db
 from app.models.employee import Employee
@@ -19,7 +19,7 @@ from .dto import (
     ComplaintDTO,
     NotificationDTO
 )
-
+from app.models.leave import LeaveRequest
 
 class DashboardService:
 
@@ -142,3 +142,72 @@ class DashboardService:
             })
 
         return data
+    
+    @staticmethod
+    def get_employee_dashboard_data(employee_id):
+        from datetime import datetime
+        from app.models.leave_usage import LeaveUsage # Giả định model quản lý ngày phép
+        
+        today = date.today()
+        
+        # 1. Lấy thông tin Employee & Position
+        emp = Employee.query.get(employee_id)
+        
+        # 2. Lấy chấm công hôm nay
+        attendance = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
+        
+        # 3. Lấy số ngày phép (Giả định logic: Tổng 12 - Đã dùng)
+        # Nếu bạn có model LeaveBalance riêng thì query từ đó
+        used_leave = db.session.query(func.sum(LeaveUsage.days_count))\
+            .filter_by(employee_id=employee_id, status='approved').scalar() or 0
+        leave_balance = {
+            "remaining_days": 12 - used_leave,
+            "total_days": 12
+        }
+
+        # 4. Lấy lương tháng gần nhất (đã thanh toán)
+        latest_salary = Salary.query.filter_by(employee_id=employee_id, status='paid')\
+            .order_by(Salary.year.desc(), Salary.month.desc()).first()
+
+        # 5. Lấy 5 thông báo mới nhất
+        notifications = Notification.query.filter_by(user_id=emp.user_id)\
+            .order_by(Notification.created_at.desc()).limit(5).all()
+
+        return {
+            "employee": emp,
+            "attendance": attendance,
+            "leave_balance": leave_balance,
+            "latest_salary": latest_salary,
+            "notifications": notifications,
+            "now": datetime.now()
+        }
+    @staticmethod
+    def get_employee_dashboard_batch(user_id):
+        emp = Employee.query.filter_by(user_id=user_id).first()
+        if not emp: return None
+
+        today = date.today()
+        # 1. Chấm công
+        attendance = Attendance.query.filter_by(employee_id=emp.id, date=today).first()
+        
+        # 2. Ngày phép: Tổng 12 - (to_date - from_date + 1)
+        used_days = db.session.query(
+            func.sum(func.datediff(LeaveRequest.to_date, LeaveRequest.from_date) + 1)
+        ).filter(LeaveRequest.employee_id == emp.id, LeaveRequest.status == 'approved').scalar() or 0
+        
+        # 3. Lương mới nhất
+        salary = Salary.query.filter_by(employee_id=emp.id, status='paid')\
+            .order_by(Salary.year.desc(), Salary.month.desc()).first()
+
+        # 4. Thông báo (Lấy 5 mục như ảnh 2)
+        notifications = Notification.query.filter_by(user_id=user_id)\
+            .order_by(Notification.created_at.desc()).limit(5).all()
+
+        return {
+            "employee": emp,
+            "attendance": attendance,
+            "leave_balance": {"remaining": 12 - int(used_days), "total": 12},
+            "latest_salary": salary,
+            "notifications": notifications,
+            "now": datetime.now(timezone.utc) 
+        }

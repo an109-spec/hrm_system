@@ -39,16 +39,13 @@ class AuthService:
 
     @staticmethod
     def _get_user_by_identifier(identifier: str) -> User | None:
-        from app.models.employee import Employee
-
-        employee = Employee.query.filter(
-            or_(
-                Employee.phone == identifier,
-                Employee.user.has(User.email == identifier)
-            )
-        ).first()
-
-        return employee.user if employee else None
+            return User.query.filter(
+                or_(
+                    User.email == identifier,       # Tìm theo email
+                    User.username == identifier,    # Tìm theo username (VD: "admin", "hr")
+                    User.employee_profile.has(Employee.phone == identifier) # Tìm theo SĐT
+                )
+            ).first()
 
     @staticmethod
     def _generate_username(email: str | None, phone: str | None) -> str:
@@ -122,7 +119,7 @@ class AuthService:
             raise UnauthorizedError("Sai thông tin đăng nhập")
 
         now = datetime.now(timezone.utc)
-        if user.locked_until and user.locked_until > now:
+        if user.locked_at and user.locked_at > now:
             raise UnauthorizedError(f"Tài khoản bị khóa đến {user.locked_until}")
 
         # Login thành công: Reset số lần sai
