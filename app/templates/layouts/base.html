@@ -22,6 +22,15 @@
 
   <div class="header-right">
     {% if current_user %}
+          <div class="avatar-sm">
+        {% if avatar_url %}
+          <img src="{{ avatar_url }}" alt="avatar" width="32" height="32" style="border-radius:50%; object-fit:cover;">
+        {% elif current_employee %}
+          {{ current_employee.full_name[0] }}
+        {% else %}
+          {{ current_user.username[0] }}
+        {% endif %}
+      </div>
       <a href="{{ url_for('employee.notifications') }}" class="header-link">
         🔔 Thông báo
         {% if unread_notifications %}

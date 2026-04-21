@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from sqlalchemy import and_
 
 from app.extensions import db
@@ -13,12 +13,12 @@ class AttendanceService:
     # ==============================
     @staticmethod
     def check_in_out(employee_id: int, sim_time_str: str = None):
-        today = date.today()
-        # Ưu tiên giờ giả lập từ demo
         if sim_time_str:
-            now_dt = datetime.strptime(f"{today} {sim_time_str}", "%Y-%m-%d %H:%M:%S")
+            now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
         else:
             now_dt = datetime.now()
+
+        today = now_dt.date()
 
         record = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
 
@@ -63,7 +63,7 @@ class AttendanceService:
 
         # CHECK OUT
         if record.check_out:
-            raise ValidationError("Bạn đã check-out rồi")
+            raise ValidationError("Bạn đã hoàn thành ca hôm nay")
 
         record.check_out = now_dt
 
@@ -76,11 +76,23 @@ class AttendanceService:
             start_dt = start_dt.replace(hour=8, minute=0, second=0)
 
         delta = now_dt - start_dt
-        hours = delta.total_seconds() / 3600
-        
-        # Trừ 1 tiếng nghỉ trưa nếu làm qua buổi trưa (sau 13h)
-        if now_dt.hour >= 13:
-            hours -= 1.0
+        total_seconds = delta.total_seconds()
+
+        # ===== TRỪ THỜI GIAN NGHỈ TRƯA CHUẨN =====
+        lunch_start = start_dt.replace(hour=12, minute=0, second=0, microsecond=0)
+        lunch_end = start_dt.replace(hour=13, minute=0, second=0, microsecond=0)
+
+        overlap_start = max(start_dt, lunch_start)
+        overlap_end = min(now_dt, lunch_end)
+
+        lunch_seconds = 0
+        if overlap_end > overlap_start:
+            lunch_seconds = (overlap_end - overlap_start).total_seconds()
+
+        # ===== GIỜ CÔNG THỰC =====
+        hours = (total_seconds - lunch_seconds) / 3600
+
+        record.working_hours = max(0, round(hours, 2))
 
         record.working_hours = max(0, round(hours, 2))
         db.session.commit()
@@ -91,10 +103,16 @@ class AttendanceService:
     # GET TODAY
     # ==============================
     @staticmethod
-    def get_today(employee_id: int):
+    def get_today(employee_id: int, sim_time_str=None):
+        if sim_time_str:
+            now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
+            today = now_dt.date()
+        else:
+            today = date.today()
+
         return Attendance.query.filter_by(
             employee_id=employee_id,
-            date=date.today()
+            date=today
         ).first()
 
     # ==============================
@@ -105,3 +123,26 @@ class AttendanceService:
         return Attendance.query.filter_by(
             employee_id=employee_id
         ).order_by(Attendance.date.desc()).limit(limit).all()
+    @staticmethod
+    def recalculate_hours(check_in, check_out):
+        start_dt = check_in
+
+        if start_dt.hour > 8 or (start_dt.hour == 8 and start_dt.minute > 10):
+            start_dt = start_dt.replace(hour=9, minute=0, second=0)
+        elif start_dt.hour < 8:
+            start_dt = start_dt.replace(hour=8, minute=0, second=0)
+
+        delta = check_out - start_dt
+        total_seconds = delta.total_seconds()
+
+        lunch_start = start_dt.replace(hour=12, minute=0, second=0)
+        lunch_end = start_dt.replace(hour=13, minute=0, second=0)
+
+        overlap_start = max(start_dt, lunch_start)
+        overlap_end = min(check_out, lunch_end)
+
+        lunch_seconds = 0
+        if overlap_end > overlap_start:
+            lunch_seconds = (overlap_end - overlap_start).total_seconds()
+
+        return round((total_seconds - lunch_seconds) / 3600, 2)

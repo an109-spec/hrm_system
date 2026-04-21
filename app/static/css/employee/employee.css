@@ -252,3 +252,7 @@
     flex-direction: column;
   }
 }
+
+.toast-item.success { background: #1f8b4c; }
+.toast-item.error { background: #c0392b; }
+.toast-item.warning { background: #f39c12; color: #000; }

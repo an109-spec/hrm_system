@@ -19,7 +19,7 @@
     <div class="profile-left">
       <div class="avatar-wrapper" onclick="document.getElementById('avatarInput').click()">
         {% if employee.avatar %}
-          <img src="{{ employee.avatar }}" class="profile-avatar">
+          <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar">
         {% else %}
           <div class="avatar-placeholder">
             {{ employee.full_name[0] }}

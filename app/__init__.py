@@ -69,9 +69,11 @@ def create_app():
     def inject_globals():
         """Truyền các biến dùng chung ra toàn bộ template HRM"""
         from flask import session
-        from app.models import User, Notification
+        from app.models import User, Notification, Employee
         
         current_user = None
+        current_employee = None
+        avatar_url = None
         header_notifications = []
         unread_notifications = 0
 
@@ -80,6 +82,10 @@ def create_app():
         if user_id:
             current_user = db.session.get(User, user_id)
             if current_user:
+                current_employee = Employee.query.filter_by(user_id=current_user.id).first()
+                if current_employee and current_employee.avatar:
+                    version = int((current_employee.updated_at or datetime.now()).timestamp())
+                    avatar_url = f"{current_employee.avatar}?v={version}"
                 # Lấy thông báo nội bộ hệ thống
                 header_notifications = (
                     Notification.query
@@ -93,6 +99,8 @@ def create_app():
         return {
             "current_year": datetime.now().year,
             "current_user": current_user,
+            "current_employee": current_employee,
+            "avatar_url": avatar_url,
             "header_notifications": header_notifications,
             "unread_notifications": unread_notifications,
             "system_name": "HRM System"

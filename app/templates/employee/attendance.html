@@ -30,9 +30,8 @@
   {% if employee %}
     <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
   {% endif %}
-  <p>{{ now.strftime('%A, %d/%m/%Y') }}</p>
+  <p id="dateText"></p>
   <p class="clock" id="liveClock">{{ now.strftime('%H:%M:%S') }}</p>
-  <p class="sim-badge">Simulation Mode: dùng nút &gt; để tua thời gian demo</p>
   <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
 
   <div class="attendance-actions">
@@ -53,7 +52,8 @@
         <th>Ngày</th>
         <th>Giờ vào</th>
         <th>Giờ ra</th>
-        <th>Giờ thực làm</th>
+        <th>Công hôm nay</th>
+
       </tr>
     </thead>
     <tbody>
@@ -62,7 +62,7 @@
         <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
         <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
         <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-        <td>{{ a.working_hours if a.working_hours else 0 }}h</td>
+        <td>{{ a.working_hours if a.working_hours else 0 }} công</td>
       </tr>
       {% else %}
       <tr><td colspan="4">Chưa có dữ liệu chấm công.</td></tr>
@@ -91,9 +91,12 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const root = document.getElementById('attendanceRoot');
 const state = {
+  isOvertime: false,
+  overtimeStarted: false,
   now: new Date(root.dataset.serverNow),
   hasAttendance: root.dataset.hasAttendance === '1',
   hasCheckout: root.dataset.hasCheckout === '1',
@@ -101,11 +104,35 @@ const state = {
   checkOut: root.dataset.checkout ? new Date(root.dataset.checkout) : null,
   scanEngine: null,
   isScannerOpen: false,
+  currentDate: null
 };
+state.currentDate = state.now.toDateString();
+function checkNewDay() {
+  const newDate = state.now.toDateString();
+
+  if (newDate !== state.currentDate) {
+    console.log("🆕 Sang ngày mới -> reset state");
+
+    state.currentDate = newDate;
+
+    state.hasAttendance = false;
+    state.hasCheckout = false;
+    state.checkIn = null;
+    state.checkOut = null;
+
+    state.isOvertime = false;
+    state.overtimeStarted = false;
+
+    toast("Đã sang ngày mới. Vui lòng check-in", "success");
+  }
+}
 
 const fmtHm = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const isLunchBreak = (d) => d.getHours() === 12;
 const inCheckinWindow = (d) => (d.getHours() > 8 || (d.getHours() === 8 && d.getMinutes() >= 0)) && (d.getHours() < 10 || (d.getHours() === 10 && d.getMinutes() === 0));
+const isAfterWork = (d) => d.getHours() >= 17 && d.getHours() < 19;
+const isOvertimeWindow = (d) => d.getHours() >= 19 && d.getHours() < 22;
+const isOvertimeEnd = (d) => d.getHours() >= 22;
 const calcEffectiveStart = (checkInDate) => {
   const lateLine = new Date(checkInDate); lateLine.setHours(8, 10, 0, 0);
   const start = new Date(checkInDate);
@@ -114,12 +141,17 @@ const calcEffectiveStart = (checkInDate) => {
   return start;
 };
 
-function toast(msg) {
+function toast(msg, type = "success") {
   const item = document.createElement('div');
-  item.className = 'toast-item';
+  item.className = 'toast-item ' + type;
   item.textContent = msg;
+
   document.getElementById('toastBox').appendChild(item);
-  setTimeout(() => item.remove(), 4200);
+
+  setTimeout(() => {
+    item.style.opacity = '0';
+    setTimeout(() => item.remove(), 300);
+  }, 3000);
 }
 
 function calcWorkedDuration(now) {
@@ -149,7 +181,36 @@ function renderState() {
   const identityText = document.getElementById('identityText');
 
   const inLunch = isLunchBreak(state.now);
+// ===== TAN CA 17H =====
+if (state.hasAttendance && !state.hasCheckout && isAfterWork(state.now)) {
+  statusText.textContent = '🔴 Đã hết ca (17:00). Vui lòng check-out';
 
+  // popup hỏi tăng ca (chỉ hiện 1 lần)
+  if (!state.isOvertime) {
+    setTimeout(() => {
+      const ok = confirm("Đã hết ca. Bạn có muốn tăng ca lúc 19:00 không?");
+      if (ok) {
+        state.isOvertime = true;
+      }
+    }, 500);
+  }
+}
+
+// ===== KHUNG GIỜ TĂNG CA =====
+if (state.isOvertime && isOvertimeWindow(state.now)) {
+  statusText.textContent = '🟣 Đang trong giờ tăng ca (19:00 - 22:00)';
+
+  // cho phép check-in lại OT
+  if (!state.overtimeStarted) {
+    document.getElementById('attendanceBtn').textContent = '🔳 CHECK-IN TĂNG CA';
+    document.getElementById('attendanceBtn').disabled = false;
+  }
+}
+
+// ===== HẾT TĂNG CA =====
+if (state.overtimeStarted && isOvertimeEnd(state.now) && !state.hasCheckout) {
+  statusText.textContent = '🔴 Hết giờ tăng ca (22:00). Vui lòng check-out';
+}
   if (state.hasCheckout) {
     btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
     btn.disabled = true;
@@ -164,7 +225,15 @@ function renderState() {
     statusText.textContent = inCheckinWindow(state.now) ? 'Trạng thái hiện tại: 🟢 Trong ca làm việc' : 'Trạng thái hiện tại: 🟡 Chưa trong khung check-in (08:00-10:00)';
     lateWarning.style.display = 'none';
   } else {
-    btn.textContent = inLunch ? 'Giờ nghỉ trưa (Mở lại sau 13:00)' : '🔳 QUÉT QR CHECK-OUT';
+if (inLunch) {
+  btn.textContent = 'Giờ nghỉ trưa (Mở lại sau 13:00)';
+} else {
+  if (state.overtimeStarted) {
+    btn.textContent = '🔳 CHECK-OUT TĂNG CA';
+  } else {
+    btn.textContent = '🔳 QUÉT QR CHECK-OUT';
+  }
+}
     btn.disabled = inLunch;
     btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
     statusText.textContent = `Trạng thái hiện tại: 🟡 Đang trong ca — Bạn vào lúc ${fmtHm(state.checkIn)}`;
@@ -179,20 +248,39 @@ function renderState() {
     }
   }
 
-  const worked = calcWorkedDuration(state.now);
-  document.getElementById('workHoursText').textContent = `Chấm công hôm nay: ${worked.hours} giờ ${String(worked.minutes).padStart(2,'0')} phút`;
-}
+const worked = calcWorkedDuration(state.now);
 
+const totalHours = (worked.hours + worked.minutes / 60);
+
+let label = totalHours >= 8 ? 'Đủ công' : 'Chưa đủ công';
+
+document.getElementById('workHoursText').textContent =
+  `Công hôm nay: ${totalHours.toFixed(2)} (${label})`;
+}
+function renderDate() {
+  const dateEl = document.getElementById('dateText');
+  dateEl.textContent = state.now.toLocaleDateString('vi-VN', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
 function startClock() {
   setInterval(() => {
     state.now = new Date(state.now.getTime() + 1000);
+
+    checkNewDay();   // 👈 THÊM DÒNG NÀY
+
     renderState();
   }, 1000);
 }
+renderDate();
 let holdTimer = null;
 const timeBtn = document.getElementById('timeForwardBtn');
 function fastForward(minutes = 1) {
   state.now = new Date(state.now.getTime() + minutes * 60000);
+  checkNewDay();
   renderState();
 }
 timeBtn.addEventListener('click', () => fastForward(5));
@@ -223,15 +311,25 @@ async function submitAttendanceFromQR(decodedText) {
 
   const action = data.status || (isCheckOut ? 'check_out' : 'check_in');
 
-  if (action === 'check_in') {
+if (action === 'check_in') {
+  // nếu đang trong OT window thì là OT check-in
+  if (state.isOvertime && isOvertimeWindow(state.now)) {
+    state.overtimeStarted = true;
+    toast("Bắt đầu tăng ca", "success");
+  } else {
     state.hasAttendance = true;
     state.checkIn = new Date(state.now);
     document.getElementById('identityText').style.display = 'block';
   }
-    if (action === 'check_out') {
-    state.hasCheckout = true;
-    state.checkOut = new Date(state.now);
+}
+if (action === 'check_out') {
+  if (state.overtimeStarted) {
+    toast("Kết thúc tăng ca", "success");
   }
+
+  state.hasCheckout = true;
+  state.checkOut = new Date(state.now);
+}
 
   if (data.warning) {
     const lateWarning = document.getElementById('lateWarning');
@@ -239,45 +337,34 @@ async function submitAttendanceFromQR(decodedText) {
     lateWarning.textContent = data.warning;
   }
 
-  toast('Xin chào Duy An, ID: 12345. Chúc bạn buổi làm việc hiệu quả!');
-  alert(data.message || '✅ Thành công');
-  renderState();
-}
+  toast(data.message || 'Chấm công thành công', data.warning ? 'warning' : 'success');
 
+  setTimeout(() => {
+    window.location.href = window.location.pathname + "?simulated_now=" + state.now.toISOString();
+  }, 500);
+}
+const scanner = HRMQRScanner.createQRScanner({
+  modalId: 'scannerModal',
+  readerId: 'qr-reader',
+  panelId: 'scannerPanel',
+  onDecoded: submitAttendanceFromQR,
+  onError: (error) => toast(error.message, 'error'),
+});
 async function openScannerModal() {
-  if (state.isScannerOpen) return;
   const btn = document.getElementById('attendanceBtn');
   if (btn.disabled) return;
 
-  const modal = document.getElementById('scannerModal');
-  modal.classList.add('open');
-  state.isScannerOpen = true;
-
-  state.scanEngine = new Html5Qrcode('qr-reader');
-  await state.scanEngine.start(
-    { facingMode: 'environment' },
-    { fps: 10, qrbox: { width: 220, height: 220 } },
-    async (decodedText) => {
-      try {
-        document.getElementById('scannerPanel').classList.add('success-flash');
-        await submitAttendanceFromQR(decodedText);
-        setTimeout(() => closeScannerModal(), 250);
-      } catch (error) {
-        alert(`❌ ${error.message}`);
-      }
-    }
-  );
+  try {
+    await scanner.open();
+    state.isScannerOpen = true;
+  } catch (error) {
+    toast(error.message, 'error');
+    state.isScannerOpen = false;
+  }
 }
 
 async function closeScannerModal() {
-  const modal = document.getElementById('scannerModal');
-  modal.classList.remove('open');
-
-  if (state.scanEngine) {
-    try { await state.scanEngine.stop(); } catch (_) {}
-    try { await state.scanEngine.clear(); } catch (_) {}
-    state.scanEngine = null;
-  }
+  await scanner.close();
   state.isScannerOpen = false;
 }
 

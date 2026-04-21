@@ -3,12 +3,18 @@
 
   <!-- PROFILE MINI -->
   <div class="text-center mb-4">
-    <img
-      src="{{ employee.avatar }}"
-      class="rounded-circle mb-2"
-      width="70"
-      height="70"
-    />
+    {% if employee and employee.avatar %}
+      <img
+        src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}"
+        class="rounded-circle mb-2"
+        width="70"
+        height="70"
+      />
+    {% else %}
+      <div class="rounded-circle mb-2 d-inline-flex align-items-center justify-content-center" style="width:70px;height:70px;background:#2d3748;">
+        {{ employee.full_name[0] if employee else 'U' }}
+      </div>
+    {% endif %}
 
     <div class="fw-bold">
       {{ employee.full_name }}

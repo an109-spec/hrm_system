@@ -25,7 +25,11 @@
         <section class="card profile-card">
             <div class="profile-header">
                 <div class="avatar-lg">
-                    {{ employee.full_name[0] }}
+                     {% if employee.avatar %}
+                      <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                    {% else %}
+                      {{ employee.full_name[0] }}
+                    {% endif %}
                 </div>
 
                 <div>
@@ -87,6 +91,7 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 let simOffset = 0; // Số giây lệch so với giờ thực
 
@@ -131,13 +136,18 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 // Lấy giờ vào từ Flask (truyền vào JS)
-const checkInTimeStr = "{{ attendance.check_in.strftime('%Y-%m-%d %H:%M:%S') if attendance and attendance.check_in else '' }}";
+const checkInTimeStr = "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}";
+const hasCheckedOut = {{ 'true' if attendance and attendance.check_out else 'false' }};
+const dbWorkingHours = Number("{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}");
 
 function updateWorkingHours() {
     const displayEl = document.getElementById('realtime-work-hours');
-    if (!checkInTimeStr || "{{ attendance.check_out }}") {
-        // Nếu chưa check-in hoặc đã check-out rồi thì lấy giá trị từ DB
-        displayEl.innerText = "{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}h";
+    if (!checkInTimeStr) {
+        displayEl.innerText = "0.00h";
+        return;
+    }
+    if (hasCheckedOut) {
+        displayEl.innerText = dbWorkingHours.toFixed(2) + "h";
         return;
     }
 
@@ -155,10 +165,14 @@ function updateWorkingHours() {
     }
 
     let diffMs = now - startTime;
-    
-    // Trừ 1 tiếng nghỉ trưa nếu giờ hiện tại đã qua 13:00
-    if (now.getHours() >= 13) {
-        diffMs -= (1 * 60 * 60 * 1000);
+    const lunchStart = new Date(startTime);
+    lunchStart.setHours(12, 0, 0, 0);
+    const lunchEnd = new Date(startTime);
+    lunchEnd.setHours(13, 0, 0, 0);
+    const overlapStart = Math.max(startTime.getTime(), lunchStart.getTime());
+    const overlapEnd = Math.min(now.getTime(), lunchEnd.getTime());
+    if (overlapEnd > overlapStart) {
+      diffMs -= (overlapEnd - overlapStart);
     }
 
     const diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
@@ -168,59 +182,38 @@ function updateWorkingHours() {
 // Chạy bộ đếm mỗi giây
 setInterval(updateWorkingHours, 1000);
 // --- QR Logic ---
-let html5QrCode;
+const scanner = HRMQRScanner.createQRScanner({
+  modalId: 'qr-modal',
+  readerId: 'reader',
+  onDecoded: processAttendance,
+  onError: (error) => alert(error.message),
+});
 
-function openQRModal() {
-    document.getElementById('qr-modal').style.display = 'block';
-    
-    // Khởi tạo engine nếu chưa có
-    if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader");
-    }
-    
-    const config = { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 }
-    };
-
-    html5QrCode.start(
-        { facingMode: "environment" }, // Dùng camera sau (environment) thay vì camera trước (user) để dễ quét
-        config,
-        (decodedText) => {
-            // Hiệu ứng phản hồi khi quét thành công
-            document.getElementById('reader').style.border = "5px solid #28a745";
-            
-            // Dừng camera ngay lập tức để tránh quét lặp lại
-            html5QrCode.stop().then(() => {
-                closeQRModal();
-                processAttendance(decodedText);
-            }).catch(err => console.error("Lỗi khi dừng camera:", err));
-        },
-        (errorMessage) => {
-            // Đây là callback khi đang quét mà chưa thấy mã, không nên alert ở đây
-            // console.log("Đang tìm mã QR...");
-        }
-    ).catch((err) => {
-        alert("Không thể khởi động Camera: " + err);
-    });
+async function openQRModal() {
+  try {
+    await scanner.open();
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
-function closeQRModal() {
-    document.getElementById('qr-modal').style.display = 'none';
-    if(html5QrCode) html5QrCode.stop();
+async function closeQRModal() {
+  await scanner.close();
 }
 
 async function processAttendance(code) {
     const now = getSimulatedDate();
-    const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
     
     try {
         const r = await fetch("{{ url_for('employee.check_in_out') }}", {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ 
+                 qr_text: code,
                 qr_data: code, 
-                sim_time: timeStr // Gửi giờ giả lập về server
+                sim_time: timeStr,
+                simulated_now: now.toISOString()
             })
         });
         const d = await r.json();
