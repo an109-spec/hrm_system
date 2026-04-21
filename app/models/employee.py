@@ -23,7 +23,15 @@ class Employee(BaseModel):
     avatar = db.Column(db.String(255), nullable=True)
     dob = db.Column(db.Date, nullable=False)
     gender = db.Column(gender_enum, nullable=False)
-    address = db.Column(db.Text)
+    address = db.Column(db.Text) # Giữ lại làm backup hoặc địa chỉ cũ
+    
+    # --- THÊM MỚI ---
+    province_id = db.Column(db.String(20), nullable=True)
+    district_id = db.Column(db.String(20), nullable=True)
+    ward_id = db.Column(db.String(20), nullable=True)
+    address_detail = db.Column(db.String(255), nullable=True)
+    # ----------------
+    
     phone = db.Column(db.String(20), unique=True)
     
     # Tổ chức và Chức danh

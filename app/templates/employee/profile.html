@@ -53,40 +53,63 @@
   <!-- TAB CONTENT -->
   <div class="tab-content">
 
-    <!-- INFO -->
-    <div class="tab-pane active" id="info">
-      <form class="form-grid">
-        <label>Họ tên
-          <input value="{{ employee.full_name }}">
-        </label>
-        <label>Email
-          <input value="{{ user.email }}" readonly>
-        </label>
-        <label>SĐT
-          <input value="{{ employee.phone or '' }}">
-        </label>
-        <label>Địa chỉ
-          <textarea>{{ employee.address or '' }}</textarea>
-        </label>
-        <button class="primary">Lưu thay đổi</button>
-      </form>
+<div class="tab-pane active" id="info">
+  <form class="form-grid" id="profileForm">
+    <div class="input-group">
+      <label>Họ tên</label>
+      <input name="full_name" value="{{ employee.full_name }}" readonly class="readonly-input">
+    </div>
+    <div class="input-group">
+      <label>Email</label>
+      <input value="{{ user.email }}" readonly class="readonly-input">
+    </div>
+    <div class="input-group">
+      <label>SĐT</label>
+      <input name="phone" value="{{ employee.phone or '' }}" readonly class="readonly-input">
     </div>
 
-    <!-- SECURITY -->
-    <div class="tab-pane" id="security">
-      <form class="form-grid">
-        <label>Mật khẩu hiện tại
-          <input type="password">
-        </label>
-        <label>Mật khẩu mới
-          <input type="password">
-        </label>
-        <label>Xác nhận mật khẩu
-          <input type="password">
-        </label>
-        <button class="warning">Đổi mật khẩu</button>
-      </form>
+    <div class="address-section">
+      <label>ĐỊA CHỈ LIÊN HỆ</label>
+        <div class="address-grid" 
+            id="addressData" 
+            data-province="{{ employee.province_id or '' }}" 
+            data-district="{{ employee.district_id or '' }}" 
+            data-ward="{{ employee.ward_id or '' }}">
+            
+            <select id="province" name="province" disabled><option value="">Chọn Tỉnh/Thành</option></select>
+            <select id="district" name="district" disabled><option value="">Chọn Quận/Huyện</option></select>
+            <select id="ward" name="ward" disabled><option value="">Chọn Phường/Xã</option></select>
+            
+            <input id="detailAddress" name="address_detail" 
+                  value="{{ employee.address_detail or '' }}" 
+                  placeholder="Số nhà, tên đường..." readonly class="readonly-input">
+        </div>
     </div>
+
+    <div class="form-actions">
+      <button type="button" id="editBtn" class="primary">Chỉnh sửa</button>
+      <div id="saveCancelActions" style="display: none;">
+        <button type="submit" class="success-btn">Lưu thay đổi</button>
+        <button type="button" id="cancelBtn" class="secondary">Hủy</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+  <div class="tab-pane" id="security">
+    <form class="form-grid" method="POST" action="{{ url_for('employee.profile') }}">
+      <label>Mật khẩu hiện tại
+        <input type="password" name="current_password" required>
+      </label>
+      <label>Mật khẩu mới
+        <input type="password" name="new_password" required>
+      </label>
+      <label>Xác nhận mật khẩu
+        <input type="password" name="confirm_password" required>
+      </label>
+      <button type="submit" name="action" value="change_password" class="primary">Đổi mật khẩu</button>
+    </form>
+  </div>
 
     <!-- NOTIFICATION -->
     <div class="tab-pane" id="notify">

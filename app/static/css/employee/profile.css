@@ -204,3 +204,68 @@ button:hover {
   background: #d4edda;
   color: #155724;
 }
+.readonly-input {
+    background-color: #f8f9fa;
+    border-color: #eee;
+    cursor: not-allowed;
+}
+
+.address-section {
+    margin-top: 10px;
+    padding: 15px;
+    background: #fdfdfd;
+    border: 1px solid #eee;
+    border-radius: 8px;
+}
+
+.address-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#detailAddress {
+    grid-column: span 3;
+}
+
+.form-actions {
+    margin-top: 20px;
+}
+
+#saveCancelActions {
+    display: flex;
+    gap: 10px;
+}
+
+.success-btn {
+    background: #28a745;
+    color: white;
+}
+
+.secondary {
+    background: #6c757d;
+    color: white;
+}
+
+select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+/* Ghi đè màu chữ cho các ô select và input khi bị disabled hoặc readonly */
+select:disabled, 
+input:disabled, 
+.readonly-input {
+    color: #333 !important; /* Màu chữ đậm (đen xám) */
+    background-color: #f8f9fa !important; /* Giữ màu nền xám nhẹ */
+    -webkit-text-fill-color: #333; /* Hỗ trợ hiển thị trên trình duyệt Safari/Chrome */
+    opacity: 1; /* Xóa độ mờ mặc định của trình duyệt */
+}
+
+/* Chỉnh riêng cho các ô select để trông chuyên nghiệp hơn */
+select:disabled {
+    cursor: not-allowed;
+    border-color: #ddd;
+}

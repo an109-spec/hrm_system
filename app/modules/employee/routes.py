@@ -136,10 +136,18 @@ def profile():
     action = request.form.get("action")
 
     if request.method == "POST" and action == "update_profile":
+        # Cập nhật thông tin cơ bản
         employee.full_name = request.form.get("full_name", employee.full_name).strip()
         employee.phone = request.form.get("phone", employee.phone).strip()
-        employee.address = request.form.get("address", employee.address).strip()
         user.email = request.form.get("email", user.email).strip()
+
+        # 🔥 THÊM CÁC DÒNG NÀY ĐỂ LƯU ĐỊA CHỈ PHÂN CẤP
+        # Lưu mã code của Tỉnh/Huyện/Xã
+        employee.province_id = request.form.get("province")
+        employee.district_id = request.form.get("district")
+        employee.ward_id = request.form.get("ward")
+        # Lưu địa chỉ chi tiết (số nhà, tên đường)
+        employee.address_detail = request.form.get("address_detail", "").strip()
 
         db.session.commit()
         flash("✅ Đã cập nhật thông tin cá nhân.", "success")
@@ -186,7 +194,37 @@ def profile():
         complaints=complaints,
     )
 
+@employee_bp.route("/update-profile", methods=["POST"])
+def update_profile_ajax():
+    guard = _ensure_login()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
 
+    employee = _current_employee()
+    user = _current_user()
+    
+    # Lấy dữ liệu JSON từ request.get_json() thay vì request.form
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Không có dữ liệu"}), 400
+
+    try:
+        # Cập nhật thông tin
+        employee.full_name = data.get("full_name", employee.full_name).strip()
+        employee.phone = data.get("phone", employee.phone).strip()
+        
+        # Lưu mã địa chỉ
+        employee.province_id = data.get("province")
+        employee.district_id = data.get("district")
+        employee.ward_id = data.get("ward")
+        employee.address_detail = data.get("address_detail", "").strip()
+
+        db.session.commit()
+        return jsonify({"message": "Cập nhật thành công!"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    
 @employee_bp.route("/attendance")
 def attendance():
     guard = _ensure_login()

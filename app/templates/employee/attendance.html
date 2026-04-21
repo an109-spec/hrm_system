@@ -213,7 +213,7 @@ async function submitAttendanceFromQR(decodedText) {
     if (!window.confirm(confirmMsg)) return;
   }
 
-  const res = await fetch("{{ url_for('employee.check_in_out') }}", {
+  const res = await fetch("{{ url_for('attendance.check_in_out') }}", {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ qr_text: decodedText, simulated_now: state.now.toISOString() })
@@ -221,12 +221,14 @@ async function submitAttendanceFromQR(decodedText) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra khi chấm công');
 
-  if (data.status === 'check_in') {
+  const action = data.status || (isCheckOut ? 'check_out' : 'check_in');
+
+  if (action === 'check_in') {
     state.hasAttendance = true;
     state.checkIn = new Date(state.now);
     document.getElementById('identityText').style.display = 'block';
   }
-    if (data.status === 'check_out') {
+    if (action === 'check_out') {
     state.hasCheckout = true;
     state.checkOut = new Date(state.now);
   }
