@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
+import os
 
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import (
     Attendance,
@@ -210,32 +212,74 @@ def check_in_out():
     employee = _current_employee()
     if not employee:
         return jsonify({"error": "Không tìm thấy nhân viên"}), 404
+    payload = request.get_json(silent=True) or {}
+    qr_text = str(payload.get("qr_text", "")).strip()
+    simulated_now = payload.get("simulated_now")
 
+    if not qr_text:
+        return jsonify({"error": "Không đọc được dữ liệu QR hợp lệ."}), 400
     current_time = datetime.now().replace(microsecond=0)
-    today = date.today()
-    attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+    if simulated_now:
+        try:
+            current_time = datetime.fromisoformat(simulated_now)
+        except ValueError:
+            return jsonify({"error": "Thời gian mô phỏng không hợp lệ."}), 400
 
+    today = current_time.date()
+    attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+    shift_start = datetime.combine(today, time(8, 0))
+    late_threshold = datetime.combine(today, time(8, 10))
+    check_in_deadline = datetime.combine(today, time(10, 0))
+
+    if not attendance and (current_time < shift_start or current_time > check_in_deadline):
+        return (
+            jsonify(
+                {
+                    "error": "Chỉ được check-in trong khung 08:00 - 10:00.",
+                    "window": "08:00-10:00",
+                }
+            ),
+            400,
+        )
     if not attendance:
         attendance = Attendance(employee_id=employee.id, date=today, check_in=current_time)
         db.session.add(attendance)
         db.session.commit()
+        is_late_over_10 = current_time > late_threshold
+        effective_start = datetime.combine(today, time(9, 0)) if is_late_over_10 else shift_start
         return jsonify(
             {
                 "status": "check_in",
                 "check_in": current_time.strftime("%H:%M:%S"),
+                "effective_start": effective_start.strftime("%H:%M"),
+                "late_over_10": is_late_over_10,
+                "identity_message": "Xác nhận danh tính: Duy An - MSNV: 12345",
+                "warning": "Bạn đã muộn hơn 10 phút. Thời gian tính công sẽ bắt đầu từ 09:00"
+                if is_late_over_10
+                else None,
                 "message": "✅ Check-in thành công",
             }
         )
 
     if attendance.check_in and not attendance.check_out:
         attendance.check_out = current_time
-        attendance.working_hours = _compute_working_hours(attendance.check_in, attendance.check_out)
+
+        check_in_dt = attendance.check_in
+        if not check_in_dt:
+            check_in_dt = current_time
+
+        late_cutoff = datetime.combine(today, time(8, 10))
+        effective_start = datetime.combine(today, time(9, 0)) if check_in_dt > late_cutoff else datetime.combine(today, time(8, 0))
+        attendance.working_hours = _compute_working_hours(effective_start, attendance.check_out)
         db.session.commit()
+        early_checkout = current_time < datetime.combine(today, time(17, 0))
         return jsonify(
             {
                 "status": "check_out",
                 "check_out": current_time.strftime("%H:%M:%S"),
                 "working_hours": float(attendance.working_hours or 0),
+                "identity_message": "Xác nhận danh tính: Duy An - MSNV: 12345",
+                "early_checkout": early_checkout,
                 "message": "✅ Check-out thành công",
             }
         )
@@ -409,3 +453,34 @@ def search():
 def dev_login():
     session["user_id"] = 1
     return redirect("/employee/dashboard")
+
+@employee_bp.route("/upload-avatar", methods=["POST"])
+def upload_avatar():
+    guard = _ensure_login()
+    if guard:
+        return guard
+
+    employee = _current_employee()
+    if not employee:
+        return jsonify({"error": "Không tìm thấy nhân viên"}), 404
+
+    file = request.files.get("avatar")
+    if not file:
+        return jsonify({"error": "Không có file"}), 400
+
+    filename = secure_filename(file.filename)
+
+    upload_folder = os.path.join("app", "static", "uploads")
+    os.makedirs(upload_folder, exist_ok=True)
+
+    filepath = os.path.join(upload_folder, filename)
+    file.save(filepath)
+
+    # 🔥 QUAN TRỌNG: lưu vào employee, không phải user
+    employee.avatar = f"/static/uploads/{filename}"
+    db.session.commit()
+
+    return jsonify({
+        "message": "Upload thành công",
+        "url": employee.avatar
+    })

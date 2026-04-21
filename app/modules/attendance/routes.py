@@ -1,4 +1,4 @@
-from flask import render_template, session, redirect, url_for, jsonify
+from flask import render_template, request, session, redirect, url_for, jsonify
 from datetime import datetime
 
 from . import attendance_bp
@@ -29,16 +29,16 @@ def attendance_page():
     )
 
 
-# =============================
-# CHECK IN / OUT API
-# =============================
 @attendance_bp.route("/check", methods=["POST"])
 def check_in_out():
     user_id = session.get("user_id")
+    data = request.get_json() or {}
+    sim_time = data.get('sim_time') # Lấy giờ từ nút "Tua"
 
     from app.models import Employee
     employee = Employee.query.filter_by(user_id=user_id).first()
 
-    result = AttendanceService.check_in_out(employee.id)
+    # Truyền sim_time vào service
+    result = AttendanceService.check_in_out(employee.id, sim_time)
 
     return jsonify(result)

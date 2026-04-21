@@ -12,48 +12,80 @@ class AttendanceService:
     # CHECK IN / OUT
     # ==============================
     @staticmethod
-    def check_in_out(employee_id: int):
+    def check_in_out(employee_id: int, sim_time_str: str = None):
         today = date.today()
-        now = datetime.now()
+        # Ưu tiên giờ giả lập từ demo
+        if sim_time_str:
+            now_dt = datetime.strptime(f"{today} {sim_time_str}", "%Y-%m-%d %H:%M:%S")
+        else:
+            now_dt = datetime.now()
 
-        record = Attendance.query.filter_by(
-            employee_id=employee_id,
-            date=today
-        ).first()
+        record = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
 
-        # ======================
-        # CHECK IN
-        # ======================
         if not record:
-            status = AttendanceStatus.query.filter_by(status_name="PRESENT").first()
+            check_in_time = now_dt.time()
+            
+            # Tạo mốc giờ chuẩn 08:00:00 của ngày hôm nay để so sánh
+            standard_time_dt = now_dt.replace(hour=8, minute=0, second=0, microsecond=0)
+            
+            # Tính số phút chênh lệch so với 08:00
+            # Nếu check-in trước 8h, diff sẽ âm hoặc bằng 0
+            diff = now_dt - standard_time_dt
+            minutes_diff = int(diff.total_seconds() / 60)
+            
+            # Quyết định trạng thái: Chỉ coi là LATE nếu muộn hơn 10 phút (tức là từ 08:11 trở đi)
+            is_late = minutes_diff > 10
+            
+            status_name = "LATE" if is_late else "PRESENT"
+            status = AttendanceStatus.query.filter_by(status_name=status_name).first()
 
             record = Attendance(
                 employee_id=employee_id,
                 date=today,
-                check_in=now.time(),
-                status_id=status.id if status else None
+                check_in=now_dt, 
+                status_id=status.id if status else None,
+                working_hours=0 # Mới vào làm chưa có giờ công
             )
-
+            
             db.session.add(record)
             db.session.commit()
-            return {"message": "Check-in thành công"}
+            
+            # Trả về thông báo chi tiết cho Frontend alert
+            if is_late:
+                msg = f"Check-in: {check_in_time.strftime('%H:%M')}. Bạn đi muộn {minutes_diff} phút. Thời gian tính công sẽ bắt đầu từ 09:00."
+            else:
+                if minutes_diff > 0:
+                    msg = f"Check-in: {check_in_time.strftime('%H:%M')}. Bạn muộn {minutes_diff} phút (Trong mức cho phép). Chúc bạn làm việc hiệu quả!"
+                else:
+                    msg = f"Check-in: {check_in_time.strftime('%H:%M')}. Bạn đến rất đúng giờ. Chúc bạn làm việc hiệu quả!"
+                
+            return {"message": msg}
 
-        # ======================
         # CHECK OUT
-        # ======================
         if record.check_out:
             raise ValidationError("Bạn đã check-out rồi")
 
-        record.check_out = now.time()
+        record.check_out = now_dt
 
-        # tính giờ làm
-        if record.check_in:
-            delta = datetime.combine(today, record.check_out) - datetime.combine(today, record.check_in)
-            record.working_hours = round(delta.total_seconds() / 3600, 2)
+        # Tính giờ làm việc
+        # Logic: Nếu vào trễ (>8:10), giờ bắt đầu tính là 09:00
+        start_dt = record.check_in
+        if start_dt.hour > 8 or (start_dt.hour == 8 and start_dt.minute > 10):
+            start_dt = start_dt.replace(hour=9, minute=0, second=0)
+        elif start_dt.hour < 8:
+            start_dt = start_dt.replace(hour=8, minute=0, second=0)
 
+        delta = now_dt - start_dt
+        hours = delta.total_seconds() / 3600
+        
+        # Trừ 1 tiếng nghỉ trưa nếu làm qua buổi trưa (sau 13h)
+        if now_dt.hour >= 13:
+            hours -= 1.0
+
+        record.working_hours = max(0, round(hours, 2))
         db.session.commit()
 
-        return {"message": "Check-out thành công"}
+        return {"message": f"Check-out thành công. Tổng công: {record.working_hours}h"}
 
     # ==============================
     # GET TODAY

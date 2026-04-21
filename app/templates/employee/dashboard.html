@@ -6,7 +6,21 @@
 
 {% block content %}
 <div class="dashboard-wrapper">
+    <div class="simulation-bar" style="background: #fff3cd; padding: 10px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ffeeba; display: flex; align-items: center; gap: 15px;">
+        <strong>🛠 Chế độ Demo:</strong>
+        <button class="btn btn-sm" onclick="adjustSimTime(-30)">-30p</button>
+        <button class="btn btn-sm" onclick="adjustSimTime(30)">+30p</button>
+        <button class="btn btn-sm btn-danger" onclick="resetSimTime()">Reset giờ thực</button>
+        <span id="sim-indicator" style="color: #856404; font-weight: bold;"></span>
+    </div>
 
+    <div id="qr-modal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.8);">
+        <div class="modal-content" style="background:#fff; margin:10% auto; padding:20px; width:90%; max-width:500px; border-radius:15px; text-align:center;">
+            <h3>Quét mã QR định danh</h3>
+            <div id="reader" style="width:100%; min-height:300px; background:#000;"></div>
+            <button class="btn" onclick="closeQRModal()" style="margin-top:15px;">Đóng</button>
+        </div>
+    </div>
     <div class="dashboard-grid-top">
         <section class="card profile-card">
             <div class="profile-header">
@@ -24,18 +38,26 @@
             </div>
 
             <div class="profile-info">
-                <p>📌 Vị trí: {{ employee.position.job_title if employee.position else 'Chưa cập nhật' }}</p>
                 <p>
                     Trạng thái:
-                    <span class="status {{ 'online' if employee.working_status == 'working' else 'offline' }}">
-                        {{ 'Đang làm việc' if employee.working_status == 'working' else 'Hết ca' }}
-                    </span>
+                    {% if attendance and not attendance.check_out %}
+                        <span class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
+                            Đang chấm công 
+                        </span>
+                    {% elif attendance and attendance.check_out %}
+                        <span class="status offline">Đã hoàn thành ca</span>
+                    {% else %}
+                        <span class="status offline">Chưa vào ca</span>
+                    {% endif %}
                 </p>
             </div>
         </section>
 
         <section class="card attendance-card">
-            <div class="card-header"><h3>🕒 Chấm công hôm nay</h3></div>
+            <div class="summary-item">
+                <h4>Công hôm nay</h4>
+                <div class="value" id="realtime-work-hours">0.00h</div>
+            </div>
             <div class="attendance-body">
                 <p class="timer" id="clock"></p>
                 
@@ -51,12 +73,6 @@
         </section>
     </div>
 
-    <div class="dashboard-grid-summary">
-        <div class="summary-item">
-            <h4>Công hôm nay</h4>
-            <div class="value">{{ attendance.working_hours if attendance else '0' }}h</div>
-        </div>
-
         <div class="summary-item">
             <h4>Phép còn lại</h4>
             <div class="value">{{ leave_balance.remaining }} ngày</div>
@@ -70,42 +86,154 @@
 
 </div>
 
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script>
-function updateClock() {
+let simOffset = 0; // Số giây lệch so với giờ thực
+
+function getSimulatedDate() {
     const now = new Date();
-
-    const days = [
-        "Chủ nhật", "Thứ 2", "Thứ 3",
-        "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"
-    ];
-
-    const day = days[now.getDay()];
-    const date = now.toLocaleDateString('vi-VN');
-    const time = now.toLocaleTimeString('vi-VN');
-
-    document.getElementById("clock").innerText =
-        `${time} - ${day}, ${date}`;
+    return new Date(now.getTime() + simOffset * 1000);
 }
 
-// chạy mỗi 1 giây
+function adjustSimTime(mins) {
+    simOffset += mins * 60;
+    updateClock();
+}
+
+function resetSimTime() {
+    simOffset = 0;
+    updateClock();
+}
+
+function updateClock() {
+    const now = getSimulatedDate();
+    const days = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+    
+    document.getElementById("clock").innerText = `${now.toLocaleTimeString('vi-VN')} - ${days[now.getDay()]}, ${now.toLocaleDateString('vi-VN')}`;
+    
+    // Hiển thị trạng thái nghỉ trưa
+    const hrs = now.getHours();
+    const btn = document.querySelector('.attendance-body button');
+    if(btn) {
+        if(hrs >= 12 && hrs < 13) {
+            btn.disabled = true;
+            btn.innerText = "☕ GIỜ NGHỈ TRƯA (Mở lại lúc 13:00)";
+            btn.style.backgroundColor = "#ccc";
+        } else {
+            btn.disabled = false;
+            if(!btn.getAttribute('data-original')) btn.setAttribute('data-original', btn.innerText);
+            btn.innerText = btn.getAttribute('data-original');
+            btn.style.backgroundColor = "";
+        }
+    }
+}
+
 setInterval(updateClock, 1000);
 updateClock();
+// Lấy giờ vào từ Flask (truyền vào JS)
+const checkInTimeStr = "{{ attendance.check_in.strftime('%Y-%m-%d %H:%M:%S') if attendance and attendance.check_in else '' }}";
 
-async function submitAttendance(btn) {
-    const original = btn.innerText;
-    btn.disabled = true;
-    btn.innerText = "⏳ Đang xử lý...";
+function updateWorkingHours() {
+    const displayEl = document.getElementById('realtime-work-hours');
+    if (!checkInTimeStr || "{{ attendance.check_out }}") {
+        // Nếu chưa check-in hoặc đã check-out rồi thì lấy giá trị từ DB
+        displayEl.innerText = "{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}h";
+        return;
+    }
+
+    const now = getSimulatedDate();
+    const checkInTime = new Date(checkInTimeStr);
+    
+    // Logic: Nếu vào muộn sau 8:10, tính từ 9:00
+    let startTime = checkInTime;
+    if (checkInTime.getHours() > 8 || (checkInTime.getHours() == 8 && checkInTime.getMinutes() > 10)) {
+        startTime = new Date(checkInTime);
+        startTime.setHours(9, 0, 0);
+    } else if (checkInTime.getHours() < 8) {
+        startTime = new Date(checkInTime);
+        startTime.setHours(8, 0, 0);
+    }
+
+    let diffMs = now - startTime;
+    
+    // Trừ 1 tiếng nghỉ trưa nếu giờ hiện tại đã qua 13:00
+    if (now.getHours() >= 13) {
+        diffMs -= (1 * 60 * 60 * 1000);
+    }
+
+    const diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
+    displayEl.innerText = diffHrs.toFixed(2) + "h";
+}
+
+// Chạy bộ đếm mỗi giây
+setInterval(updateWorkingHours, 1000);
+// --- QR Logic ---
+let html5QrCode;
+
+function openQRModal() {
+    document.getElementById('qr-modal').style.display = 'block';
+    
+    // Khởi tạo engine nếu chưa có
+    if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+    }
+    
+    const config = { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 }
+    };
+
+    html5QrCode.start(
+        { facingMode: "environment" }, // Dùng camera sau (environment) thay vì camera trước (user) để dễ quét
+        config,
+        (decodedText) => {
+            // Hiệu ứng phản hồi khi quét thành công
+            document.getElementById('reader').style.border = "5px solid #28a745";
+            
+            // Dừng camera ngay lập tức để tránh quét lặp lại
+            html5QrCode.stop().then(() => {
+                closeQRModal();
+                processAttendance(decodedText);
+            }).catch(err => console.error("Lỗi khi dừng camera:", err));
+        },
+        (errorMessage) => {
+            // Đây là callback khi đang quét mà chưa thấy mã, không nên alert ở đây
+            // console.log("Đang tìm mã QR...");
+        }
+    ).catch((err) => {
+        alert("Không thể khởi động Camera: " + err);
+    });
+}
+
+function closeQRModal() {
+    document.getElementById('qr-modal').style.display = 'none';
+    if(html5QrCode) html5QrCode.stop();
+}
+
+async function processAttendance(code) {
+    const now = getSimulatedDate();
+    const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+    
     try {
-        const r = await fetch("{{ url_for('employee.check_in_out') }}", { method: 'POST' });
+        const r = await fetch("{{ url_for('employee.check_in_out') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                qr_data: code, 
+                sim_time: timeStr // Gửi giờ giả lập về server
+            })
+        });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
+        alert(`Xác nhận danh tính: {{ employee.full_name }} \n${d.message}`);
         window.location.reload();
     } catch (e) {
         alert(e.message);
-        btn.disabled = false;
-        btn.innerText = original;
     }
 }
+
+// Thay đổi hàm gọi cũ
+function submitAttendance(btn) { openQRModal(); }
 </script>
 
 {% endblock %}

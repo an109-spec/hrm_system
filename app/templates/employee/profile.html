@@ -1,111 +1,132 @@
 {% extends "layouts/base.html" %}
 {% block title %}Hồ sơ nhân viên{% endblock %}
+
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/profile.css') }}">
 {% endblock %}
+
 {% block content %}
-<div class="emp-grid emp-grid-2">
-  <aside class="emp-card">
-    <h3>👤 Hồ sơ nhân viên</h3>
-    <div class="quick-profile">
-      <div class="avatar-shell online">
+<div class="profile-container">
+
+  <!-- HEADER -->
+  <div class="profile-header">
+    <h2>Hồ sơ cá nhân</h2>
+    <p>Quản lý thông tin và bảo mật</p>
+  </div>
+
+  <!-- PROFILE CARD -->
+  <div class="profile-card">
+    <div class="profile-left">
+      <div class="avatar-wrapper" onclick="document.getElementById('avatarInput').click()">
         {% if employee.avatar %}
-        <img src="{{ employee.avatar }}" class="rounded-circle mb-2" width="70" height="70" />
+          <img src="{{ employee.avatar }}" class="profile-avatar">
         {% else %}
-        <div class="avatar-lg mx-auto mb-2">
+          <div class="avatar-placeholder">
             {{ employee.full_name[0] }}
-        </div>
+          </div>
         {% endif %}
       </div>
-      <div>
-        <p><strong>{{ employee.full_name }}</strong></p>
-        <p>Mã nhân viên: #{{ employee.id }}</p>
-        <p>Vai trò: {{ user.role.name if user.role else 'Nhân viên' }}</p>
-        <p>Trạng thái: {{ employee.working_status }}</p>
+      <input type="file" id="avatarInput" hidden>
+
+      <div class="avatar-actions">
+        <button onclick="document.getElementById('avatarInput').click()">Chọn ảnh</button>
+        <button class="primary" id="uploadAvatarBtn">Cập nhật ảnh</button>
       </div>
     </div>
 
-  <section class="emp-card">
-    <h3>📑 Thông tin định danh & liên hệ</h3>
-    <form method="post" class="emp-form-grid">
-      <input type="hidden" name="action" value="update_profile">
-      <label>Họ và tên
-        <input name="full_name" value="{{ employee.full_name }}" required>
-      </label>
-      <label>Email
-        <input name="email" type="email" value="{{ user.email }}" required>
-      </label>
-      <label>Số điện thoại
-        <input name="phone" value="{{ employee.phone or '' }}">
-      </label>
-      <label>Địa chỉ liên hệ
-        <textarea name="address" rows="3">{{ employee.address or '' }}</textarea>
-      </label>
-      <button class="btn btn-primary" type="submit">💾 Lưu thay đổi</button>
-    </form>
-  </section>
-</div>
+    <div class="profile-right">
+      <h3>{{ employee.full_name }}</h3>
+      <p>ID: #{{ employee.id }}</p>
+      <p>Vai trò: {{ user.role.name if user.role else 'Nhân viên' }}</p>
+      <p>Email: {{ user.email }}</p>
+    </div>
+  </div>
 
-<div class="emp-grid emp-grid-2">
-  <section class="emp-card">
-    <h3>🔐 Bảo mật</h3>
-    <form method="post" class="emp-form-grid">
-      <input type="hidden" name="action" value="change_password">
-      <label>Mật khẩu hiện tại
-        <input type="password" name="current_password" required>
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" data-tab="info">Thông tin</button>
+    <button class="tab" data-tab="security">Bảo mật</button>
+    <button class="tab" data-tab="notify">Thông báo</button>
+    <button class="tab" data-tab="complaint">Khiếu nại</button>
+  </div>
+
+  <!-- TAB CONTENT -->
+  <div class="tab-content">
+
+    <!-- INFO -->
+    <div class="tab-pane active" id="info">
+      <form class="form-grid">
+        <label>Họ tên
+          <input value="{{ employee.full_name }}">
+        </label>
+        <label>Email
+          <input value="{{ user.email }}" readonly>
+        </label>
+        <label>SĐT
+          <input value="{{ employee.phone or '' }}">
+        </label>
+        <label>Địa chỉ
+          <textarea>{{ employee.address or '' }}</textarea>
+        </label>
+        <button class="primary">Lưu thay đổi</button>
+      </form>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="tab-pane" id="security">
+      <form class="form-grid">
+        <label>Mật khẩu hiện tại
+          <input type="password">
+        </label>
+        <label>Mật khẩu mới
+          <input type="password">
+        </label>
+        <label>Xác nhận mật khẩu
+          <input type="password">
+        </label>
+        <button class="warning">Đổi mật khẩu</button>
+      </form>
+    </div>
+
+    <!-- NOTIFICATION -->
+    <div class="tab-pane" id="notify">
+      <label class="switch">
+        <input type="checkbox" checked>
+        <span>Email thông báo</span>
       </label>
-      <label>Mật khẩu mới
-        <input type="password" name="new_password" minlength="8" required>
+      <label class="switch">
+        <input type="checkbox">
+        <span>Thông báo trình duyệt</span>
       </label>
-      <label>Xác nhận mật khẩu mới
-        <input type="password" name="confirm_password" minlength="8" required>
-      </label>
-      <button class="btn btn-warning" type="submit">🔄 Đổi mật khẩu</button>
-    </form>
-  </section>
+      <button>Lưu</button>
+    </div>
 
-  <section class="emp-card">
-    <h3>🔔 Cấu hình nhận tin</h3>
-    <form method="post" class="emp-form-grid">
-      <input type="hidden" name="action" value="notification_settings">
-      <label class="switch-row"><span>Email thông báo</span><input type="checkbox" checked></label>
-      <label class="switch-row"><span>Thông báo trình duyệt</span><input type="checkbox"></label>
-      <button class="btn btn-secondary" type="submit">Lưu cấu hình</button>
-    </form>
-  </section>
-</div>
+    <!-- COMPLAINT -->
+    <div class="tab-pane" id="complaint">
+      <form class="form-grid">
+        <input placeholder="Tiêu đề">
+        <textarea placeholder="Nội dung"></textarea>
+        <button class="primary">Gửi</button>
+      </form>
 
-<div class="emp-grid emp-grid-2">
-  <section class="emp-card">
-    <h3>🔔 Nhật ký thông báo</h3>
-    {% for n in notifications %}
-      <article class="notification-item {{ 'notification-item--new' if not n.is_read else '' }}">
-        <p><strong>{{ n.title }}</strong></p>
-        <p>{{ n.content }}</p>
-        <small>{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
-      </article>
-    {% else %}
-      <p>Chưa có thông báo.</p>
-    {% endfor %}
-  </section>
-
-  <section class="emp-card">
-    <h3>💬 Phản hồi / khiếu nại</h3>
-    {% for c in complaints %}
-      <article class="row-between complaint-item">
-        <div>
-          <p><strong>{{ c.title }}</strong></p>
-          <small>{{ c.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
-
+      <div class="list">
+        {% for c in complaints %}
+        <div class="item">
+          <div>
+            <strong>{{ c.title }}</strong>
+            <small>{{ c.created_at.strftime('%d/%m %H:%M') }}</small>
+          </div>
+          <span class="badge {{ c.status }}">
+            {{ c.status }}
+          </span>
         </div>
-        <span class="pill {{ 'pill-warning' if c.status in ['pending', 'in_progress'] else 'pill-success' }}">
-          {{ '⏳ Đang xử lý' if c.status in ['pending', 'in_progress'] else '✅ Đã giải quyết' }}
-        </span>
-      </article>
-    {% else %}
-      <p>Chưa có khiếu nại nào.</p>
-    {% endfor %}
-  </section>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
 
 </div>
+
+<script src="{{ url_for('static', filename='js/employee/profile.js') }}"></script>
 {% endblock %}
