@@ -20,20 +20,23 @@ def attendance_page():
 
     employee = Employee.query.filter_by(user_id=user_id).first()
 
-    today = AttendanceService.get_today(employee.id, request.args.get("simulated_now"))
-    history = AttendanceService.get_history(employee.id, request.args.get("simulated_now"))
-
-    for a in history:
-        if a.check_in and a.check_out:
-            a.working_hours = AttendanceService.recalculate_hours(a.check_in, a.check_out)
-
     simulated_now = request.args.get("simulated_now")
-
+    if simulated_now:
+        session["attendance_simulated_now"] = simulated_now
+    else:
+        simulated_now = session.get("attendance_simulated_now")
     if simulated_now:
         now = datetime.fromisoformat(simulated_now.replace("Z", "+00:00"))
     else:
         now = datetime.now()
+        simulated_now = now.isoformat()
 
+    today = AttendanceService.get_today(employee.id, simulated_now)
+    history = AttendanceService.get_history(employee.id, simulated_now)
+
+    for a in history:
+        if a.check_in and a.check_out:
+            a.working_hours = AttendanceService.recalculate_hours(a.check_in, a.check_out)
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -57,7 +60,7 @@ def check_in_out():
 
     if not simulated_now:
         return jsonify({"error": "Thiếu simulated time"}), 400
-
+    session["attendance_simulated_now"] = simulated_now
     from app.models import Employee
     employee = Employee.query.filter_by(user_id=user_id).first()
     if not employee:
@@ -90,6 +93,7 @@ def delete_attendance():
     
     try:
         new_last_date = AttendanceService.delete_attendance(employee.id, date_str)
+        session.pop("attendance_simulated_now", None)
         # Nếu còn dữ liệu thì rollback về ngày đó, không thì dùng ngày hiện tại
         return jsonify({
             "message": "Xóa thành công",

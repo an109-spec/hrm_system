@@ -4,22 +4,35 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
 <style>
 :root {
-  --primary: #1e40af;       /* xanh đậm chuẩn corporate */
-  --primary-soft: #e0e7ff;  /* nền xanh rất nhẹ (không dùng rgba) */
+  /* ===== CORE HRM (đậm hơn, có chiều sâu) ===== */
+  --primary: #1e3a8a;        /* xanh navy HRM chuẩn enterprise */
+  --primary-soft: #c7d2fe;   /* nền xanh rõ hơn (không bị nhạt) */
 
+  --success: #14532d;
+  --warning: #92400e;
+  --danger: #7f1d1d;
 
-  --success: #15803d;
-  --warning: #b45309;
-  --danger: #b91c1c;
-
-  --bg-main: #ffffff;
+  /* ===== BACKGROUND (giảm “trắng toát”) ===== */
+  --bg-main: #f1f5f9;
   --bg-card: #ffffff;
-  --border: #d1d5db;
+  --border: #cbd5e1;
 
-  --text-main: #0f172a;
-  --text-muted: #374151;
+  /* ===== TEXT (đậm hơn, contrast cao) ===== */
+  --text-main: #0b1220;
+  --text-muted: #334155;
+}
+.sim-editor {
+  gap: 8px;              /* giảm khoảng cách */
+  padding: 10px 12px;   /* gọn hơn */
 }
 
+.time-part {
+  font-size: 1.05rem;   /* nhỏ lại cho tinh gọn */
+}
+
+.unit-label {
+  font-size: 0.6rem;
+}
 /* ===== CARD ===== */
 .emp-card {
   background: var(--bg-card);
@@ -534,12 +547,8 @@ async function deleteRecord(dateIso) {
         if(!res.ok) throw new Error(data.error);
         
         toast("Đã xóa bản ghi");
-        // Rollback simulated_now về ngày server trả về
-        const newSim = new Date(state.now);
-        const rollbackDate = new Date(data.rollback_date);
-        newSim.setFullYear(rollbackDate.getFullYear(), rollbackDate.getMonth(), rollbackDate.getDate());
-        
-        window.location.href = window.location.pathname + "?simulated_now=" + newSim.toISOString();
+        // Theo yêu cầu nghiệp vụ: xóa công ngày mới nhất thì quay về thời gian thực
+        window.location.href = window.location.pathname;
     } catch(err) {
         toast(err.message, "error");
     }
