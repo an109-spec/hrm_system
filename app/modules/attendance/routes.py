@@ -1,6 +1,8 @@
 from flask import render_template, request, session, redirect, url_for, jsonify
 from datetime import datetime
 
+from app.extensions import db
+
 from . import attendance_bp
 from .service import AttendanceService
 from app.common.exceptions import ValidationError
@@ -19,7 +21,7 @@ def attendance_page():
     employee = Employee.query.filter_by(user_id=user_id).first()
 
     today = AttendanceService.get_today(employee.id, request.args.get("simulated_now"))
-    history = AttendanceService.get_history(employee.id)
+    history = AttendanceService.get_history(employee.id, request.args.get("simulated_now"))
 
     for a in history:
         if a.check_in and a.check_out:
@@ -76,3 +78,22 @@ def check_in_out():
     if expected_action == "check_in" and "muộn" in response["message"]:
         response["warning"] = "Bạn đã muộn hơn 10 phút. Thời gian tính công sẽ bắt đầu từ 09:00"
     return jsonify(response)
+
+@attendance_bp.route("/", methods=["DELETE"])
+def delete_attendance():
+    user_id = session.get("user_id")
+    data = request.get_json()
+    date_str = data.get("date") # YYYY-MM-DD
+    
+    from app.models import Employee
+    employee = Employee.query.filter_by(user_id=user_id).first()
+    
+    try:
+        new_last_date = AttendanceService.delete_attendance(employee.id, date_str)
+        # Nếu còn dữ liệu thì rollback về ngày đó, không thì dùng ngày hiện tại
+        return jsonify({
+            "message": "Xóa thành công",
+            "rollback_date": new_last_date.isoformat() if new_last_date else datetime.utcnow().date().isoformat()
+        })
+    except ValidationError as e:
+        return jsonify({"error": str(e)}), 400

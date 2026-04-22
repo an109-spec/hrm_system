@@ -5,11 +5,15 @@ export const AttendanceAPI = {
     return request("/attendance/today");
   },
 
-  checkIn() {
-    return request("/attendance/check-in", {
-      method: "POST"
-    });
-  },
+checkIn(simulated_now) {
+  return request("/attendance/check", {
+    method: "POST",
+    body: JSON.stringify({
+      simulated_now: simulated_now,
+      qr_text: "QR"
+    })
+  });
+},
 
   checkOut() {
     return request("/attendance/check-out", {
@@ -19,5 +23,11 @@ export const AttendanceAPI = {
 
   history() {
     return request("/attendance/history");
+  },
+  deleteRecord(date) {
+    return request("/attendance/", {
+      method: "DELETE",
+      body: JSON.stringify({ date: date })
+    });
   }
 };

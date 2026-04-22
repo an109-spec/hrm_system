@@ -3,24 +3,164 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
 <style>
-  .attendance-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:12px 0; }
-  .sim-badge { font-size:12px; opacity:0.75; }
-  .attendance-note { margin:8px 0; font-weight:600; }
-  .attendance-warning { color:#c0392b; font-weight:700; }
-  .scanner-modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:9999; }
-  .scanner-modal.open { display:flex; }
-  .scanner-panel { width:min(92vw,460px); background:#10151c; color:#fff; border-radius:14px; padding:14px; position:relative; }
-  .scanner-panel.success-flash { animation: successFlash .45s ease; }
-  @keyframes successFlash { 0%{box-shadow:0 0 0 0 rgba(46,204,113,.9)} 100%{box-shadow:0 0 0 18px rgba(46,204,113,0)} }
-  .scanner-view { position:relative; border-radius:10px; overflow:hidden; }
-  #qr-reader { width:100%; min-height:280px; }
-  .scanner-overlay { pointer-events:none; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
-  .scanner-box { width:75%; aspect-ratio:1/1; border:2px solid #7fdbff; box-shadow:0 0 0 9999px rgba(0,0,0,.2); position:relative; }
-  .scan-line { position:absolute; left:0; right:0; height:2px; background:#7fdbff; box-shadow:0 0 12px #7fdbff; animation: scan 2s linear infinite; }
-  @keyframes scan { 0%{top:0} 50%{top:calc(100% - 2px)} 100%{top:0} }
-  .toast-box { position:fixed; right:18px; top:18px; z-index:10000; display:flex; flex-direction:column; gap:8px; }
-  .toast-item { background:#1f8b4c; color:#fff; padding:10px 14px; border-radius:8px; min-width:300px; box-shadow:0 8px 24px rgba(0,0,0,.22); }
-  .btn-sim { position:fixed; right:20px; bottom:20px; opacity:.55; }
+:root {
+  --primary: #1e40af;       /* xanh đậm chuẩn corporate */
+  --primary-soft: #e0e7ff;  /* nền xanh rất nhẹ (không dùng rgba) */
+
+
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+
+  --bg-main: #ffffff;
+  --bg-card: #ffffff;
+  --border: #d1d5db;
+
+  --text-main: #0f172a;
+  --text-muted: #374151;
+}
+
+/* ===== CARD ===== */
+.emp-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 2px rgba(16,24,40,.06);
+  margin-bottom: 20px;
+  color: var(--text-main);
+}
+
+/* ===== SIM EDITOR (clean HRM style) ===== */
+.sim-editor {
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.time-part {
+  cursor: ns-resize;
+  font-weight: 600;
+  font-size: 1.2rem;
+  color: var(--primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.unit-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: .5px;
+}
+
+/* ===== TEXT STATUS ===== */
+.attendance-note {
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text-main);
+}
+
+.attendance-warning {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* ===== BUTTON (HRM standard) ===== */
+.btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* ===== TABLE HRM STYLE ===== */
+.emp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.emp-table th {
+  text-align: left;
+  padding: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+
+.emp-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+.emp-table tr:hover td {
+  background: #f9fafb;
+}
+
+.scanner-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999; 
+}
+.scanner-modal.open { display:flex; }
+.scanner-panel {
+  background: #fff;
+  width: 420px;
+  max-width: 92vw;
+  border-radius: 12px;
+  padding: 16px;
+  z-index: 1000000;
+  position: relative;
+}
+/* QR area clean */
+#qr-reader {
+  width: 100% !important;
+  min-height: 280px !important;
+  border-radius: 10px;
+}
+/* overlay scan box nhẹ hơn */
+.scanner-box {
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
+}
 </style>
 {% endblock %}
 
@@ -31,7 +171,29 @@
     <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
   {% endif %}
   <p id="dateText"></p>
-  <p class="clock" id="liveClock">{{ now.strftime('%H:%M:%S') }}</p>
+  <div class="sim-editor">
+    <div class="time-group">
+        <span class="time-part" data-unit="hours" id="edit-h">00</span>
+        <span class="unit-label">GIỜ</span>
+    </div> :
+    <div class="time-group">
+        <span class="time-part" data-unit="minutes" id="edit-m">00</span>
+        <span class="unit-label">PHÚT</span>
+    </div> :
+    <div class="time-group">
+        <span class="time-part" data-unit="seconds" id="edit-s">00</span>
+        <span class="unit-label">GIÂY</span>
+    </div>
+    &nbsp;&nbsp;
+    <div class="time-group">
+        <span class="time-part" data-unit="date" id="edit-d">01</span>
+        <span class="unit-label">NGÀY</span>
+    </div> /
+    <div class="time-group">
+        <span class="time-part" data-unit="month" id="edit-mo">01</span>
+        <span class="unit-label">THÁNG</span>
+    </div>
+</div>
   <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
 
   <div class="attendance-actions">
@@ -53,7 +215,7 @@
         <th>Giờ vào</th>
         <th>Giờ ra</th>
         <th>Công hôm nay</th>
-
+        <th>Hành động</th>
       </tr>
     </thead>
     <tbody>
@@ -63,6 +225,9 @@
         <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
         <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
         <td>{{ a.working_hours if a.working_hours else 0 }} công</td>
+        <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
+</td>
       </tr>
       {% else %}
       <tr><td colspan="4">Chưa có dữ liệu chấm công.</td></tr>
@@ -70,7 +235,6 @@
     </tbody>
   </table>
 </section>
-<button class="btn btn-warning btn-sim" id="timeForwardBtn" title="Simulation Mode">&gt;</button>
 
 <div class="scanner-modal" id="scannerModal">
   <div class="scanner-panel" id="scannerPanel">
@@ -107,37 +271,34 @@ const state = {
   currentDate: null
 };
 state.currentDate = state.now.toDateString();
-function checkNewDay() {
-  const newDate = state.now.toDateString();
 
-  if (newDate !== state.currentDate) {
-    console.log("🆕 Sang ngày mới -> reset state");
-
-    state.currentDate = newDate;
-
-    state.hasAttendance = false;
-    state.hasCheckout = false;
-    state.checkIn = null;
-    state.checkOut = null;
-
-    state.isOvertime = false;
-    state.overtimeStarted = false;
-
-    toast("Đã sang ngày mới. Vui lòng check-in", "success");
-  }
-}
 
 const fmtHm = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const isLunchBreak = (d) => d.getHours() === 12;
-const inCheckinWindow = (d) => (d.getHours() > 8 || (d.getHours() === 8 && d.getMinutes() >= 0)) && (d.getHours() < 10 || (d.getHours() === 10 && d.getMinutes() === 0));
+const isNewDay = (now, lastCheckin) => {
+    if (!lastCheckin) return true;
+    return now.getDate() !== lastCheckin.getDate() || now.getMonth() !== lastCheckin.getMonth();
+};
 const isAfterWork = (d) => d.getHours() >= 17 && d.getHours() < 19;
 const isOvertimeWindow = (d) => d.getHours() >= 19 && d.getHours() < 22;
 const isOvertimeEnd = (d) => d.getHours() >= 22;
 const calcEffectiveStart = (checkInDate) => {
-  const lateLine = new Date(checkInDate); lateLine.setHours(8, 10, 0, 0);
   const start = new Date(checkInDate);
-  if (checkInDate > lateLine) start.setHours(9,0,0,0);
-  else start.setHours(8,0,0,0);
+  const hour = start.getHours();
+  const min = start.getMinutes();
+
+  if (hour > 8 || (hour === 8 && min > 10)) {
+    // Đi muộn sau 08:10 -> Tính từ lúc check-in thực tế (không ép về 9h nữa)
+    // Hoặc nếu bạn muốn giống Back-end tuyệt đối là ép về 9h thì giữ nguyên, 
+    // nhưng ở đây bạn đang check-in lúc 2h chiều nên logic này bị lỗi thời.
+    return start; 
+  } else if (hour < 8) {
+    // Đi sớm trước 08:00 -> Tính từ 08:00
+    start.setHours(8, 0, 0, 0);
+  } else {
+    // Đi đúng giờ 08:00 - 08:10 -> Tính từ lúc check-in thực tế
+    start.setSeconds(0, 0);
+  }
   return start;
 };
 
@@ -174,88 +335,72 @@ function calcWorkedDuration(now) {
 }
 
 function renderState() {
-  document.getElementById('liveClock').textContent = state.now.toLocaleTimeString('vi-VN', {hour12:false});
-  const btn = document.getElementById('attendanceBtn');
-  const statusText = document.getElementById('statusText');
-  const lateWarning = document.getElementById('lateWarning');
-  const identityText = document.getElementById('identityText');
+    const btn = document.getElementById('attendanceBtn');
+    const statusText = document.getElementById('statusText');
+    const lateWarning = document.getElementById('lateWarning');
+    const identityText = document.getElementById('identityText');
+    const inLunch = isLunchBreak(state.now);
 
-  const inLunch = isLunchBreak(state.now);
-// ===== TAN CA 17H =====
-if (state.hasAttendance && !state.hasCheckout && isAfterWork(state.now)) {
-  statusText.textContent = '🔴 Đã hết ca (17:00). Vui lòng check-out';
+    // 1. Kiểm tra xem ngày đang quay (state.now) có khác ngày đã chấm công lưu trong máy (state.checkIn) không
+    const isDifferentDay = state.checkIn && (
+        state.now.getDate() !== state.checkIn.getDate() || 
+        state.now.getMonth() !== state.checkIn.getMonth() ||
+        state.now.getFullYear() !== state.checkIn.getFullYear()
+    );
 
-  // popup hỏi tăng ca (chỉ hiện 1 lần)
-  if (!state.isOvertime) {
-    setTimeout(() => {
-      const ok = confirm("Đã hết ca. Bạn có muốn tăng ca lúc 19:00 không?");
-      if (ok) {
-        state.isOvertime = true;
-      }
-    }, 500);
-  }
-}
+    // 2. LOGIC QUYẾT ĐỊNH HIỂN THỊ NÚT
+    
+    // TRƯỜNG HỢP A: ĐÃ CHECK-OUT VÀ VẪN ĐANG Ở ĐÚNG NGÀY ĐÓ -> KHÓA NÚT
+    if (state.hasCheckout && !isDifferentDay) {
+        btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
+        btn.disabled = true;
+        btn.className = 'btn btn-disabled';
+        statusText.textContent = 'Trạng thái hiện tại: ⚪ Hết ca';
+        identityText.style.display = 'block';
+        lateWarning.style.display = 'none';
+    } 
+    // TRƯỜNG HỢP B: CHƯA CÓ CÔNG *HOẶC* ĐÃ CUỘN SANG NGÀY KHÁC -> MỞ CHECK-IN (Đúng ý bạn)
+    else if (!state.hasAttendance || isDifferentDay) {
+        btn.textContent = inLunch ? 'Giờ nghỉ trưa (Mở lại sau 13:00)' : '🔳 QUÉT QR CHECK-IN';
+        btn.disabled = inLunch;
+        btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
+        
+        const isTimeOk = state.now.getHours() >= 8 && state.now.getHours() < 10;
+        statusText.textContent = isTimeOk ? 'Trạng thái hiện tại: 🟢 Trong ca làm việc' : 'Trạng thái hiện tại: 🟡 Chưa trong khung check-in (08:00-10:00)';
+        
+        lateWarning.style.display = 'none';
+        identityText.style.display = 'none';
+    } 
+    // TRƯỜNG HỢP C: ĐANG TRONG CA (ĐÃ CHECK-IN NHƯNG CHƯA CHECK-OUT)
+    else {
+        if (inLunch) {
+            btn.textContent = 'Giờ nghỉ trưa (Mở lại sau 13:00)';
+        } else {
+            btn.textContent = state.overtimeStarted ? '🔳 CHECK-OUT TĂNG CA' : '🔳 QUÉT QR CHECK-OUT';
+        }
+        btn.disabled = inLunch;
+        btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
+        statusText.textContent = `Trạng thái hiện tại: 🟡 Đang trong ca — Bạn vào lúc ${fmtHm(state.checkIn)}`;
+        identityText.style.display = 'block';
 
-// ===== KHUNG GIỜ TĂNG CA =====
-if (state.isOvertime && isOvertimeWindow(state.now)) {
-  statusText.textContent = '🟣 Đang trong giờ tăng ca (19:00 - 22:00)';
-
-  // cho phép check-in lại OT
-  if (!state.overtimeStarted) {
-    document.getElementById('attendanceBtn').textContent = '🔳 CHECK-IN TĂNG CA';
-    document.getElementById('attendanceBtn').disabled = false;
-  }
-}
-
-// ===== HẾT TĂNG CA =====
-if (state.overtimeStarted && isOvertimeEnd(state.now) && !state.hasCheckout) {
-  statusText.textContent = '🔴 Hết giờ tăng ca (22:00). Vui lòng check-out';
-}
-  if (state.hasCheckout) {
-    btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
-    btn.disabled = true;
-    btn.className = 'btn btn-disabled';
-    statusText.textContent = 'Trạng thái hiện tại: ⚪ Hết ca';
-    identityText.style.display = 'block';
-    lateWarning.style.display = 'none';
-  } else if (!state.hasAttendance) {
-    btn.textContent = inLunch ? 'Giờ nghỉ trưa (Mở lại sau 13:00)' : '🔳 QUÉT QR CHECK-IN';
-    btn.disabled = inLunch || !inCheckinWindow(state.now);
-    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
-    statusText.textContent = inCheckinWindow(state.now) ? 'Trạng thái hiện tại: 🟢 Trong ca làm việc' : 'Trạng thái hiện tại: 🟡 Chưa trong khung check-in (08:00-10:00)';
-    lateWarning.style.display = 'none';
-  } else {
-if (inLunch) {
-  btn.textContent = 'Giờ nghỉ trưa (Mở lại sau 13:00)';
-} else {
-  if (state.overtimeStarted) {
-    btn.textContent = '🔳 CHECK-OUT TĂNG CA';
-  } else {
-    btn.textContent = '🔳 QUÉT QR CHECK-OUT';
-  }
-}
-    btn.disabled = inLunch;
-    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
-    statusText.textContent = `Trạng thái hiện tại: 🟡 Đang trong ca — Bạn vào lúc ${fmtHm(state.checkIn)}`;
-    identityText.style.display = 'block';
-
-    const lateLine = new Date(state.checkIn); lateLine.setHours(8,10,0,0);
-    if (state.checkIn > lateLine) {
-      lateWarning.style.display = 'block';
-      lateWarning.textContent = 'Bạn đã muộn hơn 10 phút. Thời gian tính công sẽ bắt đầu từ 09:00';
-    } else {
-      lateWarning.style.display = 'none';
+        const lateLine = new Date(state.checkIn); lateLine.setHours(8,10,0,0);
+        if (state.checkIn > lateLine) {
+            lateWarning.style.display = 'block';
+            lateWarning.textContent = 'Trạng thái: Bạn đi muộn (Sau 08:10).';
+        } else {
+            lateWarning.style.display = 'none';
+        }
     }
-  }
 
-const worked = calcWorkedDuration(state.now);
+    // 3. Cập nhật số giờ công hiển thị phía dưới
+    const worked = calcWorkedDuration(state.now);
+    const totalHours = (worked.hours + worked.minutes / 60);
+    // Nếu là ngày khác thì công = 0, nếu đúng ngày thì mới hiện giờ đã tính
+    const displayHours = isDifferentDay ? 0 : totalHours;
+    let label = displayHours >= 8 ? 'Đủ công' : 'Chưa đủ công';
 
-const totalHours = (worked.hours + worked.minutes / 60);
-
-let label = totalHours >= 8 ? 'Đủ công' : 'Chưa đủ công';
-
-document.getElementById('workHoursText').textContent =
-  `Công hôm nay: ${totalHours.toFixed(2)} (${label})`;
+    document.getElementById('workHoursText').textContent = 
+        `Công hôm nay: ${displayHours.toFixed(2)} (${label})`;
 }
 function renderDate() {
   const dateEl = document.getElementById('dateText');
@@ -268,24 +413,17 @@ function renderDate() {
 }
 function startClock() {
   setInterval(() => {
+    const oldDay = state.now.getDate();
     state.now = new Date(state.now.getTime() + 1000);
+    if (state.now.getDate() !== oldDay) {
+        window.location.reload(); 
+    }
 
-    checkNewDay();   // 👈 THÊM DÒNG NÀY
-
+    updateEditorUI();
     renderState();
   }, 1000);
 }
 renderDate();
-let holdTimer = null;
-const timeBtn = document.getElementById('timeForwardBtn');
-function fastForward(minutes = 1) {
-  state.now = new Date(state.now.getTime() + minutes * 60000);
-  checkNewDay();
-  renderState();
-}
-timeBtn.addEventListener('click', () => fastForward(5));
-timeBtn.addEventListener('mousedown', () => { holdTimer = setInterval(() => fastForward(10), 120); });
-['mouseup','mouseleave'].forEach(evt => timeBtn.addEventListener(evt, () => clearInterval(holdTimer)));
 
 async function submitAttendanceFromQR(decodedText) {
   console.log('QR decoded:', decodedText);
@@ -304,32 +442,15 @@ async function submitAttendanceFromQR(decodedText) {
   const res = await fetch("{{ url_for('attendance.check_in_out') }}", {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ qr_text: decodedText, simulated_now: state.now.toISOString() })
+    body: JSON.stringify({ 
+    qr_text: decodedText, 
+    simulated_now: state.now.toLocaleString('sv-SE').replace(' ', 'T') // Format ISO local để tránh lệch múi giờ
+})
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra khi chấm công');
 
   const action = data.status || (isCheckOut ? 'check_out' : 'check_in');
-
-if (action === 'check_in') {
-  // nếu đang trong OT window thì là OT check-in
-  if (state.isOvertime && isOvertimeWindow(state.now)) {
-    state.overtimeStarted = true;
-    toast("Bắt đầu tăng ca", "success");
-  } else {
-    state.hasAttendance = true;
-    state.checkIn = new Date(state.now);
-    document.getElementById('identityText').style.display = 'block';
-  }
-}
-if (action === 'check_out') {
-  if (state.overtimeStarted) {
-    toast("Kết thúc tăng ca", "success");
-  }
-
-  state.hasCheckout = true;
-  state.checkOut = new Date(state.now);
-}
 
   if (data.warning) {
     const lateWarning = document.getElementById('lateWarning');
@@ -340,9 +461,8 @@ if (action === 'check_out') {
   toast(data.message || 'Chấm công thành công', data.warning ? 'warning' : 'success');
 
   setTimeout(() => {
-    window.location.href = window.location.pathname + "?simulated_now=" + state.now.toISOString();
-  }, 500);
-}
+    window.location.href = window.location.pathname + "?simulated_now=" + state.now.toLocaleString('sv-SE').replace(' ', 'T');
+  }, 800);}
 const scanner = HRMQRScanner.createQRScanner({
   modalId: 'scannerModal',
   readerId: 'qr-reader',
@@ -370,5 +490,61 @@ async function closeScannerModal() {
 
 renderState();
 startClock();
+function initSimEditor() {
+    const parts = document.querySelectorAll('.time-part');
+    parts.forEach(el => {
+        el.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const unit = el.dataset.unit;
+            const delta = e.deltaY < 0 ? 1 : -1;
+            const step = e.shiftKey ? 10 : 1;
+            
+            let dt = new Date(state.now);
+            if(unit === 'hours') dt.setHours(dt.getHours() + (delta * step));
+            if(unit === 'minutes') dt.setMinutes(dt.getMinutes() + (delta * step));
+            if(unit === 'seconds') dt.setSeconds(dt.getSeconds() + (delta * step));
+            if(unit === 'date') dt.setDate(dt.getDate() + (delta * step));
+            if(unit === 'month') dt.setMonth(dt.getMonth() + (delta * step));
+            
+            state.now = dt;
+            updateEditorUI();
+        });
+    });
+}
+
+function updateEditorUI() {
+    document.getElementById('edit-h').textContent = String(state.now.getHours()).padStart(2,'0');
+    document.getElementById('edit-m').textContent = String(state.now.getMinutes()).padStart(2,'0');
+    document.getElementById('edit-s').textContent = String(state.now.getSeconds()).padStart(2,'0');
+    document.getElementById('edit-d').textContent = String(state.now.getDate()).padStart(2,'0');
+    document.getElementById('edit-mo').textContent = String(state.now.getMonth() + 1).padStart(2,'0');
+    renderDate();
+    renderState();
+}
+async function deleteRecord(dateIso) {
+    if(!confirm("Xóa bản ghi ngày " + dateIso + "? Hệ thống sẽ rollback thời gian về ngày trước đó.")) return;
+    
+    try {
+        const res = await fetch("{{ url_for('attendance.delete_attendance') }}", {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date: dateIso })
+        });
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.error);
+        
+        toast("Đã xóa bản ghi");
+        // Rollback simulated_now về ngày server trả về
+        const newSim = new Date(state.now);
+        const rollbackDate = new Date(data.rollback_date);
+        newSim.setFullYear(rollbackDate.getFullYear(), rollbackDate.getMonth(), rollbackDate.getDate());
+        
+        window.location.href = window.location.pathname + "?simulated_now=" + newSim.toISOString();
+    } catch(err) {
+        toast(err.message, "error");
+    }
+}
+initSimEditor()
+updateEditorUI()
 </script>
 {% endblock %}
