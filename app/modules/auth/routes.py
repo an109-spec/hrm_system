@@ -20,7 +20,16 @@ def _mask_identifier(identifier: str) -> str:
         masked_local = local[:2] + "*" * (len(local) - 2) if len(local) > 2 else local + "*"
         return f"{masked_local}@{domain}"
     return f"{identifier[:2]}{'*' * (len(identifier) - 4)}{identifier[-2:]}" if len(identifier) > 4 else "*" * len(identifier)
+def _redirect_after_login(user, next_url: str | None):
+    if next_url:
+        return redirect(next_url)
 
+    role_name = (user.role.name if getattr(user, "role", None) else "Employee").strip().lower()
+    if role_name == "admin":
+        return redirect(url_for("admin.admin_dashboard_page"))
+    if role_name == "manager":
+        return redirect(url_for("manager.dashboard_page"))
+    return redirect(url_for("employee.dashboard"))
 # ======================================================
 # LOGIN
 # ======================================================
@@ -48,8 +57,7 @@ def login():
         # 4. Tạo JWT Token
         access_token = create_access_token(identity=str(user.id))
 
-        # 5. Tạo response redirect về Dashboard
-        response = redirect(next_url or url_for("employee.dashboard"))
+        response = _redirect_after_login(user, next_url)
 
         # 6. Đính Token vào Cookie (Quan trọng để @jwt_required đọc được)
         set_access_cookies(response, access_token)

@@ -246,7 +246,23 @@ def attendance():
 
     employee = _current_employee()
     now = parse_simulated_time({})
-
+    latest_attendance = (
+        Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).first()
+        if employee
+        else None
+    )
+    if latest_attendance and latest_attendance.date > now.date():
+        fallback_time = (
+            latest_attendance.check_out.time()
+            if latest_attendance.check_out
+            else (
+                latest_attendance.check_in.time()
+                if latest_attendance.check_in
+                else time(17, 0)
+            )
+        )
+        now = datetime.combine(latest_attendance.date, fallback_time)
+        session["simulated_now"] = now.isoformat()
     today = EmployeeDashboardService.get_today_attendance(employee.id, now.date()) if employee else None
     history = (
         Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).limit(10).all()

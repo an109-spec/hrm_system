@@ -242,7 +242,8 @@
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
-
+  data-regular-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
+  data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
   data-server-now="{{ now.isoformat() }}"
 >
 
@@ -360,11 +361,7 @@
 
         <!-- WORK HOURS (FIX CHUẨN SERVICE) -->
         <td>
-          {% if a.calculated_hours is defined %}
-           {{ (a.calculated_hours|float)|int }} giờ
-          {% else %}
-            {{ ((a.working_hours or 0)|float)|int }} giờ
-          {% endif %}
+          {{ ((a.regular_hours or 0)|float)|int }} giờ
         </td>
           <td>{{ a.overtime_hours or 0 }} giờ</td>
         <!-- STATUS (FULL LOGIC HRM) -->
@@ -672,11 +669,22 @@ function renderState() {
   // =========================
   // WORK HOURS
   // =========================
-  const worked = calcWorkedDuration(state.now);
-  const total = worked.hours + worked.minutes / 60;
-  const standardHoursRoundedDown = Math.floor(total);
-  document.getElementById('workHoursText').textContent =
-    `Công hôm nay: ${standardHoursRoundedDown} giờ`;
+  const regularFromServer = Number(root.dataset.regularHours || 0);
+  const overtimeFromServer = Number(root.dataset.overtimeHours || 0);
+
+  if (state.hasCheckout) {
+    const totalDone = regularFromServer + overtimeFromServer;
+    document.getElementById('workHoursText').textContent =
+      `Công hôm nay: ${totalDone.toFixed(0)} giờ (Công chuẩn: ${regularFromServer.toFixed(0)} giờ, Tăng ca: ${overtimeFromServer.toFixed(0)} giờ)`;
+  } else {
+    const worked = calcWorkedDuration(state.now);
+    const regularLive = worked.hours + worked.minutes / 60;
+    const overtimeLive = Math.max(0, regularLive - 8);
+    const regularCapped = Math.min(8, regularLive);
+    const totalLive = regularCapped + overtimeLive;
+    document.getElementById('workHoursText').textContent =
+      `Công hôm nay: ${totalLive.toFixed(0)} giờ (Công chuẩn: ${regularCapped.toFixed(0)} giờ, Tăng ca: ${overtimeLive.toFixed(0)} giờ)`;
+  }
 }
 
 /* ===================== DATE ===================== */
