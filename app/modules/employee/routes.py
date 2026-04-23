@@ -358,8 +358,10 @@ def check_in_out():
         # CHECK-OUT FLOW
         # =========================
         if attendance.check_in and not attendance.check_out:
-
-            if current_time < attendance.check_in:
+            check_in_time = attendance.check_in
+            if check_in_time.tzinfo is not None:
+                check_in_time = check_in_time.replace(tzinfo=None)
+            if current_time < check_in_time:
                 return jsonify({
                     "toast": True,
                     "type": "error",
@@ -373,7 +375,7 @@ def check_in_out():
             # =========================
             effective_start = (
                 datetime.combine(today, time(9, 0))
-                if attendance.check_in > late_threshold
+                if check_in_time > late_threshold
                 else datetime.combine(today, time(8, 0))
             )
 
