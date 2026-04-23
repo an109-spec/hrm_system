@@ -414,7 +414,7 @@ def check_in_out():
 
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
-            attendance.working_hours = regular_hours
+            attendance.working_hours = regular_hours + overtime_hours
             if OvertimeService.is_weekend(today):
                 attendance.attendance_type = "holiday"
             elif overtime_hours > 0:
