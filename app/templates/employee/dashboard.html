@@ -38,7 +38,7 @@
                     Trạng thái:
                     {% if attendance and not attendance.check_out %}
                         <span class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
-                            Đang chấm công 
+                            Đang làm việc
                         </span>
                     {% elif attendance and attendance.check_out %}
                         <span class="status offline">Đã hoàn thành ca</span>
@@ -56,7 +56,29 @@
             </div>
             <div class="attendance-body">
                 <p class="timer" id="clock"></p>
-                
+                <div class="sim-editor" style="background:#f9fafb;border:1px solid #cbd5e1;padding:10px 14px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;margin:10px 0;">
+                    <div>
+                        <span class="time-part" data-unit="hours" id="dash-edit-h" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">GIỜ</span>
+                    </div> :
+                    <div>
+                        <span class="time-part" data-unit="minutes" id="dash-edit-m" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">PHÚT</span>
+                    </div> :
+                    <div>
+                        <span class="time-part" data-unit="seconds" id="dash-edit-s" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">GIÂY</span>
+                    </div>
+                    &nbsp;&nbsp;
+                    <div>
+                        <span class="time-part" data-unit="date" id="dash-edit-d" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">01</span>
+                        <span style="font-size:.65rem;color:#334155;">NGÀY</span>
+                    </div> /
+                    <div>
+                        <span class="time-part" data-unit="month" id="dash-edit-mo" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">01</span>
+                        <span style="font-size:.65rem;color:#334155;">THÁNG</span>
+                    </div>
+                </div>               
                 {% if not attendance %}
                     <button class="btn btn-green" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>
                 {% elif not attendance.check_out %}
@@ -85,21 +107,35 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
-let simOffset = 0; // Số giây lệch so với giờ thực
+const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const state = {
+    now: readSharedSimTime(new Date("{{ now.isoformat() if now else '' }}")),
+};
+
+function readSharedSimTime(fallback) {
+    try {
+        const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
+        if (!raw) return fallback;
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function toLocalISO(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3,'0')}`;
+}
 
 function getSimulatedDate() {
-    const now = new Date();
-    return new Date(now.getTime() + simOffset * 1000);
+    return new Date(state.now);
 }
 
-function adjustSimTime(mins) {
-    simOffset += mins * 60;
-    updateClock();
-}
-
-function resetSimTime() {
-    simOffset = 0;
-    updateClock();
+function persistSimTime() {
+    try {
+        localStorage.setItem(SHARED_SIM_TIME_KEY, toLocalISO(state.now));
+    } catch (_) {}
 }
 
 function updateClock() {
@@ -107,7 +143,7 @@ function updateClock() {
     const days = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
     
     document.getElementById("clock").innerText = `${now.toLocaleTimeString('vi-VN')} - ${days[now.getDay()]}, ${now.toLocaleDateString('vi-VN')}`;
-    
+    updateEditorUI();
     // Hiển thị trạng thái nghỉ trưa
     const hrs = now.getHours();
     const btn = document.querySelector('.attendance-body button');
@@ -125,8 +161,15 @@ function updateClock() {
     }
 }
 
-setInterval(updateClock, 1000);
+function tickClock() {
+    state.now = new Date(state.now.getTime() + 1000);
+    persistSimTime();
+    updateClock();
+}
+
+setInterval(tickClock, 1000);
 updateClock();
+persistSimTime();
 // Lấy giờ vào từ Flask (truyền vào JS)
 const checkInTimeStr = "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}";
 const hasCheckedOut = {{ 'true' if attendance and attendance.check_out else 'false' }};
@@ -173,6 +216,45 @@ function updateWorkingHours() {
 
 // Chạy bộ đếm mỗi giây
 setInterval(updateWorkingHours, 1000);
+updateWorkingHours();
+
+function initSimEditor() {
+    document.querySelectorAll('.sim-editor .time-part').forEach(el => {
+        el.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const unit = el.dataset.unit;
+            const delta = e.deltaY < 0 ? 1 : -1;
+            const dt = new Date(state.now);
+
+            if (unit === 'hours') dt.setHours(dt.getHours() + delta);
+            if (unit === 'minutes') dt.setMinutes(dt.getMinutes() + delta);
+            if (unit === 'seconds') dt.setSeconds(dt.getSeconds() + delta);
+            if (unit === 'date') dt.setDate(dt.getDate() + delta);
+            if (unit === 'month') dt.setMonth(dt.getMonth() + delta);
+
+            state.now = dt;
+            persistSimTime();
+            updateClock();
+            updateWorkingHours();
+        });
+    });
+}
+
+function updateEditorUI() {
+    const now = getSimulatedDate();
+    const mappings = [
+      ['dash-edit-h', now.getHours()],
+      ['dash-edit-m', now.getMinutes()],
+      ['dash-edit-s', now.getSeconds()],
+      ['dash-edit-d', now.getDate()],
+      ['dash-edit-mo', now.getMonth() + 1]
+    ];
+    mappings.forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(value).padStart(2, '0');
+    });
+}
+initSimEditor();
 // --- QR Logic ---
 const scanner = HRMQRScanner.createQRScanner({
   modalId: 'qr-modal',
@@ -202,14 +284,15 @@ async function processAttendance(code) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ 
-                 qr_text: code,
+                qr_text: code,
                 qr_data: code, 
                 sim_time: timeStr,
-                simulated_now: now.toISOString()
+                simulated_now: toLocalISO(now)
             })
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
+        persistSimTime();
         alert(`Xác nhận danh tính: {{ employee.full_name }} \n${d.message}`);
         window.location.reload();
     } catch (e) {

@@ -428,20 +428,61 @@
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const root = document.getElementById('attendanceRoot');
+const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const attendanceByDate = new Map([
+  {% if today %}
+  ["{{ today.date.isoformat() }}", {
+    hasAttendance: {{ 'true' if today.check_in else 'false' }},
+    hasCheckout: {{ 'true' if today.check_out else 'false' }},
+    checkIn: "{{ today.check_in.isoformat() if today.check_in else '' }}",
+    checkOut: "{{ today.check_out.isoformat() if today.check_out else '' }}",
+    regularHours: {{ (today.regular_hours or 0)|float }},
+    overtimeHours: {{ (today.overtime_hours or 0)|float }}
+  }],
+  {% endif %}
+  {% for a in history %}
+  ["{{ a.date.isoformat() }}", {
+    hasAttendance: {{ 'true' if a.check_in else 'false' }},
+    hasCheckout: {{ 'true' if a.check_out else 'false' }},
+    checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
+    checkOut: "{{ a.check_out.isoformat() if a.check_out else '' }}",
+    regularHours: {{ (a.regular_hours or 0)|float }},
+    overtimeHours: {{ (a.overtime_hours or 0)|float }}
+  }],
+  {% endfor %}
+]);
 
+function readSharedSimTime(fallback) {
+  try {
+    const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
+    if (!raw) return fallback;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function persistSharedSimTime(date) {
+  try {
+    localStorage.setItem(SHARED_SIM_TIME_KEY, toLocalISO(date));
+  } catch (_) {}
+}
 const state = {
   isOvertime: false,
   overtimeStartAt: null,
   overtimeStarted: false,
   isPreOvertimeRest: false,
-  now: new Date(root.dataset.serverNow),
+  now: readSharedSimTime(new Date(root.dataset.serverNow)),
   hasAttendance: root.dataset.hasAttendance === '1',
   hasCheckout: root.dataset.hasCheckout === '1',
   checkIn: root.dataset.checkin ? new Date(root.dataset.checkin) : null,
   checkOut: root.dataset.checkout ? new Date(root.dataset.checkout) : null,
+  regularHours: Number(root.dataset.regularHours || 0),
+  overtimeHours: Number(root.dataset.overtimeHours || 0),
   scanEngine: null,
   isScannerOpen: false,
-    currentDate: null,
+  currentDate: null,
   notices: {
     otInvite: false,
     otStart: false,
@@ -449,7 +490,35 @@ const state = {
   }
 };
 
-state.currentDate = state.now.toDateString();
+const dateKeyOf = (d) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+function syncAttendanceStateByDate(force = false) {
+  const key = dateKeyOf(state.now);
+  if (!force && key === state.currentDate) return;
+
+  state.currentDate = key;
+  const record = attendanceByDate.get(key);
+
+  if (!record) {
+    state.hasAttendance = false;
+    state.hasCheckout = false;
+    state.checkIn = null;
+    state.checkOut = null;
+    state.regularHours = 0;
+    state.overtimeHours = 0;
+    return;
+  }
+
+  state.hasAttendance = Boolean(record.hasAttendance);
+  state.hasCheckout = Boolean(record.hasCheckout);
+  state.checkIn = record.checkIn ? new Date(record.checkIn) : null;
+  state.checkOut = record.checkOut ? new Date(record.checkOut) : null;
+  state.regularHours = Number(record.regularHours || 0);
+  state.overtimeHours = Number(record.overtimeHours || 0);
+}
 
 function toLocalISO(date) {
   const pad = n => String(n).padStart(2,'0');
@@ -573,6 +642,7 @@ function toast(msg, type="success") {
 }
 
 function renderState() {
+  syncAttendanceStateByDate();
   const btn = document.getElementById('attendanceBtn');
   const statusText = document.getElementById('statusText');
   const lateWarning = document.getElementById('lateWarning');
@@ -615,23 +685,6 @@ function renderState() {
 
     identityText.style.display = 'none';
     lateWarning.style.display = 'none';
-
-    // 🔥 RESET logic FE cho ngày mới
-    if (isDifferentDay) {
-      state.hasAttendance = false;
-      state.hasCheckout = false;
-      state.checkIn = null;
-      state.checkOut = null;
-      state.isOvertime = false;
-      state.overtimeStarted = false;
-      state.isPreOvertimeRest = false;
-      state.overtimeStartAt = null;
-      state.notices = {
-        otInvite: false,
-        otStart: false,
-        otEnd: false
-      };
-    }
   }
 
   // =========================
@@ -666,16 +719,10 @@ function renderState() {
     }
   }
 
-  // =========================
-  // WORK HOURS
-  // =========================
-  const regularFromServer = Number(root.dataset.regularHours || 0);
-  const overtimeFromServer = Number(root.dataset.overtimeHours || 0);
-
   if (state.hasCheckout) {
-    const totalDone = regularFromServer + overtimeFromServer;
+    const totalDone = state.regularHours + state.overtimeHours;
     document.getElementById('workHoursText').textContent =
-      `Công hôm nay: ${totalDone.toFixed(0)} giờ (Công chuẩn: ${regularFromServer.toFixed(0)} giờ, Tăng ca: ${overtimeFromServer.toFixed(0)} giờ)`;
+      `Công hôm nay: ${totalDone.toFixed(0)} giờ (Công chuẩn: ${state.regularHours.toFixed(0)} giờ, Tăng ca: ${state.overtimeHours.toFixed(0)} giờ)`;
   } else {
     const worked = calcWorkedDuration(state.now);
     const regularLive = worked.hours + worked.minutes / 60;
@@ -708,6 +755,7 @@ function startClock() {
       location.reload();
     }
     maybeNotifyOvertimeWindow();
+    persistSharedSimTime(state.now);
     updateEditorUI();
     renderState();
   }, 1000);
@@ -793,6 +841,16 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     default:
       state.hasCheckout = true;
   }
+    const selectedDateKey = dateKeyOf(state.now);
+    attendanceByDate.set(selectedDateKey, {
+      hasAttendance: state.hasAttendance,
+      hasCheckout: state.hasCheckout,
+      checkIn: state.checkIn ? state.checkIn.toISOString() : '',
+      checkOut: state.checkOut ? state.checkOut.toISOString() : '',
+      regularHours: state.regularHours,
+      overtimeHours: state.overtimeHours
+    });
+    persistSharedSimTime(state.now);
     toast(data.message, data.type || "success");
 
     setTimeout(() => {
@@ -824,6 +882,7 @@ function initSimEditor() {
       if(unit === 'month') dt.setMonth(dt.getMonth() + delta);
 
       state.now = dt;
+      persistSharedSimTime(state.now);
       maybeNotifyOvertimeWindow();
       updateEditorUI();
     });
@@ -852,6 +911,7 @@ function updateEditorUI() {
 
 /* ===================== INIT ===================== */
 renderDate();
+syncAttendanceStateByDate(true);
 renderState();
 startClock();
 initSimEditor();
