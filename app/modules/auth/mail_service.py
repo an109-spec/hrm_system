@@ -16,8 +16,7 @@ class MailService:
             raise ValidationError("Email người nhận không hợp lệ")
 
         try:
-            # 1. Chế độ Test/Development: Không gửi mail thật để tiết kiệm quota/tránh spam
-            if current_app.debug:
+            if current_app.config.get("MAIL_SUPPRESS_SEND"):
                 logger.info(f"--- [DEV MODE EMAIL] ---")
                 logger.info(f"To: {to_email}")
                 logger.info(f"Subject: Mã OTP đặt lại mật khẩu HRM")

@@ -159,6 +159,7 @@ class AuthService:
                 logger.info("Password reset OTP sent via email for user_id=%s", user.id)
             except Exception as exc:
                 logger.exception("Failed to send OTP email for user_id=%s: %s", user.id, exc)
+                raise ValidationError("Không thể gửi OTP qua email. Vui lòng kiểm tra cấu hình mail và thử lại.")
             return RequestPasswordResetResultDTO(
                 otp_expires_at_iso=expires_at.isoformat(),
                 delivery_channel="email",

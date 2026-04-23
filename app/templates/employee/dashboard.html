@@ -110,6 +110,11 @@
 const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
 const state = {
     now: readSharedSimTime(new Date("{{ now.isoformat() if now else '' }}")),
+    hasAttendance: {{ 'true' if attendance else 'false' }},
+    hasCheckedOut: {{ 'true' if attendance and attendance.check_out else 'false' }},
+    checkIn: "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}",
+    attendanceDate: "{{ attendance.date.isoformat() if attendance else '' }}",
+    pendingCheckoutWithoutOT: false,
 };
 
 function readSharedSimTime(fallback) {
@@ -146,6 +151,7 @@ function updateClock() {
     updateEditorUI();
     // Hiển thị trạng thái nghỉ trưa
     const hrs = now.getHours();
+    syncAttendanceStateByDate();
     const btn = document.querySelector('.attendance-body button');
     if(btn) {
         if(hrs >= 12 && hrs < 13) {
@@ -154,8 +160,9 @@ function updateClock() {
             btn.style.backgroundColor = "#ccc";
         } else {
             btn.disabled = false;
-            if(!btn.getAttribute('data-original')) btn.setAttribute('data-original', btn.innerText);
-            btn.innerText = btn.getAttribute('data-original');
+            btn.innerText = state.hasAttendance && !state.hasCheckedOut
+                ? "🔳 QUÉT QR CHECK-OUT"
+                : "🔳 QUÉT QR CHECK-IN";
             btn.style.backgroundColor = "";
         }
     }
@@ -170,24 +177,35 @@ function tickClock() {
 setInterval(tickClock, 1000);
 updateClock();
 persistSimTime();
-// Lấy giờ vào từ Flask (truyền vào JS)
-const checkInTimeStr = "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}";
-const hasCheckedOut = {{ 'true' if attendance and attendance.check_out else 'false' }};
+function dateKeyOf(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+}
+
+function syncAttendanceStateByDate() {
+    const todayKey = dateKeyOf(getSimulatedDate());
+    if (state.attendanceDate && state.attendanceDate !== todayKey) {
+        state.hasAttendance = false;
+        state.hasCheckedOut = false;
+        state.checkIn = "";
+    }
+}
+
 const dbWorkingHours = Number("{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}");
 
 function updateWorkingHours() {
     const displayEl = document.getElementById('realtime-work-hours');
-    if (!checkInTimeStr) {
+    if (!state.checkIn) {
         displayEl.innerText = "0.00h";
         return;
     }
-    if (hasCheckedOut) {
+    if (state.hasCheckedOut) {
         displayEl.innerText = dbWorkingHours.toFixed(2) + "h";
         return;
     }
 
     const now = getSimulatedDate();
-    const checkInTime = new Date(checkInTimeStr);
+    const checkInTime = new Date(state.checkIn);
     
     // Logic: Nếu vào muộn sau 8:10, tính từ 9:00
     let startTime = checkInTime;
@@ -275,23 +293,50 @@ async function closeQRModal() {
   await scanner.close();
 }
 
-async function processAttendance(code) {
-    const now = getSimulatedDate();
-    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    
-    try {
+        const payload = {
+            qr_text: code,
+            qr_data: code, 
+            sim_time: timeStr,
+            simulated_now: toLocalISO(now),
+            overtime_rejected: state.pendingCheckoutWithoutOT
+        };
         const r = await fetch("{{ url_for('employee.check_in_out') }}", {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                qr_text: code,
-                qr_data: code, 
-                sim_time: timeStr,
-                simulated_now: toLocalISO(now)
-            })
+            body: JSON.stringify(payload)
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
+
+        if (d.action === "confirm_overtime" && !state.pendingCheckoutWithoutOT) {
+            const confirmed = confirm(d.message || "Bạn có muốn đăng ký tăng ca không?");
+            if (confirmed) {
+                const confirmRes = await fetch("{{ url_for('employee.check_in_out') }}", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ...payload,
+                        overtime_confirmed: true,
+                        overtime_start: toLocalISO(now)
+                    })
+                });
+                const confirmData = await confirmRes.json();
+                if (!confirmRes.ok) throw new Error(confirmData.message || "Xử lý tăng ca thất bại");
+                state.pendingCheckoutWithoutOT = false;
+                alert(`Xác nhận danh tính: {{ employee.full_name }} \n${confirmData.message}`);
+                persistSimTime();
+                window.location.reload();
+                return;
+            }
+
+            state.pendingCheckoutWithoutOT = true;
+            alert("Bạn đã chọn không tăng ca. Vui lòng quét lại QR để check-out.");
+            await scanner.close();
+            setTimeout(() => openQRModal(), 250);
+            return;
+        }
+
+        state.pendingCheckoutWithoutOT = false;        
         persistSimTime();
         alert(`Xác nhận danh tính: {{ employee.full_name }} \n${d.message}`);
         window.location.reload();

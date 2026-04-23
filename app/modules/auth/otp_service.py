@@ -10,7 +10,6 @@ from app.common.security.otp import (
     is_otp_expired,
 )
 from app.common.exceptions import ValidationError, TooManyRequestsError
-from .mail_service import MailService # Giữ MailService đã gộp
 from .sms_service import SMSService
 
 class OTPService:
@@ -71,12 +70,7 @@ class OTPService:
         db.session.add(otp)
         db.session.commit()
 
-        # 4. SEND OTP (Sửa tên hàm gọi MailService cho đúng bản gộp)
-        if otp_type == "email" and user.email:
-            # Đổi từ send_otp_email thành send_otp
-            MailService.send_otp(user.email, raw_code)
-
-        elif otp_type == "sms" and user.phone:
+        if otp_type == "sms" and user.phone:
             SMSService.send(user.phone, f"Mã OTP HRM của bạn là: {raw_code}")
 
         return raw_code

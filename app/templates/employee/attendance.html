@@ -487,7 +487,8 @@ const state = {
     otInvite: false,
     otStart: false,
     otEnd: false
-  }
+  },
+  pendingCheckoutWithoutOT: false
 };
 
 const dateKeyOf = (d) => {
@@ -771,7 +772,8 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       qr_text: decodedText,
       simulated_now: toLocalISO(state.now),
       overtime_confirmed: state.isOvertime,
-      overtime_start: state.overtimeStartAt || toLocalISO(state.now)
+      overtime_start: state.overtimeStartAt || toLocalISO(state.now),
+      overtime_rejected: state.pendingCheckoutWithoutOT
     };
     const isWeekend = [0, 6].includes(state.now.getDay());
     if (!state.hasAttendance && isWeekend) {
@@ -802,14 +804,20 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       if (confirmed) {
         state.isOvertime = true;
         state.overtimeStartAt = state.overtimeStartAt || toLocalISO(state.now);
-      } 
+      } else {
+        state.pendingCheckoutWithoutOT = true;
+        toast("Bạn đã chọn không tăng ca. Vui lòng quét lại QR để check-out.", "warning");
+        await scanner.close();
+        setTimeout(() => openScannerModal(), 250);
+        return;
+      }
       const confirmRes = await fetch("/employee/attendance/check", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           ...payload,
           overtime_confirmed: confirmed,
-          overtime_rejected: !confirmed,
+          overtime_rejected: false,
           overtime_start: state.overtimeStartAt || toLocalISO(state.now)
         })
       });
@@ -821,7 +829,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       }
       Object.assign(data, confirmData);
     }
-
+    state.pendingCheckoutWithoutOT = false;
   switch (data.action) {
     case 'check_in':
       state.hasAttendance = true;
