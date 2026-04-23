@@ -314,19 +314,6 @@ def check_in_out():
 
         shift_start = datetime.combine(today, time(8, 0))
         late_threshold = datetime.combine(today, time(8, 10))
-        check_in_deadline = datetime.combine(today, time(10, 0))
-
-        # =========================
-        # BLOCK INVALID CHECK-IN TIME
-        # =========================
-        if not attendance and (
-            current_time < shift_start or current_time > check_in_deadline
-        ):
-            return jsonify({
-                "toast": True,
-                "type": "error",
-                "message": "Chỉ được check-in từ 08:00 - 10:00"
-            }), 400
 
         # =========================
         # CHECK-IN FLOW
@@ -342,13 +329,20 @@ def check_in_out():
             db.session.commit()
 
             late_minutes = 0
+            early_minutes = 0
+            if current_time < shift_start:
+                early_minutes = int(
+                    (shift_start - current_time).total_seconds() // 60
+                )
             if current_time > late_threshold:
                 late_minutes = int(
                     (current_time - late_threshold).total_seconds() // 60
                 )
 
             msg = f"Check-in lúc {current_time.strftime('%H:%M:%S')}"
-            if late_minutes > 0:
+            if early_minutes > 0:
+                msg += f" • Bạn đến sớm {early_minutes} phút, chúc bạn 1 ngày làm việc hiệu quả"
+            elif late_minutes > 0:
                 msg += f" • Muộn {late_minutes} phút"
 
             return jsonify({

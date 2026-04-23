@@ -653,7 +653,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         qr_text: decodedText,
-        simulated_now: state.now.toISOString()
+        simulated_now: toLocalISO(state.now)
       })
     });
 
@@ -687,7 +687,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     setTimeout(() => {
       window.location.href =
         window.location.pathname +
-        "?simulated_now=" + state.now.toISOString();
+        "?simulated_now=" + toLocalISO(state.now);
     }, 800);
 
   } catch (err) {
