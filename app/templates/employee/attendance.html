@@ -336,6 +336,7 @@
         <th>Giờ vào</th>
         <th>Giờ ra</th>
         <th>Công chuẩn</th>
+        <th>Tăng ca</th>
         <th>Trạng thái</th>
         <th>Hành động</th>
       </tr>
@@ -365,7 +366,7 @@
             {{ a.working_hours or 0 }} giờ
           {% endif %}
         </td>
-
+          <td>{{ a.overtime_hours or 0 }} giờ</td>
         <!-- STATUS (FULL LOGIC HRM) -->
         <td>
           {% if not a.check_in %}
@@ -401,7 +402,7 @@
 
       {% else %}
       <tr>
-        <td colspan="6">Chưa có dữ liệu chấm công.</td>
+       <td colspan="7">Chưa có dữ liệu chấm công.</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -433,6 +434,7 @@ const root = document.getElementById('attendanceRoot');
 
 const state = {
   isOvertime: false,
+  overtimeStartAt: null,
   overtimeStarted: false,
   now: new Date(root.dataset.serverNow),
   hasAttendance: root.dataset.hasAttendance === '1',
@@ -441,7 +443,12 @@ const state = {
   checkOut: root.dataset.checkout ? new Date(root.dataset.checkout) : null,
   scanEngine: null,
   isScannerOpen: false,
-  currentDate: null
+    currentDate: null,
+  notices: {
+    otInvite: false,
+    otStart: false,
+    otEnd: false
+  }
 };
 
 state.currentDate = state.now.toDateString();
@@ -460,7 +467,33 @@ const isNewDay = (now, lastCheckin) => {
   return now.getDate() !== lastCheckin.getDate() ||
          now.getMonth() !== lastCheckin.getMonth();
 };
+function maybeNotifyOvertimeWindow() {
+  const hour = state.now.getHours();
+  const isWeekend = [0, 6].includes(state.now.getDay());
+  const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
+  if (!isWeekend && isWorkingSession && hour === 17 && !state.notices.otInvite) {
+    state.notices.otInvite = true;
+    const accepted = confirm("Đã đến khung 17h-17h59. Bạn có muốn tăng ca tiếp tục không?");
+    if (accepted) {
+      state.isOvertime = true;
+      state.overtimeStartAt = toLocalISO(state.now);
+      toast("Đã chuyển trạng thái: Tăng ca", "warning");
+      renderState();
+    }
+  }
+
+  if (state.isOvertime && isWorkingSession && hour >= 19 && !state.notices.otStart) {
+    state.notices.otStart = true;
+    state.overtimeStarted = true;
+    alert("Đến 19h: Đến lúc tăng ca, yêu cầu check-in để thực hiện tăng ca.");
+  }
+
+  if (state.isOvertime && isWorkingSession && hour >= 22 && !state.notices.otEnd) {
+    state.notices.otEnd = true;
+    alert("Đã hết thời gian tăng ca, vui lòng check_out để kết thúc giờ làm.");
+  }
+}
 /* ===================== FIX QUAN TRỌNG ===================== */ 
 /* KHỚP BACKEND */
 const calcEffectiveStart = (checkInDate) => {
@@ -576,6 +609,14 @@ function renderState() {
       state.hasCheckout = false;
       state.checkIn = null;
       state.checkOut = null;
+      state.isOvertime = false;
+      state.overtimeStarted = false;
+      state.overtimeStartAt = null;
+      state.notices = {
+        otInvite: false,
+        otStart: false,
+        otEnd: false
+      };
     }
   }
 
@@ -589,9 +630,9 @@ function renderState() {
 
     btn.disabled = inLunch;
     btn.className = 'btn btn-warning';
-
+    const statusPrefix = state.isOvertime ? '🟣 Tăng ca' : '🟢 Đang làm việc';
     statusText.textContent =
-      `🟢 Đang làm việc (vào ${fmtHm(state.checkIn)})`;
+      `${statusPrefix} (vào ${fmtHm(state.checkIn)})`;
 
     identityText.style.display = 'block';
 
@@ -636,7 +677,7 @@ function startClock() {
     if (state.now.getDate() !== oldDay) {
       location.reload();
     }
-
+    maybeNotifyOvertimeWindow();
     updateEditorUI();
     renderState();
   }, 1000);
@@ -650,8 +691,20 @@ async function submitAttendanceFromQR(decodedText) {
 console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     const payload = {
       qr_text: decodedText,
-      simulated_now: toLocalISO(state.now)
+      simulated_now: toLocalISO(state.now),
+      overtime_confirmed: state.isOvertime,
+      overtime_start: state.overtimeStartAt || toLocalISO(state.now)
     };
+    const isWeekend = [0, 6].includes(state.now.getDay());
+    if (!state.hasAttendance && isWeekend) {
+      const acceptedHolidayOT = confirm("Hôm nay là ngày nghỉ, bạn muốn tăng ca chứ?");
+      if (!acceptedHolidayOT) {
+        toast("Đã hủy chấm công ngày nghỉ", "warning");
+        return;
+      }
+      state.isOvertime = true;
+      state.overtimeStartAt = toLocalISO(state.now);
+    }
 
     const res = await fetch("/employee/attendance/check", {
       method: 'POST',
@@ -667,6 +720,11 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     }
     if (data.action === "confirm_overtime") {
       const confirmed = confirm(data.message || "Bạn có muốn đăng ký tăng ca không?");
+
+      if (confirmed) {
+        state.isOvertime = true;
+        state.overtimeStartAt = state.overtimeStartAt || toLocalISO(state.now);
+      } 
       const confirmRes = await fetch("/employee/attendance/check", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -674,7 +732,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
           ...payload,
           overtime_confirmed: confirmed,
           overtime_rejected: !confirmed,
-          overtime_start: toLocalISO(state.now)
+          overtime_start: state.overtimeStartAt || toLocalISO(state.now)
         })
       });
 
@@ -691,6 +749,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       state.hasAttendance = true;
       state.hasCheckout = false;
       state.checkIn = new Date(state.now);
+      state.checkOut = null;
       break;
 
     case 'check_out':
@@ -735,6 +794,7 @@ function initSimEditor() {
       if(unit === 'month') dt.setMonth(dt.getMonth() + delta);
 
       state.now = dt;
+      maybeNotifyOvertimeWindow();
       updateEditorUI();
     });
   });
