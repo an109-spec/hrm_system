@@ -29,9 +29,10 @@ class Attendance(BaseModel):
     check_in = db.Column(db.DateTime(timezone=True), nullable=True)
     check_out = db.Column(db.DateTime(timezone=True), nullable=True)
     
-    # Tổng giờ làm việc (Dùng Numeric để tính toán chính xác số thập phân)
     working_hours = db.Column(db.Numeric(4, 2), default=0)
-    
+    regular_hours = db.Column(db.Numeric(4, 2), default=0)
+    overtime_hours = db.Column(db.Numeric(4, 2), default=0)
+    attendance_type = db.Column(db.String(20), default="normal")  # normal / overtime / holiday
     # Liên kết tới trạng thái chấm công
     status_id = db.Column(db.Integer, db.ForeignKey('attendance_status.id'), nullable=True)
 

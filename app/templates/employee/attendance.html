@@ -648,13 +648,15 @@ async function submitAttendanceFromQR(decodedText) {
     console.log("TIME SENT:", state.now)
     console.log("FE TIME:", state.now.toString());
 console.log("SEND TIME:", state.now.toISOString().slice(0,19));
+    const payload = {
+      qr_text: decodedText,
+      simulated_now: toLocalISO(state.now)
+    };
+
     const res = await fetch("/employee/attendance/check", {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        qr_text: decodedText,
-        simulated_now: toLocalISO(state.now)
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
@@ -662,6 +664,26 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     if (!res.ok) {
       toast(data.message || "Lỗi", "error");
       return;
+    }
+    if (data.action === "confirm_overtime") {
+      const confirmed = confirm(data.message || "Bạn có muốn đăng ký tăng ca không?");
+      const confirmRes = await fetch("/employee/attendance/check", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          ...payload,
+          overtime_confirmed: confirmed,
+          overtime_rejected: !confirmed,
+          overtime_start: toLocalISO(state.now)
+        })
+      });
+
+      const confirmData = await confirmRes.json();
+      if (!confirmRes.ok) {
+        toast(confirmData.message || "Lỗi", "error");
+        return;
+      }
+      Object.assign(data, confirmData);
     }
 
   switch (data.action) {

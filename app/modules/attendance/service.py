@@ -1,10 +1,22 @@
-from datetime import datetime
+from datetime import datetime, time 
+from decimal import Decimal
 from app.extensions import db
 from app.models import Attendance, AttendanceStatus
 from app.common.exceptions import ValidationError
 
 
 class AttendanceService:
+    REGULAR_START = time(8, 0, 0)
+    LATE_THRESHOLD = time(8, 10, 0)
+    REGULAR_END = time(17, 0, 0)
+
+    @staticmethod
+    def calculate_regular_hours(check_in: datetime, check_out: datetime) -> Decimal:
+        end_of_shift = datetime.combine(check_in.date(), AttendanceService.REGULAR_END)
+        capped_checkout = min(check_out, end_of_shift)
+        if capped_checkout <= check_in:
+            return Decimal("0.00")
+        return Decimal(str(AttendanceService.recalculate_hours(check_in, capped_checkout)))
     @staticmethod
     def check_in_out(employee_id: int, sim_time_str: str = None):
         if not sim_time_str:

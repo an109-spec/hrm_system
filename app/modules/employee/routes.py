@@ -19,6 +19,7 @@ from app.models import (
     Salary,
     User,
 )
+from app.modules.attendance.overtime_service import OvertimeService
 from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
@@ -312,17 +313,19 @@ def check_in_out():
             date=today
         ).first()
 
-        shift_start = datetime.combine(today, time(8, 0))
-        late_threshold = datetime.combine(today, time(8, 10))
+        shift_start = datetime.combine(today, AttendanceService.REGULAR_START)
+        late_threshold = datetime.combine(today, AttendanceService.LATE_THRESHOLD)
 
         # =========================
         # CHECK-IN FLOW
         # =========================
         if not attendance:
+            attendance_type = "holiday" if OvertimeService.is_weekend(today) else "normal"
             attendance = Attendance(
                 employee_id=employee.id,
                 date=today,
-                check_in=current_time
+                check_in=current_time,
+                attendance_type=attendance_type
             )
 
             db.session.add(attendance)
@@ -365,7 +368,18 @@ def check_in_out():
                     "type": "error",
                     "message": "Thời gian check-out không hợp lệ"
                 }), 400
+            overtime_confirmed = bool(payload.get("overtime_confirmed"))
+            overtime_rejected = bool(payload.get("overtime_rejected"))
+            should_suggest_ot = OvertimeService.should_suggest_overtime(current_time, today)
 
+            if should_suggest_ot and not overtime_confirmed and not overtime_rejected:
+                return jsonify({
+                    "toast": False,
+                    "type": "warning",
+                    "action": "confirm_overtime",
+                    "message": "Hiện tại đã ngoài giờ làm việc / ngày nghỉ. Bạn có muốn đăng ký tăng ca không?",
+                    "attendance_state": "holiday" if OvertimeService.is_weekend(today) else "overtime",
+                })
             attendance.check_out = current_time
 
             # =========================
@@ -380,18 +394,39 @@ def check_in_out():
             # =========================
             # WORK HOURS CALC
             # =========================
-            working_hours = _compute_working_hours(
+            regular_hours = _compute_working_hours(
                 effective_start,
-                attendance.check_out
+                min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
+            overtime_start_raw = payload.get("overtime_start")
+            overtime_start_dt = current_time
+            if overtime_start_raw:
+                try:
+                    overtime_start_dt = datetime.fromisoformat(str(overtime_start_raw).replace("Z", "+00:00"))
+                    if overtime_start_dt.tzinfo is not None:
+                        overtime_start_dt = overtime_start_dt.replace(tzinfo=None)
+                except ValueError:
+                    overtime_start_dt = current_time
 
-            attendance.working_hours = working_hours
+            overtime_hours = Decimal("0.00")
+            if overtime_confirmed:
+                overtime_hours = OvertimeService.calculate_overtime(overtime_start_dt, attendance.check_out)
+
+            attendance.regular_hours = regular_hours
+            attendance.overtime_hours = overtime_hours
+            attendance.working_hours = regular_hours
+            if OvertimeService.is_weekend(today):
+                attendance.attendance_type = "holiday"
+            elif overtime_hours > 0:
+                attendance.attendance_type = "overtime"
+            else:
+                attendance.attendance_type = "normal"
             db.session.commit()
 
             # =========================
             # EARLY LEAVE CHECK
             # =========================
-            end_of_day = datetime.combine(today, time(17, 0))
+            end_of_day = datetime.combine(today, AttendanceService.REGULAR_END)
             early_minutes = 0
 
             if current_time < end_of_day:
@@ -400,7 +435,9 @@ def check_in_out():
                 )
 
             msg = f"Check-out lúc {current_time.strftime('%H:%M:%S')}"
-            msg += f" • Công: {working_hours}h"
+            msg += f" • Ca chính: {regular_hours}h"
+            if overtime_hours > 0:
+                msg += f" • Tăng ca: {overtime_hours}h"
 
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
@@ -409,7 +446,10 @@ def check_in_out():
                 "toast": True,
                 "type": "warning" if early_minutes > 0 else "success",
                 "action": "check_out",
-                "message": msg
+                "message": msg,
+                "attendance_state": attendance.attendance_type,
+                "regular_hours": str(regular_hours),
+                "overtime_hours": str(overtime_hours),
             })
 
         # =========================
