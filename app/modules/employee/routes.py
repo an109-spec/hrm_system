@@ -19,6 +19,7 @@ from app.models import (
     Salary,
     User,
 )
+from app.utils.time import parse_simulated_time
 from . import employee_bp
 
 
@@ -90,27 +91,6 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
         overlap_seconds = Decimal((overlap_end - overlap_start).total_seconds())
         total_hours -= (overlap_seconds / Decimal("3600")).quantize(Decimal("0.01"))
     return max(total_hours, Decimal("0"))
-
-def _parse_simulated_time(payload: dict) -> datetime:
-    current_time = datetime.now().replace(microsecond=0)
-    simulated_now = payload.get("simulated_now")
-    sim_time = payload.get("sim_time")
-
-    if simulated_now:
-        try:
-            return datetime.fromisoformat(str(simulated_now))
-        except ValueError:
-            raise ValueError("Thời gian mô phỏng không hợp lệ.")
-
-    if sim_time:
-        raw = str(sim_time).strip()
-        for fmt in ("%H:%M:%S", "%H:%M"):
-            try:
-                parsed = datetime.strptime(raw, fmt).time()
-                return datetime.combine(current_time.date(), parsed)
-            except ValueError:
-                continue
-        raise ValueError("sim_time phải theo định dạng HH:MM[:SS].")
 
     return current_time
 def _status_badge(status: str) -> tuple[str, str]:
@@ -260,97 +240,195 @@ def attendance():
         return guard
 
     employee = _current_employee()
+    now = parse_simulated_time({})
+
     today = EmployeeDashboardService.get_today_attendance(employee.id) if employee else None
     history = (
         Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).limit(10).all()
         if employee
         else []
     )
-    return render_template("employee/attendance.html", employee=employee, today=today, history=history, now=datetime.now())
+    return render_template("employee/attendance.html", employee=employee, today=today, history=history, now = now)
 
 
 @employee_bp.route("/attendance/check", methods=["POST"])
 def check_in_out():
+    # =========================
+    # AUTH GUARD
+    # =========================
     guard = _ensure_login()
     if guard:
         return guard
 
     employee = _current_employee()
     if not employee:
-        return jsonify({"error": "Không tìm thấy nhân viên"}), 404
+        return jsonify({
+            "toast": True,
+            "type": "error",
+            "message": "Không tìm thấy nhân viên"
+        }), 404
+
+    # =========================
+    # PARSE REQUEST
+    # =========================
     payload = request.get_json(silent=True) or {}
+
     qr_text = str(payload.get("qr_text") or payload.get("qr_data") or "").strip()
     if not qr_text:
-        return jsonify({"error": "Không đọc được dữ liệu QR hợp lệ."}), 400
-    try:
-        current_time = _parse_simulated_time(payload)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return jsonify({
+            "toast": True,
+            "type": "error",
+            "message": "Không đọc được dữ liệu QR."
+        }), 400
 
     try:
+        current_time = parse_simulated_time(payload)
+
+        # normalize timezone
+        if current_time.tzinfo is not None:
+            current_time = current_time.replace(tzinfo=None)
+
+        session["simulated_now"] = current_time.isoformat()
+
+    except ValueError as e:
+        return jsonify({
+            "toast": True,
+            "type": "error",
+            "message": str(e)
+        }), 400
+
+    # =========================
+    # LOAD ATTENDANCE
+    # =========================
+    try:
         today = current_time.date()
-        attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+
+        attendance = Attendance.query.filter_by(
+            employee_id=employee.id,
+            date=today
+        ).first()
+
         shift_start = datetime.combine(today, time(8, 0))
         late_threshold = datetime.combine(today, time(8, 10))
         check_in_deadline = datetime.combine(today, time(10, 0))
 
-        if not attendance and (current_time < shift_start or current_time > check_in_deadline):
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "error": "Chỉ được check-in trong khung 08:00 - 10:00.",
-                        "window": "08:00-10:00",
-                    }
-                ),
-                400,
-            )
+        # =========================
+        # BLOCK INVALID CHECK-IN TIME
+        # =========================
+        if not attendance and (
+            current_time < shift_start or current_time > check_in_deadline
+        ):
+            return jsonify({
+                "toast": True,
+                "type": "error",
+                "message": "Chỉ được check-in từ 08:00 - 10:00"
+            }), 400
+
+        # =========================
+        # CHECK-IN FLOW
+        # =========================
         if not attendance:
-            attendance = Attendance(employee_id=employee.id, date=today, check_in=current_time)
+            attendance = Attendance(
+                employee_id=employee.id,
+                date=today,
+                check_in=current_time
+            )
+
             db.session.add(attendance)
             db.session.commit()
-            is_late_over_10 = current_time > late_threshold
-            effective_start = datetime.combine(today, time(9, 0)) if is_late_over_10 else shift_start
-            return jsonify(
-                {
-                    "status": "check_in",
-                    "check_in": current_time.strftime("%H:%M:%S"),
-                    "effective_start": effective_start.strftime("%H:%M"),
-                    "late_over_10": is_late_over_10,
-                    "identity_message": "Xác nhận danh tính: Duy An - MSNV: 12345",
-                    "warning": "Bạn đã muộn hơn 10 phút. Thời gian tính công sẽ bắt đầu từ 09:00"
-                    if is_late_over_10
-                    else None,
-                    "message": "✅ Check-in thành công",
-                }
-            )
 
+            late_minutes = 0
+            if current_time > late_threshold:
+                late_minutes = int(
+                    (current_time - late_threshold).total_seconds() // 60
+                )
+
+            msg = f"Check-in lúc {current_time.strftime('%H:%M:%S')}"
+            if late_minutes > 0:
+                msg += f" • Muộn {late_minutes} phút"
+
+            return jsonify({
+                "toast": True,
+                "type": "warning" if late_minutes > 0 else "success",
+                "action": "check_in",
+                "message": msg
+            })
+
+        # =========================
+        # CHECK-OUT FLOW
+        # =========================
         if attendance.check_in and not attendance.check_out:
+
+            if current_time < attendance.check_in:
+                return jsonify({
+                    "toast": True,
+                    "type": "error",
+                    "message": "Thời gian check-out không hợp lệ"
+                }), 400
+
             attendance.check_out = current_time
 
-
-            check_in_dt = attendance.check_in or current_time
-            late_cutoff = datetime.combine(today, time(8, 10))
-            effective_start = datetime.combine(today, time(9, 0)) if check_in_dt > late_cutoff else datetime.combine(today, time(8, 0))
-            attendance.working_hours = _compute_working_hours(effective_start, attendance.check_out)
-            db.session.commit()
-            early_checkout = current_time < datetime.combine(today, time(17, 0))
-            return jsonify(
-                {
-                    "status": "check_out",
-                    "check_out": current_time.strftime("%H:%M:%S"),
-                    "working_hours": float(attendance.working_hours or 0),
-                    "identity_message": "Xác nhận danh tính: Duy An - MSNV: 12345",
-                    "early_checkout": early_checkout,
-                    "message": "✅ Check-out thành công",
-                }
+            # =========================
+            # EFFECTIVE START (late rule)
+            # =========================
+            effective_start = (
+                datetime.combine(today, time(9, 0))
+                if attendance.check_in > late_threshold
+                else datetime.combine(today, time(8, 0))
             )
 
-        return jsonify({"status": "done", "message": "Bạn đã hoàn thành chấm công hôm nay."})
+            # =========================
+            # WORK HOURS CALC
+            # =========================
+            working_hours = _compute_working_hours(
+                effective_start,
+                attendance.check_out
+            )
+
+            attendance.working_hours = working_hours
+            db.session.commit()
+
+            # =========================
+            # EARLY LEAVE CHECK
+            # =========================
+            end_of_day = datetime.combine(today, time(17, 0))
+            early_minutes = 0
+
+            if current_time < end_of_day:
+                early_minutes = int(
+                    (end_of_day - current_time).total_seconds() // 60
+                )
+
+            msg = f"Check-out lúc {current_time.strftime('%H:%M:%S')}"
+            msg += f" • Công: {working_hours}h"
+
+            if early_minutes > 0:
+                msg += f" • Về sớm {early_minutes} phút"
+
+            return jsonify({
+                "toast": True,
+                "type": "warning" if early_minutes > 0 else "success",
+                "action": "check_out",
+                "message": msg
+            })
+
+        # =========================
+        # ALREADY DONE
+        # =========================
+        return jsonify({
+            "toast": True,
+            "type": "info",
+            "action": "done",
+            "message": "Bạn đã hoàn thành chấm công hôm nay"
+        })
+
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"status": "error", "error": f"Không thể xử lý chấm công: {exc}"}), 400
-
+        return jsonify({
+            "toast": True,
+            "type": "error",
+            "message": f"Lỗi hệ thống: {str(exc)}"
+        }), 500
 
 @employee_bp.route("/leave", methods=["GET", "POST"])
 def leave_request():

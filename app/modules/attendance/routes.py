@@ -1,17 +1,14 @@
 from flask import render_template, request, session, redirect, url_for, jsonify
 from datetime import datetime
-
 from app.extensions import db
+from app.modules import employee
 
 from . import attendance_bp
 from .service import AttendanceService
 from app.common.exceptions import ValidationError
 
-# =============================
-# PAGE
-# =============================
 @attendance_bp.route("/")
-def attendance_page():
+def attendance_page(): 
     user_id = session.get("user_id")
     if not user_id:
         return redirect(url_for("auth.login"))
@@ -20,23 +17,24 @@ def attendance_page():
 
     employee = Employee.query.filter_by(user_id=user_id).first()
 
-    simulated_now = request.args.get("simulated_now")
-    if simulated_now:
-        session["attendance_simulated_now"] = simulated_now
-    else:
-        simulated_now = session.get("attendance_simulated_now")
+    simulated_now = request.args.get("simulated_now") or session.get("simulated_now")
+
     if simulated_now:
         now = datetime.fromisoformat(simulated_now.replace("Z", "+00:00"))
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
+
+        session["simulated_now"] = simulated_now
     else:
         now = datetime.now()
-        simulated_now = now.isoformat()
 
-    today = AttendanceService.get_today(employee.id, simulated_now)
-    history = AttendanceService.get_history(employee.id, simulated_now)
+    today = AttendanceService.get_today(employee.id)
+    history = AttendanceService.get_history(employee.id)
 
     for a in history:
         if a.check_in and a.check_out:
-            a.working_hours = AttendanceService.recalculate_hours(a.check_in, a.check_out)
+            a.calculated_hours = AttendanceService.recalculate_hours(a.check_in, a.check_out)
+
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -45,59 +43,61 @@ def attendance_page():
         now=now
     )
 
-
-@attendance_bp.route("/check", methods=["POST"])
-def check_in_out():
+@attendance_bp.route("/delete", methods=["DELETE"])
+def delete_attendance():
     user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"error": "Bạn chưa đăng nhập"}), 401
+        return jsonify({
+            "status": "error",
+            "message": "Bạn chưa đăng nhập",
+            "toast": True
+        }), 401
+
     data = request.get_json() or {}
-    qr_text = str(data.get("qr_text", "")).strip()
-    simulated_now = data.get("simulated_now")
+    date_str = data.get("date") 
 
-    if not qr_text:
-        return jsonify({"error": "Không đọc được dữ liệu QR hợp lệ."}), 400
+    if not date_str:
+        return jsonify({
+            "status": "error",
+            "message": "Thiếu ngày cần xóa",
+            "toast": True
+        }), 400
 
-    if not simulated_now:
-        return jsonify({"error": "Thiếu simulated time"}), 400
-    session["attendance_simulated_now"] = simulated_now
     from app.models import Employee
     employee = Employee.query.filter_by(user_id=user_id).first()
     if not employee:
-        return jsonify({"error": "Không tìm thấy nhân viên"}), 404
-
-    today_record = AttendanceService.get_today(employee.id, simulated_now)
-    expected_action = "check_in" if not today_record else ("done" if today_record.check_out else "check_out")
-    try:
-        result = AttendanceService.check_in_out(employee.id, simulated_now)
-    except ValidationError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    response = {
-        "status": expected_action,
-
-        "message": result.get("message", "Chấm công thành công")
-    }
-    if expected_action == "check_in" and "muộn" in response["message"]:
-        response["warning"] = "Bạn đã muộn hơn 10 phút. Thời gian tính công sẽ bắt đầu từ 09:00"
-    return jsonify(response)
-
-@attendance_bp.route("/", methods=["DELETE"])
-def delete_attendance():
-    user_id = session.get("user_id")
-    data = request.get_json()
-    date_str = data.get("date") # YYYY-MM-DD
-    
-    from app.models import Employee
-    employee = Employee.query.filter_by(user_id=user_id).first()
-    
+        return jsonify({ 
+            "status": "error",
+            "message": "Không tìm thấy nhân viên",
+            "toast": True
+        }), 404
     try:
         new_last_date = AttendanceService.delete_attendance(employee.id, date_str)
-        session.pop("attendance_simulated_now", None)
-        # Nếu còn dữ liệu thì rollback về ngày đó, không thì dùng ngày hiện tại
+        session.pop("simulated_now", None)
+        rollback_date = (
+            new_last_date.isoformat()
+            if new_last_date
+            else datetime.now().date().isoformat()
+        )
+
         return jsonify({
-            "message": "Xóa thành công",
-            "rollback_date": new_last_date.isoformat() if new_last_date else datetime.utcnow().date().isoformat()
+            "status": "success",
+            "message": f"Đã xóa chấm công ngày {date_str}",
+            "toast": True,
+            "rollback_date": rollback_date
         })
+
     except ValidationError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "toast": True
+        }), 400
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "message": f"Lỗi hệ thống: {str(e)}",
+            "toast": True
+        }), 500

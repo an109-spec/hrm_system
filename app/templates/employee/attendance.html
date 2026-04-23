@@ -21,10 +21,6 @@
   --text-main: #0b1220;
   --text-muted: #334155;
 }
-.sim-editor {
-  gap: 8px;              /* giảm khoảng cách */
-  padding: 10px 12px;   /* gọn hơn */
-}
 
 .time-part {
   font-size: 1.05rem;   /* nhỏ lại cho tinh gọn */
@@ -44,15 +40,14 @@
   color: var(--text-main);
 }
 
-/* ===== SIM EDITOR (clean HRM style) ===== */
 .sim-editor {
   background: #f9fafb;
   border: 1px solid var(--border);
-  padding: 14px 18px;
+  padding: 14px 18px; /* giữ cái này */
   border-radius: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px; /* giữ gap nhỏ */
   margin: 16px 0;
 }
 
@@ -174,76 +169,240 @@
   border: 2px solid var(--primary);
   box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
 }
+.toast-box {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 999999;
+}
+
+.toast-item {
+  background: #111827;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  opacity: 1;
+  transition: opacity .3s;
+}
+
+.toast-item.success { background: #16a34a; }
+.toast-item.error { background: #dc2626; }
+.toast-item.warning { background: #f59e0b; }
+
+/* ===== STATUS BADGE ===== */
+.status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+/* chuẩn */
+.status-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* đang làm */
+.status-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* vắng */
+.status-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* đi muộn */
+.status-late {
+  background: #fde68a;
+  color: #92400e;
+}
+
+/* về sớm */
+.status-early {
+  background: #e0e7ff;
+  color: #1e40af;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="emp-card emp-center" id="attendanceRoot" data-has-attendance="{{ 1 if today else 0 }}" data-has-checkout="{{ 1 if today and today.check_out else 0 }}" data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}" data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}" data-server-now="{{ now.isoformat() }}">
+<div 
+  class="emp-card emp-center" 
+  id="attendanceRoot"
+
+  data-has-attendance="{{ 1 if today else 0 }}"
+  data-has-checkout="{{ 1 if today and today.check_out else 0 }}"
+
+  data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
+  data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
+
+  data-server-now="{{ now.isoformat() }}"
+>
+
   <h3>🕒 Chấm công</h3>
+
   {% if employee %}
     <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
   {% endif %}
+
+  <!-- DATE -->
   <p id="dateText"></p>
+
+  <!-- TIME SIMULATOR -->
   <div class="sim-editor">
     <div class="time-group">
         <span class="time-part" data-unit="hours" id="edit-h">00</span>
         <span class="unit-label">GIỜ</span>
     </div> :
+
     <div class="time-group">
         <span class="time-part" data-unit="minutes" id="edit-m">00</span>
         <span class="unit-label">PHÚT</span>
     </div> :
+
     <div class="time-group">
         <span class="time-part" data-unit="seconds" id="edit-s">00</span>
         <span class="unit-label">GIÂY</span>
     </div>
+
     &nbsp;&nbsp;
+
     <div class="time-group">
         <span class="time-part" data-unit="date" id="edit-d">01</span>
         <span class="unit-label">NGÀY</span>
     </div> /
+
     <div class="time-group">
         <span class="time-part" data-unit="month" id="edit-mo">01</span>
         <span class="unit-label">THÁNG</span>
     </div>
-</div>
-  <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
-
-  <div class="attendance-actions">
-    <button id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">🔳 QUÉT QR CHECK-IN</button>
   </div>
 
-  <p id="statusText" class="attendance-note">Trạng thái hiện tại: 🟡 Chưa vào ca</p>
-  <p id="identityText" class="attendance-note" style="display:none;">Xác nhận danh tính: Duy An - MSNV: 12345</p>
+  <!-- BREAK INFO -->
+  <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
+
+  <!-- ACTION -->
+  <div class="attendance-actions">
+    <button 
+      id="attendanceBtn" 
+      class="btn btn-primary" 
+      onclick="openScannerModal()"
+    >
+      🔳 QUÉT QR CHECK-IN
+    </button>
+  </div>
+
+  <!-- STATUS -->
+  <p id="statusText" class="attendance-note">
+    Trạng thái hiện tại: 🟡 Chưa vào ca
+  </p>
+
+  <!-- IDENTITY (FIX: dynamic, không hardcode) -->
+  <p id="identityText" class="attendance-note" style="display:none;">
+    Xác nhận danh tính: 
+    <strong>{{ employee.full_name if employee else '' }}</strong>
+    {% if employee %}
+      - MSNV: {{ employee.id }}
+    {% endif %}
+  </p>
+
+  <!-- WARNING (OPTIONAL UI, không phải toast chính) -->
   <p id="lateWarning" class="attendance-warning" style="display:none;"></p>
-  <p id="workHoursText" class="attendance-note">Chấm công hôm nay: 0 giờ 00 phút</p>
+
+  <!-- WORK HOURS -->
+  <p id="workHoursText" class="attendance-note">
+    Công hôm nay: 0 giờ 00 phút
+  </p>
+
 </div>
+
+<!-- TOAST CONTAINER (BẮT BUỘC) -->
+<div class="toast-box" id="toastBox"></div>
 
 <section class="emp-card">
   <h3>Lịch sử gần đây</h3>
+
   <table class="emp-table">
     <thead>
       <tr>
         <th>Ngày</th>
         <th>Giờ vào</th>
         <th>Giờ ra</th>
-        <th>Công hôm nay</th>
+        <th>Công chuẩn</th>
+        <th>Trạng thái</th>
         <th>Hành động</th>
       </tr>
     </thead>
+
     <tbody>
       {% for a in history %}
       <tr>
+        <!-- DATE -->
         <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-        <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
-        <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-        <td>{{ a.working_hours if a.working_hours else 0 }} công</td>
+
+        <!-- CHECK IN -->
         <td>
-        <button class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
-</td>
+          {{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}
+        </td>
+
+        <!-- CHECK OUT -->
+        <td>
+          {{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}
+        </td>
+
+        <!-- WORK HOURS (FIX CHUẨN SERVICE) -->
+        <td>
+          {% if a.calculated_hours is defined %}
+            {{ a.calculated_hours }} giờ
+          {% else %}
+            {{ a.working_hours or 0 }} giờ
+          {% endif %}
+        </td>
+
+        <!-- STATUS (FULL LOGIC HRM) -->
+        <td>
+          {% if not a.check_in %}
+            <span class="status status-danger">❌ Vắng</span>
+
+          {% elif a.check_in and not a.check_out %}
+            <span class="status status-warning">🟡 Đang làm</span>
+
+          {% else %}
+            {% set hour = a.check_in.hour %}
+            {% set minute = a.check_in.minute %}
+
+            {% if hour > 8 or (hour == 8 and minute > 10) %}
+              <span class="status status-late">⏰ Đi muộn</span>
+
+            {% elif a.check_out and a.check_out.hour < 17 %}
+              <span class="status status-early">🏃 Về sớm</span>
+
+            {% else %}
+              <span class="status status-success">✅ Hoàn thành</span>
+            {% endif %}
+          {% endif %}
+        </td>
+
+        <!-- ACTION -->
+        <td>
+          <button class="btn btn-sm btn-danger"
+                  onclick="deleteRecord('{{ a.date.isoformat() }}')">
+            Xóa
+          </button>
+        </td>
       </tr>
+
       {% else %}
-      <tr><td colspan="4">Chưa có dữ liệu chấm công.</td></tr>
+      <tr>
+        <td colspan="6">Chưa có dữ liệu chấm công.</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
@@ -271,6 +430,7 @@
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const root = document.getElementById('attendanceRoot');
+
 const state = {
   isOvertime: false,
   overtimeStarted: false,
@@ -283,39 +443,77 @@ const state = {
   isScannerOpen: false,
   currentDate: null
 };
+
 state.currentDate = state.now.toDateString();
 
+function toLocalISO(date) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3,'0')}`;
+}
+const fmtHm = (d) =>
+  `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 
-const fmtHm = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const isLunchBreak = (d) => d.getHours() === 12;
-const isNewDay = (now, lastCheckin) => {
-    if (!lastCheckin) return true;
-    return now.getDate() !== lastCheckin.getDate() || now.getMonth() !== lastCheckin.getMonth();
-};
-const isAfterWork = (d) => d.getHours() >= 17 && d.getHours() < 19;
-const isOvertimeWindow = (d) => d.getHours() >= 19 && d.getHours() < 22;
-const isOvertimeEnd = (d) => d.getHours() >= 22;
-const calcEffectiveStart = (checkInDate) => {
-  const start = new Date(checkInDate);
-  const hour = start.getHours();
-  const min = start.getMinutes();
 
-  if (hour > 8 || (hour === 8 && min > 10)) {
-    // Đi muộn sau 08:10 -> Tính từ lúc check-in thực tế (không ép về 9h nữa)
-    // Hoặc nếu bạn muốn giống Back-end tuyệt đối là ép về 9h thì giữ nguyên, 
-    // nhưng ở đây bạn đang check-in lúc 2h chiều nên logic này bị lỗi thời.
-    return start; 
-  } else if (hour < 8) {
-    // Đi sớm trước 08:00 -> Tính từ 08:00
-    start.setHours(8, 0, 0, 0);
+const isNewDay = (now, lastCheckin) => {
+  if (!lastCheckin) return true;
+  return now.getDate() !== lastCheckin.getDate() ||
+         now.getMonth() !== lastCheckin.getMonth();
+};
+
+/* ===================== FIX QUAN TRỌNG ===================== */ 
+/* KHỚP BACKEND */
+const calcEffectiveStart = (checkInDate) => {
+  const d = new Date(checkInDate);
+
+  const lateCutoff = new Date(d);
+  lateCutoff.setHours(8,10,0,0);
+
+  const start = new Date(d);
+
+  if (d > lateCutoff) {
+    start.setHours(9,0,0,0); // ✅ đúng backend
   } else {
-    // Đi đúng giờ 08:00 - 08:10 -> Tính từ lúc check-in thực tế
-    start.setSeconds(0, 0);
+    start.setHours(8,0,0,0);
   }
+
   return start;
 };
 
-function toast(msg, type = "success") {
+/* ===================== WORKING TIME (preview realtime) ===================== */
+function calcWorkedDuration(now) {
+  if (!state.checkIn) return {hours:0, minutes:0};
+
+  const end = state.checkOut || now;
+  if (end <= state.checkIn) return {hours:0, minutes:0};
+
+  let effectiveStart = calcEffectiveStart(state.checkIn);
+
+  let ms = end - effectiveStart;
+
+  // trừ nghỉ trưa
+  const lunchStart = new Date(effectiveStart);
+  lunchStart.setHours(12,0,0,0);
+
+  const lunchEnd = new Date(effectiveStart);
+  lunchEnd.setHours(13,0,0,0);
+
+  if (end > lunchStart) {
+    const overlap =
+      Math.min(end, lunchEnd) - Math.max(effectiveStart, lunchStart);
+    if (overlap > 0) ms -= overlap;
+  }
+
+  const totalMin = Math.max(0, Math.floor(ms/60000));
+
+  return {
+    hours: Math.floor(totalMin/60),
+    minutes: totalMin%60
+  };
+}
+
+/* ===================== TOAST ===================== */
+function toast(msg, type="success") {
   const item = document.createElement('div');
   item.className = 'toast-item ' + type;
   item.textContent = msg;
@@ -328,161 +526,241 @@ function toast(msg, type = "success") {
   }, 3000);
 }
 
-function calcWorkedDuration(now) {
-  if (!state.checkIn) return {hours:0, minutes:0};
-  const end = state.checkOut || now;
-  if (end <= state.checkIn) return {hours:0, minutes:0};
-
-  let effectiveStart = calcEffectiveStart(state.checkIn);
-  if (end <= effectiveStart) return {hours:0, minutes:0};
-
-  let ms = end - effectiveStart;
-  const lunchStart = new Date(effectiveStart); lunchStart.setHours(12,0,0,0);
-  const lunchEnd = new Date(effectiveStart); lunchEnd.setHours(13,0,0,0);
-  const overlapStart = new Date(Math.max(effectiveStart.getTime(), lunchStart.getTime()));
-  const overlapEnd = new Date(Math.min(end.getTime(), lunchEnd.getTime()));
-  if (overlapEnd > overlapStart) ms -= (overlapEnd - overlapStart);
-
-  const totalMin = Math.max(0, Math.floor(ms/60000));
-  return {hours: Math.floor(totalMin/60), minutes: totalMin%60};
-}
-
 function renderState() {
-    const btn = document.getElementById('attendanceBtn');
-    const statusText = document.getElementById('statusText');
-    const lateWarning = document.getElementById('lateWarning');
-    const identityText = document.getElementById('identityText');
-    const inLunch = isLunchBreak(state.now);
+  const btn = document.getElementById('attendanceBtn');
+  const statusText = document.getElementById('statusText');
+  const lateWarning = document.getElementById('lateWarning');
+  const identityText = document.getElementById('identityText');
 
-    // 1. Kiểm tra xem ngày đang quay (state.now) có khác ngày đã chấm công lưu trong máy (state.checkIn) không
-    const isDifferentDay = state.checkIn && (
-        state.now.getDate() !== state.checkIn.getDate() || 
-        state.now.getMonth() !== state.checkIn.getMonth() ||
-        state.now.getFullYear() !== state.checkIn.getFullYear()
-    );
+  const inLunch = isLunchBreak(state.now);
 
-    // 2. LOGIC QUYẾT ĐỊNH HIỂN THỊ NÚT
-    
-    // TRƯỜNG HỢP A: ĐÃ CHECK-OUT VÀ VẪN ĐANG Ở ĐÚNG NGÀY ĐÓ -> KHÓA NÚT
-    if (state.hasCheckout && !isDifferentDay) {
-        btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
-        btn.disabled = true;
-        btn.className = 'btn btn-disabled';
-        statusText.textContent = 'Trạng thái hiện tại: ⚪ Hết ca';
-        identityText.style.display = 'block';
-        lateWarning.style.display = 'none';
-    } 
-    // TRƯỜNG HỢP B: CHƯA CÓ CÔNG *HOẶC* ĐÃ CUỘN SANG NGÀY KHÁC -> MỞ CHECK-IN (Đúng ý bạn)
-    else if (!state.hasAttendance || isDifferentDay) {
-        btn.textContent = inLunch ? 'Giờ nghỉ trưa (Mở lại sau 13:00)' : '🔳 QUÉT QR CHECK-IN';
-        btn.disabled = inLunch;
-        btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
-        
-        const isTimeOk = state.now.getHours() >= 8 && state.now.getHours() < 10;
-        statusText.textContent = isTimeOk ? 'Trạng thái hiện tại: 🟢 Trong ca làm việc' : 'Trạng thái hiện tại: 🟡 Chưa trong khung check-in (08:00-10:00)';
-        
-        lateWarning.style.display = 'none';
-        identityText.style.display = 'none';
-    } 
-    // TRƯỜNG HỢP C: ĐANG TRONG CA (ĐÃ CHECK-IN NHƯNG CHƯA CHECK-OUT)
-    else {
-        if (inLunch) {
-            btn.textContent = 'Giờ nghỉ trưa (Mở lại sau 13:00)';
-        } else {
-            btn.textContent = state.overtimeStarted ? '🔳 CHECK-OUT TĂNG CA' : '🔳 QUÉT QR CHECK-OUT';
-        }
-        btn.disabled = inLunch;
-        btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
-        statusText.textContent = `Trạng thái hiện tại: 🟡 Đang trong ca — Bạn vào lúc ${fmtHm(state.checkIn)}`;
-        identityText.style.display = 'block';
+  // ✅ FIX CỐT LÕI: detect khác ngày
+  const isDifferentDay = state.checkIn && (
+    state.now.getDate() !== state.checkIn.getDate() ||
+    state.now.getMonth() !== state.checkIn.getMonth() ||
+    state.now.getFullYear() !== state.checkIn.getFullYear()
+  );
 
-        const lateLine = new Date(state.checkIn); lateLine.setHours(8,10,0,0);
-        if (state.checkIn > lateLine) {
-            lateWarning.style.display = 'block';
-            lateWarning.textContent = 'Trạng thái: Bạn đi muộn (Sau 08:10).';
-        } else {
-            lateWarning.style.display = 'none';
-        }
+  // =========================
+  // CASE 1: ĐÃ CHECK-OUT (CHỈ KHÓA KHI CÙNG NGÀY)
+  // =========================
+  if (state.hasCheckout){
+    btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
+    btn.disabled = true;
+    btn.className = 'btn btn-disabled';
+
+    statusText.textContent = '⚪ Hết ca';
+    identityText.style.display = 'block';
+    lateWarning.style.display = 'none';
+  }
+
+  // =========================
+  // CASE 2: NGÀY MỚI hoặc CHƯA CÓ ATTENDANCE
+  // =========================
+  else if (!state.hasAttendance || isDifferentDay) {
+    btn.textContent = inLunch
+      ? 'Giờ nghỉ trưa'
+      : '🔳 QUÉT QR CHECK-IN';
+
+    btn.disabled = inLunch;
+    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
+
+    statusText.textContent = '🟡 Chưa vào ca';
+
+    identityText.style.display = 'none';
+    lateWarning.style.display = 'none';
+
+    // 🔥 RESET logic FE cho ngày mới
+    if (isDifferentDay) {
+      state.hasAttendance = false;
+      state.hasCheckout = false;
+      state.checkIn = null;
+      state.checkOut = null;
     }
+  }
 
-    // 3. Cập nhật số giờ công hiển thị phía dưới
-    const worked = calcWorkedDuration(state.now);
-    const totalHours = (worked.hours + worked.minutes / 60);
-    // Nếu là ngày khác thì công = 0, nếu đúng ngày thì mới hiện giờ đã tính
-    const displayHours = isDifferentDay ? 0 : totalHours;
-    let label = displayHours >= 8 ? 'Đủ công' : 'Chưa đủ công';
+  // =========================
+  // CASE 3: ĐANG TRONG CA
+  // =========================
+  else {
+    btn.textContent = inLunch
+      ? 'Giờ nghỉ trưa'
+      : '🔳 QUÉT QR CHECK-OUT';
 
-    document.getElementById('workHoursText').textContent = 
-        `Công hôm nay: ${displayHours.toFixed(2)} (${label})`;
+    btn.disabled = inLunch;
+    btn.className = 'btn btn-warning';
+
+    statusText.textContent =
+      `🟢 Đang làm việc (vào ${fmtHm(state.checkIn)})`;
+
+    identityText.style.display = 'block';
+
+    const lateLine = new Date(state.checkIn);
+    lateLine.setHours(8,10,0,0);
+
+    if (state.checkIn > lateLine) {
+      lateWarning.style.display = 'block';
+      lateWarning.textContent = 'Bạn đi muộn';
+    } else {
+      lateWarning.style.display = 'none';
+    }
+  }
+
+  // =========================
+  // WORK HOURS
+  // =========================
+  const worked = calcWorkedDuration(state.now);
+  const total = worked.hours + worked.minutes / 60;
+
+  document.getElementById('workHoursText').textContent =
+    `Công hôm nay: ${total.toFixed(2)} giờ`;
 }
+
+/* ===================== DATE ===================== */
 function renderDate() {
-  const dateEl = document.getElementById('dateText');
-  dateEl.textContent = state.now.toLocaleDateString('vi-VN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
+  document.getElementById('dateText').textContent =
+    state.now.toLocaleDateString('vi-VN', {
+      weekday:'long',
+      day:'2-digit',
+      month:'2-digit',
+      year:'numeric'
+    });
 }
+
+/* ===================== CLOCK ===================== */
 function startClock() {
   setInterval(() => {
     const oldDay = state.now.getDate();
     state.now = new Date(state.now.getTime() + 1000);
+
     if (state.now.getDate() !== oldDay) {
-        window.location.reload(); 
+      location.reload();
     }
 
     updateEditorUI();
     renderState();
   }, 1000);
 }
-renderDate();
 
+/* ===================== API ===================== */
 async function submitAttendanceFromQR(decodedText) {
-  console.log('QR decoded:', decodedText);
-  const isCheckOut = state.hasAttendance && !state.hasCheckout;
-  const worked = calcWorkedDuration(state.now);
+  try {
+    console.log("TIME SENT:", state.now)
+    console.log("FE TIME:", state.now.toString());
+console.log("SEND TIME:", state.now.toISOString().slice(0,19));
+    const res = await fetch("/employee/attendance/check", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        qr_text: decodedText,
+        simulated_now: state.now.toISOString()
+      })
+    });
 
-  if (isCheckOut) {
-    const nowHm = fmtHm(state.now);
-    const before17 = state.now.getHours() < 17;
-    const projectedHours = (worked.hours + (worked.minutes / 60)).toFixed(2);
-    const baseMsg = `Bạn muốn kết thúc ca làm việc lúc ${nowHm}? Tổng công dự kiến: ${projectedHours}h`;
-    const confirmMsg = before17 ? `Chưa đến giờ về quy định (17:00). Bạn có chắc chắn muốn về sớm?\n${baseMsg}` : baseMsg;
-    if (!window.confirm(confirmMsg)) return;
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast(data.message || "Lỗi", "error");
+      return;
+    }
+
+  switch (data.action) {
+    case 'check_in':
+      state.hasAttendance = true;
+      state.hasCheckout = false;
+      state.checkIn = new Date(state.now);
+      break;
+
+    case 'check_out':
+      state.hasCheckout = true;
+      state.checkOut = new Date(state.now);
+      break;
+
+    case 'done':
+      state.hasCheckout = true;
+      break;
+    default:
+      state.hasCheckout = true;
   }
+    toast(data.message, data.type || "success");
 
-  const res = await fetch("{{ url_for('attendance.check_in_out') }}", {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ 
-    qr_text: decodedText, 
-    simulated_now: state.now.toLocaleString('sv-SE').replace(' ', 'T') // Format ISO local để tránh lệch múi giờ
-})
+    setTimeout(() => {
+      window.location.href =
+        window.location.pathname +
+        "?simulated_now=" + state.now.toISOString();
+    }, 800);
+
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+/* ===================== SIM EDITOR ===================== */
+function initSimEditor() {
+  document.querySelectorAll('.time-part').forEach(el => {
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+
+      const unit = el.dataset.unit;
+      const delta = e.deltaY < 0 ? 1 : -1;
+
+      let dt = new Date(state.now);
+
+      if(unit === 'hours') dt.setHours(dt.getHours() + delta);
+      if(unit === 'minutes') dt.setMinutes(dt.getMinutes() + delta);
+      if(unit === 'seconds') dt.setSeconds(dt.getSeconds() + delta);
+      if(unit === 'date') dt.setDate(dt.getDate() + delta);
+      if(unit === 'month') dt.setMonth(dt.getMonth() + delta);
+
+      state.now = dt;
+      updateEditorUI();
+    });
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra khi chấm công');
+}
 
-  const action = data.status || (isCheckOut ? 'check_out' : 'check_in');
+function updateEditorUI() {
+  document.getElementById('edit-h').textContent =
+    String(state.now.getHours()).padStart(2,'0');
 
-  if (data.warning) {
-    const lateWarning = document.getElementById('lateWarning');
-    lateWarning.style.display = 'block';
-    lateWarning.textContent = data.warning;
-  }
+  document.getElementById('edit-m').textContent =
+    String(state.now.getMinutes()).padStart(2,'0');
 
-  toast(data.message || 'Chấm công thành công', data.warning ? 'warning' : 'success');
+  document.getElementById('edit-s').textContent =
+    String(state.now.getSeconds()).padStart(2,'0');
 
-  setTimeout(() => {
-    window.location.href = window.location.pathname + "?simulated_now=" + state.now.toLocaleString('sv-SE').replace(' ', 'T');
-  }, 800);}
+  document.getElementById('edit-d').textContent =
+    String(state.now.getDate()).padStart(2,'0');
+
+  document.getElementById('edit-mo').textContent =
+    String(state.now.getMonth()+1).padStart(2,'0');
+
+  renderDate();
+  renderState();
+}
+
+/* ===================== INIT ===================== */
+renderDate();
+renderState();
+startClock();
+initSimEditor();
+updateEditorUI();
+/* ===================== QR SCANNER ===================== */
+
 const scanner = HRMQRScanner.createQRScanner({
   modalId: 'scannerModal',
   readerId: 'qr-reader',
   panelId: 'scannerPanel',
-  onDecoded: submitAttendanceFromQR,
-  onError: (error) => toast(error.message, 'error'),
+
+  onDecoded: async (decodedText) => {
+    await submitAttendanceFromQR(decodedText);
+    await scanner.close();
+  },
+
+  onError: (err) => {
+    toast(err.message || "Lỗi camera", "error");
+  }
 });
+
 async function openScannerModal() {
   const btn = document.getElementById('attendanceBtn');
   if (btn.disabled) return;
@@ -490,9 +768,8 @@ async function openScannerModal() {
   try {
     await scanner.open();
     state.isScannerOpen = true;
-  } catch (error) {
-    toast(error.message, 'error');
-    state.isScannerOpen = false;
+  } catch (err) {
+    toast("Không thể mở camera: " + err.message, "error");
   }
 }
 
@@ -500,60 +777,29 @@ async function closeScannerModal() {
   await scanner.close();
   state.isScannerOpen = false;
 }
-
-renderState();
-startClock();
-function initSimEditor() {
-    const parts = document.querySelectorAll('.time-part');
-    parts.forEach(el => {
-        el.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const unit = el.dataset.unit;
-            const delta = e.deltaY < 0 ? 1 : -1;
-            const step = e.shiftKey ? 10 : 1;
-            
-            let dt = new Date(state.now);
-            if(unit === 'hours') dt.setHours(dt.getHours() + (delta * step));
-            if(unit === 'minutes') dt.setMinutes(dt.getMinutes() + (delta * step));
-            if(unit === 'seconds') dt.setSeconds(dt.getSeconds() + (delta * step));
-            if(unit === 'date') dt.setDate(dt.getDate() + (delta * step));
-            if(unit === 'month') dt.setMonth(dt.getMonth() + (delta * step));
-            
-            state.now = dt;
-            updateEditorUI();
-        });
-    });
-}
-
-function updateEditorUI() {
-    document.getElementById('edit-h').textContent = String(state.now.getHours()).padStart(2,'0');
-    document.getElementById('edit-m').textContent = String(state.now.getMinutes()).padStart(2,'0');
-    document.getElementById('edit-s').textContent = String(state.now.getSeconds()).padStart(2,'0');
-    document.getElementById('edit-d').textContent = String(state.now.getDate()).padStart(2,'0');
-    document.getElementById('edit-mo').textContent = String(state.now.getMonth() + 1).padStart(2,'0');
-    renderDate();
-    renderState();
-}
 async function deleteRecord(dateIso) {
-    if(!confirm("Xóa bản ghi ngày " + dateIso + "? Hệ thống sẽ rollback thời gian về ngày trước đó.")) return;
-    
-    try {
-        const res = await fetch("{{ url_for('attendance.delete_attendance') }}", {
-            method: 'DELETE',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ date: dateIso })
-        });
-        const data = await res.json();
-        if(!res.ok) throw new Error(data.error);
-        
-        toast("Đã xóa bản ghi");
-        // Theo yêu cầu nghiệp vụ: xóa công ngày mới nhất thì quay về thời gian thực
-        window.location.href = window.location.pathname;
-    } catch(err) {
-        toast(err.message, "error");
+  if (!confirm("Xóa bản ghi ngày " + dateIso + "?")) return;
+
+  try {
+    const res = await fetch("/attendance/delete", {
+      method: "DELETE",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ date: dateIso })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Xóa thất bại");
     }
+
+    toast(data.message || "Đã xóa", "success");
+
+    setTimeout(() => location.reload(), 500);
+
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
-initSimEditor()
-updateEditorUI()
 </script>
 {% endblock %}
