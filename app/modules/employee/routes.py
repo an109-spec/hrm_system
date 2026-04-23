@@ -19,6 +19,8 @@ from app.models import (
     Salary,
     User,
 )
+from app.common.exceptions import ValidationError
+from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
 from . import employee_bp
 
@@ -47,8 +49,9 @@ def _ensure_login():
 
 class EmployeeDashboardService:
     @staticmethod
-    def get_today_attendance(employee_id: int):
-        return Attendance.query.filter_by(employee_id=employee_id, date=date.today()).first()
+    def get_today_attendance(employee_id: int, target_date: date | None = None):
+        target_date = target_date or date.today()
+        return Attendance.query.filter_by(employee_id=employee_id, date=target_date).first()
 
     @staticmethod
     def get_leave_balance(employee_id: int, current_year: int):
@@ -112,7 +115,8 @@ def dashboard():
         return render_template("employee/dashboard.html", employee=None)
 
     user = _current_user()
-    attendance = EmployeeDashboardService.get_today_attendance(employee.id)
+    now = parse_simulated_time({})
+    attendance = EmployeeDashboardService.get_today_attendance(employee.id, now.date())
     leave_balance = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
     latest_salary = EmployeeDashboardService.get_latest_salary(employee.id)
     notifications = EmployeeDashboardService.get_notifications(user.id if user else 0)
@@ -124,7 +128,7 @@ def dashboard():
         leave_balance=leave_balance,
         latest_salary=latest_salary,
         notifications=notifications,
-        now=datetime.now(),
+        now=now,
     )
 
 
@@ -242,7 +246,7 @@ def attendance():
     employee = _current_employee()
     now = parse_simulated_time({})
 
-    today = EmployeeDashboardService.get_today_attendance(employee.id) if employee else None
+    today = EmployeeDashboardService.get_today_attendance(employee.id, now.date()) if employee else None
     history = (
         Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).limit(10).all()
         if employee
@@ -430,6 +434,61 @@ def check_in_out():
             "toast": True,
             "type": "error",
             "message": f"Lỗi hệ thống: {str(exc)}"
+        }), 500
+
+@employee_bp.route("/attendance/delete", methods=["DELETE"])
+def delete_attendance_record():
+    guard = _ensure_login()
+    if guard:
+        return jsonify({
+            "status": "error",
+            "message": "Bạn chưa đăng nhập",
+            "toast": True
+        }), 401
+
+    employee = _current_employee()
+    if not employee:
+        return jsonify({
+            "status": "error",
+            "message": "Không tìm thấy nhân viên",
+            "toast": True
+        }), 404
+
+    payload = request.get_json(silent=True) or {}
+    date_str = payload.get("date")
+    if not date_str:
+        return jsonify({
+            "status": "error",
+            "message": "Thiếu ngày cần xóa",
+            "toast": True
+        }), 400
+
+    try:
+        new_last_date = AttendanceService.delete_attendance(employee.id, date_str)
+        rollback_date = (
+            new_last_date.isoformat()
+            if new_last_date
+            else datetime.now().date().isoformat()
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": f"Đã xóa chấm công ngày {date_str}",
+            "toast": True,
+            "rollback_date": rollback_date
+        })
+    except ValidationError as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "toast": True
+        }), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "message": f"Lỗi hệ thống: {str(e)}",
+            "toast": True
         }), 500
 
 @employee_bp.route("/leave", methods=["GET", "POST"])
