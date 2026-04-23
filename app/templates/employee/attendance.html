@@ -470,6 +470,7 @@ function persistSharedSimTime(date) {
 }
 const state = {
   isOvertime: false,
+  overtimeDeclined: false,
   overtimeStartAt: null,
   overtimeStarted: false,
   isPreOvertimeRest: false,
@@ -546,12 +547,15 @@ function maybeNotifyOvertimeWindow() {
     const accepted = confirm("Đã đến 17:00. Bạn có muốn tăng ca không?");
     if (accepted) {
       state.isOvertime = true;
+      state.overtimeDeclined = false;
       state.isPreOvertimeRest = true;
       const overtimeStart = new Date(state.now);
       overtimeStart.setHours(19, 0, 0, 0);
       state.overtimeStartAt = toLocalISO(overtimeStart);
       toast("Đã đăng ký tăng ca. Trạng thái hiện tại: nghỉ ngơi trước tăng ca.", "warning");
       renderState();
+    } else {
+      state.overtimeDeclined = true;
     }
   }
 
@@ -773,7 +777,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       simulated_now: toLocalISO(state.now),
       overtime_confirmed: state.isOvertime,
       overtime_start: state.overtimeStartAt || toLocalISO(state.now),
-      overtime_rejected: state.pendingCheckoutWithoutOT
+      overtime_rejected: state.pendingCheckoutWithoutOT || state.overtimeDeclined
     };
     const isWeekend = [0, 6].includes(state.now.getDay());
     if (!state.hasAttendance && isWeekend) {
@@ -803,13 +807,12 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
 
       if (confirmed) {
         state.isOvertime = true;
+        state.overtimeDeclined = false;
         state.overtimeStartAt = state.overtimeStartAt || toLocalISO(state.now);
       } else {
         state.pendingCheckoutWithoutOT = true;
-        toast("Bạn đã chọn không tăng ca. Vui lòng quét lại QR để check-out.", "warning");
-        await scanner.close();
-        setTimeout(() => openScannerModal(), 250);
-        return;
+        state.overtimeDeclined = true;
+        toast("Bạn đã chọn không tăng ca. Hệ thống sẽ check-out luôn.", "warning");
       }
       const confirmRes = await fetch("/employee/attendance/check", {
         method: "POST",
@@ -817,7 +820,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
         body: JSON.stringify({
           ...payload,
           overtime_confirmed: confirmed,
-          overtime_rejected: false,
+          overtime_rejected: !confirmed,
           overtime_start: state.overtimeStartAt || toLocalISO(state.now)
         })
       });

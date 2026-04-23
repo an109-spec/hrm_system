@@ -292,7 +292,10 @@ async function openQRModal() {
 async function closeQRModal() {
   await scanner.close();
 }
-
+async function processAttendance(code) {
+    try {
+        const now = getSimulatedDate();
+        const timeStr = toLocalISO(now);
         const payload = {
             qr_text: code,
             qr_data: code, 

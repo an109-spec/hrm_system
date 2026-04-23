@@ -401,12 +401,12 @@ def check_in_out():
             # =========================
             # EFFECTIVE START (late rule)
             # =========================
-            effective_start = (
+            policy_start = (
                 datetime.combine(today, time(9, 0))
                 if check_in_time > late_threshold
                 else datetime.combine(today, time(8, 0))
             )
-
+            effective_start = max(check_in_time, policy_start)
             # =========================
             # WORK HOURS CALC
             # =========================
