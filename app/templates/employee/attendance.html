@@ -361,9 +361,9 @@
         <!-- WORK HOURS (FIX CHUẨN SERVICE) -->
         <td>
           {% if a.calculated_hours is defined %}
-            {{ a.calculated_hours }} giờ
+           {{ (a.calculated_hours|float)|int }} giờ
           {% else %}
-            {{ a.working_hours or 0 }} giờ
+            {{ ((a.working_hours or 0)|float)|int }} giờ
           {% endif %}
         </td>
           <td>{{ a.overtime_hours or 0 }} giờ</td>
@@ -436,6 +436,7 @@ const state = {
   isOvertime: false,
   overtimeStartAt: null,
   overtimeStarted: false,
+  isPreOvertimeRest: false,
   now: new Date(root.dataset.serverNow),
   hasAttendance: root.dataset.hasAttendance === '1',
   hasCheckout: root.dataset.hasCheckout === '1',
@@ -469,24 +470,35 @@ const isNewDay = (now, lastCheckin) => {
 };
 function maybeNotifyOvertimeWindow() {
   const hour = state.now.getHours();
+  const minute = state.now.getMinutes();
   const isWeekend = [0, 6].includes(state.now.getDay());
   const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
-  if (!isWeekend && isWorkingSession && hour === 17 && !state.notices.otInvite) {
+  if (!isWeekend && isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
     state.notices.otInvite = true;
-    const accepted = confirm("Đã đến khung 17h-17h59. Bạn có muốn tăng ca tiếp tục không?");
+    const accepted = confirm("Đã đến 17:00. Bạn có muốn tăng ca không?");
     if (accepted) {
       state.isOvertime = true;
-      state.overtimeStartAt = toLocalISO(state.now);
-      toast("Đã chuyển trạng thái: Tăng ca", "warning");
+      state.isPreOvertimeRest = true;
+      const overtimeStart = new Date(state.now);
+      overtimeStart.setHours(19, 0, 0, 0);
+      state.overtimeStartAt = toLocalISO(overtimeStart);
+      toast("Đã đăng ký tăng ca. Trạng thái hiện tại: nghỉ ngơi trước tăng ca.", "warning");
       renderState();
     }
   }
 
-  if (state.isOvertime && isWorkingSession && hour >= 19 && !state.notices.otStart) {
+  if (
+    state.isOvertime &&
+    state.isPreOvertimeRest &&
+    isWorkingSession &&
+    (hour > 18 || (hour === 18 && minute >= 55)) &&
+    !state.notices.otStart
+  ) {
     state.notices.otStart = true;
     state.overtimeStarted = true;
-    alert("Đến 19h: Đến lúc tăng ca, yêu cầu check-in để thực hiện tăng ca.");
+    state.isPreOvertimeRest = false;
+    alert("Đã đến giờ tăng ca. Vui lòng check_in để tăng ca.");
   }
 
   if (state.isOvertime && isWorkingSession && hour >= 22 && !state.notices.otEnd) {
@@ -521,8 +533,12 @@ function calcWorkedDuration(now) {
   if (end <= state.checkIn) return {hours:0, minutes:0};
 
   let effectiveStart = calcEffectiveStart(state.checkIn);
+  const regularEnd = new Date(effectiveStart);
+  regularEnd.setHours(17, 0, 0, 0);
+  const cappedEnd = end > regularEnd ? regularEnd : end;
 
-  let ms = end - effectiveStart;
+  if (cappedEnd <= effectiveStart) return {hours:0, minutes:0};
+  let ms = cappedEnd - effectiveStart;
 
   // trừ nghỉ trưa
   const lunchStart = new Date(effectiveStart);
@@ -531,9 +547,9 @@ function calcWorkedDuration(now) {
   const lunchEnd = new Date(effectiveStart);
   lunchEnd.setHours(13,0,0,0);
 
-  if (end > lunchStart) {
+  if (cappedEnd > lunchStart) {
     const overlap =
-      Math.min(end, lunchEnd) - Math.max(effectiveStart, lunchStart);
+      Math.min(cappedEnd, lunchEnd) - Math.max(effectiveStart, lunchStart);
     if (overlap > 0) ms -= overlap;
   }
 
@@ -556,7 +572,7 @@ function toast(msg, type="success") {
   setTimeout(() => {
     item.style.opacity = '0';
     setTimeout(() => item.remove(), 300);
-  }, 3000);
+  }, 6000);
 }
 
 function renderState() {
@@ -611,6 +627,7 @@ function renderState() {
       state.checkOut = null;
       state.isOvertime = false;
       state.overtimeStarted = false;
+      state.isPreOvertimeRest = false;
       state.overtimeStartAt = null;
       state.notices = {
         otInvite: false,
@@ -630,7 +647,12 @@ function renderState() {
 
     btn.disabled = inLunch;
     btn.className = 'btn btn-warning';
-    const statusPrefix = state.isOvertime ? '🟣 Tăng ca' : '🟢 Đang làm việc';
+    let statusPrefix = '🟢 Đang làm việc';
+    if (state.isPreOvertimeRest) {
+      statusPrefix = '🟠 Nghỉ ngơi trước tăng ca';
+    } else if (state.overtimeStarted || state.isOvertime) {
+      statusPrefix = '🟣 Tăng ca';
+    }
     statusText.textContent =
       `${statusPrefix} (vào ${fmtHm(state.checkIn)})`;
 
@@ -652,9 +674,9 @@ function renderState() {
   // =========================
   const worked = calcWorkedDuration(state.now);
   const total = worked.hours + worked.minutes / 60;
-
+  const standardHoursRoundedDown = Math.floor(total);
   document.getElementById('workHoursText').textContent =
-    `Công hôm nay: ${total.toFixed(2)} giờ`;
+    `Công hôm nay: ${standardHoursRoundedDown} giờ`;
 }
 
 /* ===================== DATE ===================== */
