@@ -544,7 +544,7 @@ function renderState() {
   // =========================
   // CASE 1: ĐÃ CHECK-OUT (CHỈ KHÓA KHI CÙNG NGÀY)
   // =========================
-  if (state.hasCheckout){
+  if (state.hasCheckout && !isDifferentDay){
     btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
     btn.disabled = true;
     btn.className = 'btn btn-disabled';
