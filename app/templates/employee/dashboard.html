@@ -79,14 +79,16 @@
                         <span style="font-size:.65rem;color:#334155;">THÁNG</span>
                     </div>
                 </div>               
-                {% if not attendance %}
-                    <button class="btn btn-green" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>
-                {% elif not attendance.check_out %}
-                    <button class="btn btn-orange" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
-                    <p class="msg">Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}</p>
-                {% else %}
-                    <div class="status-success">✅ ĐÃ HOÀN THÀNH</div>
-                {% endif %}
+                <div id="attendance-action-slot">
+                    {% if not attendance %}
+                        <button class="btn btn-green" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>
+                    {% elif not attendance.check_out %}
+                        <button class="btn btn-orange" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
+                        <p class="msg">Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}</p>
+                    {% else %}
+                        <div class="status-success">✅ ĐÃ HOÀN THÀNH</div>
+                    {% endif %}
+                </div>
             </div>
         </section>
     </div>
@@ -188,7 +190,31 @@ function syncAttendanceStateByDate() {
         state.hasAttendance = false;
         state.hasCheckedOut = false;
         state.checkIn = "";
+        state.attendanceDate = todayKey;
+        renderAttendanceAction();
     }
+}
+function renderAttendanceAction() {
+    const slot = document.getElementById("attendance-action-slot");
+    if (!slot) return;
+
+    if (!state.hasAttendance) {
+        slot.innerHTML = `<button class="btn btn-green" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>`;
+        return;
+    }
+
+    if (!state.hasCheckedOut) {
+        const checkInText = state.checkIn
+            ? new Date(state.checkIn).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+            : '--:--';
+        slot.innerHTML = `
+            <button class="btn btn-orange" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
+            <p class="msg">Giờ vào: ${checkInText}</p>
+        `;
+        return;
+    }
+
+    slot.innerHTML = `<div class="status-success">✅ ĐÃ HOÀN THÀNH</div>`;
 }
 
 const dbWorkingHours = Number("{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}");
