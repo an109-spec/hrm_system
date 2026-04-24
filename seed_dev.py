@@ -3,6 +3,7 @@ from app.extensions.db import db
 from app.models.user import User
 from app.models.role import Role
 from app.models.employee import Employee
+from app.models.department import Department
 from app.models.leave_usage import EmployeeLeaveUsage
 from datetime import date
 app = create_app()
@@ -47,8 +48,15 @@ with app.app_context():
             "username": "employee",
             "email": "employee@test.com",
             "role": "EMPLOYEE",
-            "full_name": "Employee User",
+            "full_name": "Employee Test",
             "phone": "0999999999",
+        },
+        {
+            "username": "employee_gmail",
+            "email": "employee@gmail.com",
+            "role": "EMPLOYEE",
+            "full_name": "Employee Gmail",
+            "phone": "0999999998",
         },
     ]
     employee_profiles = {}
@@ -88,12 +96,29 @@ with app.app_context():
                 employee_profiles[u["username"]] = employee
 
     manager_emp = employee_profiles.get("manager")
-    employee_emp = employee_profiles.get("employee")
-    if manager_emp and employee_emp:
-        employee_emp.manager_id = manager_emp.id
+    employee_test = employee_profiles.get("employee")
+    employee_gmail = employee_profiles.get("employee_gmail")
+    if manager_emp:
+        for subordinate in (employee_test, employee_gmail):
+            if subordinate:
+                subordinate.manager_id = manager_emp.id
+
+    department = Department.query.filter_by(name="Phòng Kỹ thuật").first()
+    if not department:
+        department = Department(name="Phòng Kỹ thuật", description="Phòng kỹ thuật mặc định")
+        db.session.add(department)
+        db.session.flush()
+
+    if manager_emp:
+        department.manager_id = manager_emp.id
+        manager_emp.department_id = department.id
+    if employee_test:
+        employee_test.department_id = department.id
+    if employee_gmail:
+        employee_gmail.department_id = department.id
 
     current_year = date.today().year
-    for username in ("manager", "employee"):
+    for username in ("manager", "employee", "employee_gmail"):
         profile = employee_profiles.get(username)
         if not profile:
             continue

@@ -1,0 +1,33 @@
+{% extends "layouts/base.html" %}
+{% block title %}Nhân viên phòng ban{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/department_employees.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="page-title">👥 Nhân viên phòng ban</h2>
+
+<div id="dept-emp-error" class="alert-box" hidden></div>
+
+<table class="summary-table">
+  <thead>
+    <tr>
+      <th>Trạng thái hiện tại</th>
+      <th>Số lượng</th>
+      <th>Tỉ lệ</th>
+      <th>Hành động</th>
+    </tr>
+  </thead>
+  <tbody id="status-summary-body"></tbody>
+</table>
+
+<section id="quick-action-panel" class="quick-panel" hidden>
+  <h3 id="quick-action-title"></h3>
+  <div id="quick-action-list" class="quick-list"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manager/department_employees.js') }}"></script>
+{% endblock %}

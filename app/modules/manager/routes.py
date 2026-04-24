@@ -34,6 +34,13 @@ def attendance_page():
     manager = _current_manager()
     return render_template("manager/attendance.html", employee=manager)
 
+@manager_bp.route("/department-employees")
+def department_employees_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/department_employees.html", employee=manager)
 
 @manager_bp.route("/leave-management")
 def leave_page():

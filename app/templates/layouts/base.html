@@ -53,7 +53,7 @@
                 <a href="{{ url_for('manager.dashboard_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.dashboard_page' }}">
                     <i class="fas fa-chart-line"></i> Tổng quan hệ thống
                 </a>
-                <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
+                <a href="{{ url_for('manager.department_employees_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.department_employees_page' }}">
                     <i class="fas fa-users"></i> Nhân viên phòng ban
                 </a>
                 <a href="{{ url_for('manager.leave_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.leave_page' }}">
@@ -73,6 +73,9 @@
                 </a>
                 <a href="{{ url_for('manager.profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.profile_page' }}">
                     <i class="fas fa-user-circle"></i> Hồ sơ cá nhân
+                </a>
+                <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
+                    <i class="fas fa-user-circle"></i> Thông tin trưởng phòng
                 </a>
             {% else %}
                 <a href="{{ url_for('employee.dashboard') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.dashboard' }}">

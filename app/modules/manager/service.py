@@ -374,6 +374,7 @@ class ManagerService:
                 {
                     "employee_id": e.id,
                     "name": e.full_name,
+                    "phone": e.phone,
                     "on_time": on_time,
                     "late": late,
                     "absent": absent,
