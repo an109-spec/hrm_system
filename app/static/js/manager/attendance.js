@@ -1,11 +1,6 @@
 let allRows = []
 let activeFilter = 'ALL'
 const SHARED_SIM_TIME_KEY = 'hrm_simulated_now'
-const managerAttendanceState = {
-  hasAttendance: false,
-  hasCheckedOut: false
-}
-let managerQRScanner = null
 function formatStatus(status) {
   const map = {
     ON_TIME: '🟢 Đúng giờ',
@@ -60,12 +55,6 @@ function readSharedSimTime(fallback) {
     return fallback
   }
 }
-
-function toLocalISO(date) {
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, '0')}`
-}
-
 function getNow() {
   return readSharedSimTime(new Date())
 }
@@ -77,93 +66,7 @@ function renderManagerClock() {
   el.textContent = `${now.toLocaleTimeString('vi-VN')} - ${now.toLocaleDateString('vi-VN')}`
 }
 
-function updateManagerAttendanceButton() {
-  const btn = document.getElementById('manager-attendance-btn')
-  if (!btn) return
-  if (!managerAttendanceState.hasAttendance) {
-    btn.textContent = '🔳 QUÉT QR CHECK-IN'
-    return
-  }
-  if (!managerAttendanceState.hasCheckedOut) {
-    btn.textContent = '🔳 QUÉT QR CHECK-OUT'
-    return
-  }
-  btn.textContent = '✅ ĐÃ HOÀN THÀNH CHẤM CÔNG'
-  btn.disabled = true
-}
 
-async function refreshManagerAttendanceState() {
-  const now = getNow()
-  const month = now.getMonth() + 1
-  const year = now.getFullYear()
-  const result = await ManagerAPI.attendanceMonth(month, year)
-  const todayKey = now.toISOString().slice(0, 10)
-  const todayRow = (result || []).find((row) => row.date === todayKey)
-  managerAttendanceState.hasAttendance = Boolean(todayRow && todayRow.check_in)
-  managerAttendanceState.hasCheckedOut = Boolean(todayRow && todayRow.check_out)
-  updateManagerAttendanceButton()
-}
-
-async function submitManagerAttendance(qrText, options = {}) {
-  const now = getNow()
-  const payload = {
-    qr_text: qrText,
-    simulated_now: toLocalISO(now),
-    ...options
-  }
-  const response = await fetch('/employee/attendance/check', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  const data = await response.json()
-  if (!response.ok) {
-    throw new Error(data.message || 'Không thể chấm công.')
-  }
-  if (data.action === 'confirm_overtime') {
-    const confirmOT = window.confirm(data.message || 'Bạn có muốn đăng ký tăng ca không?')
-    if (confirmOT) {
-      return submitManagerAttendance(qrText, { overtime_confirmed: true })
-    }
-    return submitManagerAttendance(qrText, { overtime_rejected: true })
-  }
-  return data
-}
-
-function initManagerAttendanceAction() {
-  const btn = document.getElementById('manager-attendance-btn')
-  const closeBtn = document.getElementById('manager-close-qr')
-  if (!btn || !window.HRMQRScanner) return
-
-  managerQRScanner = window.HRMQRScanner.createQRScanner({
-    modalId: 'manager-qr-modal',
-    readerId: 'manager-qr-reader',
-    onDecoded: async (decodedText) => {
-      const data = await submitManagerAttendance(decodedText || 'manager-self-attendance')
-      window.alert(data.message || 'Chấm công thành công.')
-      await refreshManagerAttendanceState()
-      await loadAttendance()
-    },
-    onError: (err) => {
-      window.alert(err?.message || 'Lỗi quét QR.')
-    }
-  })
-
-  btn.addEventListener('click', async () => {
-    if (btn.disabled) return
-    try {
-      await managerQRScanner.open()
-    } catch (err) {
-      window.alert(err?.message || 'Không thể mở camera.')
-    }
-  })
-
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      if (managerQRScanner) managerQRScanner.close()
-    })
-  }
-}
 async function loadAttendance() {
   const sendBtn = document.getElementById('send-reminder')
   sendBtn.disabled = true
@@ -204,5 +107,3 @@ document.getElementById('send-reminder').addEventListener('click', async () => {
 loadAttendance()
 renderManagerClock()
 setInterval(renderManagerClock, 1000)
-initManagerAttendanceAction()
-refreshManagerAttendanceState().catch(() => {})

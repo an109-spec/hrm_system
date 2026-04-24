@@ -4,7 +4,8 @@ from flask import jsonify, render_template, request, session, redirect, url_for
 from app.models.employee import Employee
 from . import manager_bp
 from .service import ManagerService
-
+from app.modules.employee.routes import _get_holiday_for_date
+from app.utils.time import parse_simulated_time
 
 def _current_manager() -> Employee | None:
     user_id = session.get("user_id")
@@ -32,7 +33,13 @@ def attendance_page():
     if guard:
         return guard
     manager = _current_manager()
-    return render_template("manager/attendance.html", employee=manager)
+    now = parse_simulated_time({})
+    today_holiday = _get_holiday_for_date(now.date())
+    return render_template(
+        "manager/attendance.html",
+        employee=manager,
+        today_holiday=today_holiday,
+    )
 
 @manager_bp.route("/department-employees")
 def department_employees_page():

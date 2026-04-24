@@ -62,6 +62,9 @@
                 <a href="{{ url_for('manager.attendance_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.attendance_page' }}">
                     <i class="fas fa-calendar-check"></i> Chấm công phòng ban
                 </a>
+                <a href="{{ url_for('employee.attendance') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.attendance' }}">
+                    <i class="fas fa-user-check"></i> Chấm công
+                </a>
                 <a href="{{ url_for('manager.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.payroll_page' }}">
                     <i class="fas fa-money-check-alt"></i> Lương phòng ban
                 </a>
