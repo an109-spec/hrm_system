@@ -288,7 +288,13 @@
 
   <!-- BREAK INFO -->
   <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
-
+  <p
+    id="holidayText"
+    class="attendance-note"
+    style="{% if not today_holiday %}display:none;{% endif %}"
+  >
+    🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name if today_holiday else '' }}
+  </p>
   <!-- ACTION -->
   <div class="attendance-actions">
     <button 
@@ -429,6 +435,7 @@
 <script>
 const root = document.getElementById('attendanceRoot');
 const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const HOLIDAY_LOOKUP = {{ holiday_lookup|tojson }};
 const attendanceByDate = new Map([
   {% if today %}
   ["{{ today.date.isoformat() }}", {
@@ -748,6 +755,23 @@ function renderDate() {
       month:'2-digit',
       year:'numeric'
     });
+  renderHolidayNotice();
+}
+
+function renderHolidayNotice() {
+  const key = `${String(state.now.getMonth() + 1).padStart(2, '0')}-${String(state.now.getDate()).padStart(2, '0')}`;
+  const holidayName = HOLIDAY_LOOKUP[key];
+  const holidayEl = document.getElementById('holidayText');
+  if (!holidayEl) return;
+
+  if (!holidayName) {
+    holidayEl.style.display = 'none';
+    holidayEl.textContent = '';
+    return;
+  }
+
+  holidayEl.style.display = '';
+  holidayEl.textContent = `🎉 Hôm nay là ngày nghỉ lễ: ${holidayName}`;
 }
 
 /* ===================== CLOCK ===================== */

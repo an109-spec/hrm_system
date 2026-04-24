@@ -6,11 +6,15 @@
 
 {% block content %}
 <div class="dashboard-wrapper">
-    {% if today_holiday %}
-    <section class="card" style="margin-bottom:12px; border-left:4px solid #16a34a;">
-        <strong>🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}</strong>
+    <section
+        id="holiday-notice"
+        class="card"
+        style="margin-bottom:12px; border-left:4px solid #16a34a; {% if not today_holiday %}display:none;{% endif %}"
+    >
+        <strong id="holiday-notice-text">
+            🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name if today_holiday else '' }}
+        </strong>
     </section>
-    {% endif %}
     <div id="qr-modal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.8);">
         <div class="modal-content" style="background:#fff; margin:10% auto; padding:20px; width:90%; max-width:500px; border-radius:15px; text-align:center;">
             <h3>Quét mã QR định danh</h3>
@@ -115,6 +119,7 @@
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const HOLIDAY_LOOKUP = {{ holiday_lookup|tojson }};
 const attendanceByDate = new Map([
     {% if attendance %}
     ["{{ attendance.date.isoformat() }}", {
@@ -174,6 +179,7 @@ function updateClock() {
     const days = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
     
     document.getElementById("clock").innerText = `${now.toLocaleTimeString('vi-VN')} - ${days[now.getDay()]}, ${now.toLocaleDateString('vi-VN')}`;
+    renderHolidayNotice(now);
     updateEditorUI();
     // Hiển thị trạng thái nghỉ trưa
     const hrs = now.getHours();
@@ -192,6 +198,23 @@ function updateClock() {
             btn.style.backgroundColor = "";
         }
     }
+}
+
+function renderHolidayNotice(now) {
+    const key = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const holidayName = HOLIDAY_LOOKUP[key];
+    const noticeEl = document.getElementById('holiday-notice');
+    const noticeTextEl = document.getElementById('holiday-notice-text');
+    if (!noticeEl || !noticeTextEl) return;
+
+    if (!holidayName) {
+        noticeEl.style.display = 'none';
+        noticeTextEl.textContent = '';
+        return;
+    }
+
+    noticeEl.style.display = '';
+    noticeTextEl.textContent = `🎉 Hôm nay là ngày nghỉ lễ: ${holidayName}`;
 }
 
 function tickClock() {

@@ -50,6 +50,27 @@ def _ensure_login():
         return redirect(url_for("auth.login", next=request.url))
     return None
 
+def _get_holiday_for_date(target_date: date) -> Holiday | None:
+    exact_holiday = Holiday.query.filter_by(date=target_date).first()
+    if exact_holiday:
+        return exact_holiday
+
+    return (
+        Holiday.query.filter(
+            Holiday.is_recurring.is_(True),
+            db.extract("month", Holiday.date) == target_date.month,
+            db.extract("day", Holiday.date) == target_date.day,
+        )
+        .order_by(Holiday.id.asc())
+        .first()
+    )
+
+
+def _get_holiday_lookup() -> dict[str, str]:
+    return {
+        holiday.date.strftime("%m-%d"): holiday.name
+        for holiday in Holiday.query.order_by(Holiday.is_recurring.desc(), Holiday.id.asc()).all()
+    }
 
 class EmployeeDashboardService:
     @staticmethod
@@ -222,7 +243,8 @@ def dashboard():
     leave_balance = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
     latest_salary = EmployeeDashboardService.get_latest_salary(employee.id)
     notifications = EmployeeDashboardService.get_notifications(user.id if user else 0)
-    today_holiday = Holiday.query.filter_by(date=now.date()).first()
+    today_holiday = _get_holiday_for_date(now.date())
+    holiday_lookup = _get_holiday_lookup()
     return render_template(
         "employee/dashboard.html",
         employee=employee,
@@ -233,6 +255,7 @@ def dashboard():
         now=now,
         attendance_history=attendance_history,
         today_holiday=today_holiday,
+        holiday_lookup=holiday_lookup,
     )
 
 
@@ -481,7 +504,17 @@ def attendance():
         if employee
         else []
     )
-    return render_template("employee/attendance.html", employee=employee, today=today, history=history, now = now)
+    today_holiday = _get_holiday_for_date(now.date())
+    holiday_lookup = _get_holiday_lookup()
+    return render_template(
+        "employee/attendance.html",
+        employee=employee,
+        today=today,
+        history=history,
+        now=now,
+        today_holiday=today_holiday,
+        holiday_lookup=holiday_lookup,
+    )
 
 
 @employee_bp.route("/attendance/check", methods=["POST"])
@@ -899,7 +932,7 @@ def leave_request():
         return redirect(url_for("employee.leave_request"))
 
     requests = LeaveRequest.query.filter_by(employee_id=employee.id).order_by(LeaveRequest.created_at.desc()).all()    
-    today_holiday = Holiday.query.filter_by(date=now.date()).first()
+    today_holiday = _get_holiday_for_date(now.date())
 
     return render_template(
         "employee/leave.html",
