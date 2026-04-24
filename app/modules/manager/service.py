@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-
+from sqlalchemy import or_
 from app.extensions.db import db
 from app.models.attendance import Attendance
 from app.models.contract import Contract
+from app.models.department import Department
 from app.models.employee import Employee
 
 from app.models.leave import LeaveRequest
@@ -21,7 +22,21 @@ class ManagerService:
         manager = Employee.query.get(manager_id)
         if not manager:
             return []
-        return list(manager.subordinates)
+        direct_subordinates = [
+            emp for emp in manager.subordinates if not getattr(emp, "is_deleted", False)
+        ]
+        if direct_subordinates:
+            return direct_subordinates
+
+        managed_department = Department.query.filter_by(manager_id=manager_id).first()
+        if not managed_department:
+            return []
+
+        return [
+            emp
+            for emp in managed_department.employees
+            if emp.id != manager_id and not getattr(emp, "is_deleted", False)
+        ]
     @staticmethod
     def _approved_leave_employee_ids(employee_ids: list[int], target_date: date) -> set[int]:
         if not employee_ids:
@@ -114,14 +129,21 @@ class ManagerService:
         employees = ManagerService._get_subordinates(manager_id)
         sub_ids = [e.id for e in employees]
         if not sub_ids:
-            return []
-
-        query = LeaveRequest.query.filter(LeaveRequest.employee_id.in_(sub_ids))
+            # Fallback theo người duyệt được chỉ định trên đơn
+            query = LeaveRequest.query.filter(LeaveRequest.approved_by == manager_id)
+        else:
+            query = LeaveRequest.query.filter(
+                or_(
+                    LeaveRequest.employee_id.in_(sub_ids),
+                    LeaveRequest.approved_by == manager_id,
+                )
+            )
 
         if status:
             query = query.filter(LeaveRequest.status == status)
 
-        rows = query.order_by(LeaveRequest.created_at.desc()).all()
+        if not rows:
+            return []
         return [
             {
                 "id": l.id,
@@ -145,7 +167,8 @@ class ManagerService:
         if not leave:
             raise ValueError("Không tìm thấy đơn nghỉ phép")
         sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
-        if leave.employee_id not in sub_ids:
+        can_process = leave.employee_id in sub_ids or leave.approved_by == manager_id
+        if not can_process:
             raise ValueError("Không có quyền xử lý đơn này")
         return leave
     @staticmethod

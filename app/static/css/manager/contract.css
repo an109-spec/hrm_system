@@ -5,6 +5,7 @@
 .contract-warning button { border:1px solid var(--info); color:var(--info); background:#fff; border-radius:6px; padding:6px 10px; }
 .state.error { color:var(--danger); margin-top:8px; }
 .modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,0.4); }
+.modal[hidden] { display:none !important; }
 .modal-content { width:min(480px,95vw); background:#fff; border-radius:10px; padding:16px; display:grid; gap:8px; position:relative; }
 .modal-content input { border:1px solid var(--border); border-radius:6px; padding:8px; }
 .close { position:absolute; right:12px; top:6px; font-size:22px; cursor:pointer; }
