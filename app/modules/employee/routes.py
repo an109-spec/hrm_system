@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import os
 import uuid
+from lunardate import LunarDate
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -33,6 +34,23 @@ VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "05-01": "Quốc tế Lao động",
     "09-02": "Quốc khánh",
 }
+VN_LUNAR_PUBLIC_HOLIDAYS: tuple[tuple[int, int, str], ...] = (
+    (1, 1, "Tết Nguyên đán (Mùng 1)"),
+    (1, 2, "Tết Nguyên đán (Mùng 2)"),
+    (1, 3, "Tết Nguyên đán (Mùng 3)"),
+    (3, 10, "Giỗ Tổ Hùng Vương"),
+)
+
+
+def _build_lunar_public_holidays_for_year(year: int) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for lunar_month, lunar_day, holiday_name in VN_LUNAR_PUBLIC_HOLIDAYS:
+        try:
+            solar_date = LunarDate(year, lunar_month, lunar_day).toSolarDate()
+        except ValueError:
+            continue
+        lookup[solar_date.strftime("%m-%d")] = holiday_name
+    return lookup
 
 def _current_user() -> User | None:
     user_id = session.get("user_id")
@@ -57,6 +75,8 @@ def _ensure_login():
 
 def _get_holiday_for_date(target_date: date) -> Holiday | None:
     default_holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(target_date.strftime("%m-%d"))
+    lunar_holiday_lookup = _build_lunar_public_holidays_for_year(target_date.year)
+    lunar_holiday_name = lunar_holiday_lookup.get(target_date.strftime("%m-%d"))
     exact_holiday = Holiday.query.filter_by(date=target_date).first()
     if exact_holiday:
         return exact_holiday
@@ -80,7 +100,13 @@ def _get_holiday_for_date(target_date: date) -> Holiday | None:
             is_paid=True,
             is_recurring=True,
         )
-
+    if lunar_holiday_name:
+        return Holiday(
+            name=lunar_holiday_name,
+            date=target_date,
+            is_paid=True,
+            is_recurring=False,
+        )
     return None
 
 def _get_holiday_lookup() -> dict[str, str]:
@@ -89,6 +115,8 @@ def _get_holiday_lookup() -> dict[str, str]:
         for holiday in Holiday.query.order_by(Holiday.is_recurring.desc(), Holiday.id.asc()).all()
     }
     for holiday_key, holiday_name in VN_FIXED_PUBLIC_HOLIDAYS.items():
+        lookup.setdefault(holiday_key, holiday_name)
+    for holiday_key, holiday_name in _build_lunar_public_holidays_for_year(date.today().year).items():
         lookup.setdefault(holiday_key, holiday_name)
     return lookup
 class EmployeeDashboardService:
