@@ -60,10 +60,26 @@ class EmployeeDashboardService:
     @staticmethod
     def get_leave_balance(employee_id: int, current_year: int):
         usage = EmployeeLeaveUsage.query.filter_by(employee_id=employee_id, year=current_year).first()
-        if usage:
+        if not usage:
+            usage = EmployeeLeaveUsage(
+                employee_id=employee_id,
+                year=current_year,
+                total_days=12,
+                used_days=0,
+                remaining_days=12,
+            )
+            db.session.add(usage)
+            db.session.commit()
             usage.update_balance()
             return usage
-        return None
+
+        if usage.total_days is None or int(usage.total_days) <= 0:
+            usage.total_days = 12
+        if usage.used_days is None or int(usage.used_days) < 0:
+            usage.used_days = 0
+        usage.update_balance()
+        db.session.commit()
+        return usage
 
     @staticmethod
     def get_latest_salary(employee_id: int):
@@ -749,7 +765,8 @@ def leave_request():
         flash("Không tìm thấy hồ sơ nhân viên", "danger")
         return redirect(url_for("employee.dashboard"))
 
-    usage = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
+    now = parse_simulated_time({})
+    usage = EmployeeDashboardService.get_leave_balance(employee.id, now.year)
     leave_types = _ensure_leave_types()
     leave_type_by_id = {t.id: t for t in leave_types}
     annual_type = next((t for t in leave_types if t.name == "Nghỉ phép năm"), None)
@@ -882,7 +899,7 @@ def leave_request():
         return redirect(url_for("employee.leave_request"))
 
     requests = LeaveRequest.query.filter_by(employee_id=employee.id).order_by(LeaveRequest.created_at.desc()).all()    
-    today_holiday = Holiday.query.filter_by(date=date.today()).first()
+    today_holiday = Holiday.query.filter_by(date=now.date()).first()
 
     return render_template(
         "employee/leave.html",
@@ -890,6 +907,8 @@ def leave_request():
         leave_types=leave_types,
         requests=requests,
         usage=usage,
+        current_year=now.year,
+        now=now,
         annual_type_id=annual_type.id if annual_type else None,
         holiday_type_id=holiday_type.id if holiday_type else None,
         personal_subtypes=PERSONAL_SUBTYPES,

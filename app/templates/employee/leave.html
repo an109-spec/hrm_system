@@ -7,6 +7,7 @@
 {% block content %}
 <section class="emp-card">
   <h3>🏖️ Tổng quan hạn mức phép năm {{ usage.year if usage else current_year }}</h3>
+  <p id="leave-live-time" style="font-weight:600;color:#334155;"></p>
   <div class="emp-grid emp-grid-3">
     <div>
       <h4>Tổng phép</h4>
@@ -116,6 +117,37 @@
 </section>
 <script>
   (function() {
+
+    const SHARED_SIM_TIME_KEY = "hrm_simulated_now";
+    const timeEl = document.getElementById("leave-live-time");
+    let simulatedNow = (() => {
+      const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
+      if (!raw) return new Date("{{ now.isoformat() if now else '' }}");
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? new Date("{{ now.isoformat() if now else '' }}") : parsed;
+    })();
+
+    function toLocalISO(dateObj) {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const day = String(dateObj.getDate()).padStart(2, "0");
+      const hour = String(dateObj.getHours()).padStart(2, "0");
+      const minute = String(dateObj.getMinutes()).padStart(2, "0");
+      const second = String(dateObj.getSeconds()).padStart(2, "0");
+      return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+    }
+
+    function renderLiveTime() {
+      const days = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
+      timeEl.textContent = `🕒 ${simulatedNow.toLocaleTimeString("vi-VN")} - ${days[simulatedNow.getDay()]}, ${simulatedNow.toLocaleDateString("vi-VN")}`;
+      localStorage.setItem(SHARED_SIM_TIME_KEY, toLocalISO(simulatedNow));
+    }
+
+    renderLiveTime();
+    setInterval(function() {
+      simulatedNow = new Date(simulatedNow.getTime() + 1000);
+      renderLiveTime();
+    }, 1000);
     const leaveSelect = document.getElementById("leave_type_select");
     const personalWrap = document.getElementById("personal_subtype_wrap");
     const personalSelect = document.getElementById("personal_subtype");

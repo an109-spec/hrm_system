@@ -3,6 +3,7 @@ from app.extensions.db import db
 from app.models.user import User
 from app.models.role import Role
 from app.models.employee import Employee
+from app.models.leave_usage import EmployeeLeaveUsage
 from datetime import date
 app = create_app()
 
@@ -50,7 +51,7 @@ with app.app_context():
             "phone": "0999999999",
         },
     ]
-
+    employee_profiles = {}
     for u in users_seed:
         user = User.query.filter_by(username=u["username"]).first()
 
@@ -77,10 +78,39 @@ with app.app_context():
             )
 
             db.session.add(employee)
+            db.session.flush()
+            employee_profiles[u["username"]] = employee
         else:
             user.email = u["email"]
             user.role_id = role_map[u["role"]].id
+            employee = Employee.query.filter_by(user_id=user.id).first()
+            if employee:
+                employee_profiles[u["username"]] = employee
 
+    manager_emp = employee_profiles.get("manager")
+    employee_emp = employee_profiles.get("employee")
+    if manager_emp and employee_emp:
+        employee_emp.manager_id = manager_emp.id
+
+    current_year = date.today().year
+    for username in ("manager", "employee"):
+        profile = employee_profiles.get(username)
+        if not profile:
+            continue
+        usage = EmployeeLeaveUsage.query.filter_by(
+            employee_id=profile.id,
+            year=current_year,
+        ).first()
+        if not usage:
+            db.session.add(
+                EmployeeLeaveUsage(
+                    employee_id=profile.id,
+                    year=current_year,
+                    total_days=12,
+                    used_days=0,
+                    remaining_days=12,
+                )
+            )
     db.session.commit()
 
     print("------ ACCOUNTS ------")
