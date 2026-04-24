@@ -33,6 +33,9 @@ class LeaveRequest(BaseModel):
     to_date = db.Column(db.Date, nullable=False)
     
     reason = db.Column(db.Text)
+    document_url = db.Column(db.String(500), nullable=True)
+    subtype = db.Column(db.String(50), nullable=True)
+    relation = db.Column(db.String(50), nullable=True)    
     
     # Trạng thái đơn: Pending (Chờ), Approved (Duyệt), Rejected (Từ chối)
     status = db.Column(
@@ -59,3 +62,16 @@ class LeaveRequest(BaseModel):
 
     def __repr__(self):
         return f"<LeaveRequest Emp:{self.employee_id} From:{self.from_date} To:{self.to_date}>"
+
+
+class Holiday(db.Model):
+    __tablename__ = "holidays"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    date = db.Column(db.Date, nullable=False, unique=True, index=True)
+    is_paid = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    is_recurring = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    def __repr__(self):
+        return f"<Holiday {self.name} {self.date}>"

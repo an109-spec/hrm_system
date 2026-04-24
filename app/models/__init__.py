@@ -7,6 +7,7 @@ from app.models.base import BaseModel
 from app.models.role import Role
 from app.models.system import SystemSetting
 from app.models.leave import LeaveType
+from app.models.leave import Holiday
 from app.models.allowance import AllowanceType
 from app.models.attendance import AttendanceStatus
 
@@ -39,6 +40,7 @@ __all__ = [
     'AttendanceStatus',
     'Attendance',
     'LeaveType',
+    'Holiday',
     'LeaveRequest',
     'EmployeeLeaveUsage',
     'Contract',

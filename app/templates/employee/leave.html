@@ -21,6 +21,9 @@
       <p class="number">{{ usage.remaining_days if usage else 0 }}</p>
     </div>
   </div>
+  {% if usage and usage.remaining_days == 0 %}
+  <p style="color:#b91c1c;font-weight:600;">Bạn đã dùng hết phép năm.</p>
+  {% endif %}
   {% if usage %}
   <div class="progress-wrap">
     <div class="progress-bar" style="width: {{ (usage.used_days / usage.total_days * 100) if usage.total_days else 0 }}%"></div>
@@ -31,12 +34,22 @@
 
 <section class="emp-card">
   <h3>📤 Đăng ký nghỉ phép mới</h3>
-  <form method="post" class="emp-form-grid">
+  {% if today_holiday %}
+  <p style="color:#166534;font-weight:600;">🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}.</p>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" class="emp-form-grid">
     <label>Loại nghỉ
-      <select name="leave_type_id" required>
+      <select id="leave_type_select" name="leave_type_id" required>
         <option value="">-- Chọn loại nghỉ --</option>
         {% for t in leave_types %}
-          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% set is_annual_disabled = annual_type_id and t.id == annual_type_id and usage and usage.remaining_days <= 0 %}
+          {% set is_holiday_disabled = holiday_type_id and t.id == holiday_type_id %}
+          <option
+            value="{{ t.id }}"
+            {% if is_annual_disabled or is_holiday_disabled %}disabled{% endif %}
+          >
+            {{ t.name }}{% if is_annual_disabled %} (Đã hết phép){% endif %}{% if is_holiday_disabled %} (Tự động hệ thống){% endif %}
+          </option>
         {% endfor %}
       </select>
     </label>
@@ -48,6 +61,26 @@
     </label>
     <label>Lý do
       <textarea name="reason" rows="3" required></textarea>
+    </label>
+    <label id="personal_subtype_wrap" style="display:none;">Loại lý do việc riêng
+      <select name="personal_subtype" id="personal_subtype">
+        <option value="">-- Chọn lý do --</option>
+        {% for k, v in personal_subtypes.items() %}
+        <option value="{{ k }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label id="relation_wrap" style="display:none;">Quan hệ (áp dụng tang lễ)
+      <select name="relation" id="relation">
+        <option value="">-- Chọn quan hệ --</option>
+        {% for r in allowed_funeral_relations %}
+        <option value="{{ r }}">{{ r|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label id="document_wrap" style="display:none;">Tải giấy tờ (PDF/Ảnh)
+      <input id="leave_document" type="file" name="leave_document" accept=".pdf,.png,.jpg,.jpeg">
+      <small id="document_preview"></small>
     </label>
     <p>Người duyệt: {{ employee.manager.full_name if employee.manager else 'Chưa có quản lý trực tiếp' }}</p>
     <button class="btn btn-primary" type="submit">📤 Gửi đơn xin nghỉ</button>
@@ -81,4 +114,63 @@
     </tbody>
   </table>
 </section>
+<script>
+  (function() {
+    const leaveSelect = document.getElementById("leave_type_select");
+    const personalWrap = document.getElementById("personal_subtype_wrap");
+    const personalSelect = document.getElementById("personal_subtype");
+    const relationWrap = document.getElementById("relation_wrap");
+    const relationSelect = document.getElementById("relation");
+    const documentWrap = document.getElementById("document_wrap");
+    const documentInput = document.getElementById("leave_document");
+    const preview = document.getElementById("document_preview");
+
+    function resetOptionalFields() {
+      personalSelect.value = "";
+      relationSelect.value = "";
+      documentInput.value = "";
+      preview.textContent = "";
+    }
+
+    function toggleLeaveFields() {
+      const selectedText = leaveSelect.options[leaveSelect.selectedIndex]?.text || "";
+      const isSick = selectedText.includes("Nghỉ ốm");
+      const isPersonal = selectedText.includes("Nghỉ việc riêng có lương");
+      const isMaternity = selectedText.includes("Nghỉ thai sản");
+
+      personalWrap.style.display = isPersonal ? "block" : "none";
+      relationWrap.style.display = "none";
+      documentWrap.style.display = (isSick || isPersonal || isMaternity) ? "block" : "none";
+      documentInput.required = isSick || isPersonal || isMaternity;
+
+      if (!isPersonal) {
+        personalSelect.value = "";
+      }
+      if (!isSick && !isPersonal && !isMaternity) {
+        documentInput.value = "";
+        preview.textContent = "";
+      }
+    }
+
+    leaveSelect.addEventListener("change", function() {
+      resetOptionalFields();
+      toggleLeaveFields();
+    });
+
+    personalSelect.addEventListener("change", function() {
+      relationWrap.style.display = personalSelect.value === "PERSONAL_FUNERAL" ? "block" : "none";
+      relationSelect.required = personalSelect.value === "PERSONAL_FUNERAL";
+      if (personalSelect.value !== "PERSONAL_FUNERAL") {
+        relationSelect.value = "";
+      }
+    });
+
+    documentInput.addEventListener("change", function() {
+      const file = documentInput.files && documentInput.files[0];
+      preview.textContent = file ? `Đã chọn: ${file.name}` : "";
+    });
+
+    toggleLeaveFields();
+  })();
+</script>
 {% endblock %}

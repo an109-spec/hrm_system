@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import os
-
+import uuid
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -20,6 +20,7 @@ from app.models import (
     Notification,
     Salary,
     User,
+    Holiday,
 )
 from app.modules.attendance.overtime_service import OvertimeService
 from app.common.exceptions import ValidationError
@@ -133,6 +134,56 @@ def _labelize_enum(value: str | None) -> str:
     }
     return labels.get(value, value)
 
+LEAVE_TYPE_CONFIGS = [
+    {"name": "Nghỉ phép năm", "is_paid": True},
+    {"name": "Nghỉ ốm", "is_paid": True},
+    {"name": "Nghỉ không lương", "is_paid": False},
+    {"name": "Nghỉ lễ", "is_paid": True},
+    {"name": "Nghỉ việc riêng có lương", "is_paid": True},
+    {"name": "Nghỉ thai sản", "is_paid": True},
+]
+
+PERSONAL_SUBTYPES = {
+    "PERSONAL_MARRIAGE": "Kết hôn",
+    "PERSONAL_FUNERAL": "Tang lễ",
+}
+
+ALLOWED_FUNERAL_RELATIONS = {"cha", "mẹ", "vợ", "chồng", "con"}
+
+
+def _ensure_leave_types() -> list[LeaveType]:
+    changed = False
+    for cfg in LEAVE_TYPE_CONFIGS:
+        existed = LeaveType.query.filter_by(name=cfg["name"]).first()
+        if existed:
+            if existed.is_paid != cfg["is_paid"]:
+                existed.is_paid = cfg["is_paid"]
+                changed = True
+            continue
+        db.session.add(LeaveType(name=cfg["name"], is_paid=cfg["is_paid"]))
+        changed = True
+    if changed:
+        db.session.commit()
+    return LeaveType.query.order_by(LeaveType.id.asc()).all()
+
+
+def _save_leave_document(file_storage, category: str) -> str:
+    if not file_storage or not file_storage.filename:
+        raise ValidationError("Vui lòng tải lên giấy tờ đính kèm.")
+
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+    allowed_ext = {"pdf", "png", "jpg", "jpeg"}
+    if ext not in allowed_ext:
+        raise ValidationError("Chỉ chấp nhận file PDF hoặc ảnh (png/jpg/jpeg).")
+
+    folder = os.path.join("app", "static", "uploads", "leave", category)
+    os.makedirs(folder, exist_ok=True)
+    filename = secure_filename(file_storage.filename)
+    unique_name = f"{uuid.uuid4().hex}_{filename}"
+    abs_path = os.path.join(folder, unique_name)
+    file_storage.save(abs_path)
+    return f"/static/uploads/leave/{category}/{unique_name}"
+
 @employee_bp.route("/dashboard")
 def dashboard():
     guard = _ensure_login()
@@ -155,7 +206,7 @@ def dashboard():
     leave_balance = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
     latest_salary = EmployeeDashboardService.get_latest_salary(employee.id)
     notifications = EmployeeDashboardService.get_notifications(user.id if user else 0)
-
+    today_holiday = Holiday.query.filter_by(date=now.date()).first()
     return render_template(
         "employee/dashboard.html",
         employee=employee,
@@ -165,6 +216,7 @@ def dashboard():
         notifications=notifications,
         now=now,
         attendance_history=attendance_history,
+        today_holiday=today_holiday,
     )
 
 
@@ -698,13 +750,24 @@ def leave_request():
         return redirect(url_for("employee.dashboard"))
 
     usage = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
+    leave_types = _ensure_leave_types()
+    leave_type_by_id = {t.id: t for t in leave_types}
+    annual_type = next((t for t in leave_types if t.name == "Nghỉ phép năm"), None)
+    holiday_type = next((t for t in leave_types if t.name == "Nghỉ lễ"), None)
 
     if request.method == "POST":
         leave_type_id = request.form.get("leave_type_id", type=int)
         from_date = request.form.get("from_date")
         to_date = request.form.get("to_date")
         reason = request.form.get("reason", "").strip()
+        personal_subtype = request.form.get("personal_subtype", "").strip()
+        relation = request.form.get("relation", "").strip().lower()
+        leave_document = request.files.get("leave_document")
 
+        selected_type = leave_type_by_id.get(leave_type_id)
+        if not selected_type:
+            flash("❌ Loại nghỉ không hợp lệ.", "danger")
+            return redirect(url_for("employee.leave_request"))
         try:
             from_obj = datetime.strptime(from_date, "%Y-%m-%d").date()
             to_obj = datetime.strptime(to_date, "%Y-%m-%d").date()
@@ -717,16 +780,86 @@ def leave_request():
             return redirect(url_for("employee.leave_request"))
 
         requested_days = (to_obj - from_obj).days + 1
-        if usage and Decimal(str(usage.remaining_days)) < Decimal(requested_days):
-            flash("❌ Bạn không đủ ngày phép còn lại.", "danger")
+        if selected_type.name == "Nghỉ lễ":
+            flash("❌ Nghỉ lễ do hệ thống tự động xử lý, không cần gửi đơn.", "danger")
             return redirect(url_for("employee.leave_request"))
+        if selected_type.name == "Nghỉ phép năm":
+            remaining_days = Decimal(str(usage.remaining_days)) if usage else Decimal("0")
+            if remaining_days <= 0:
+                flash("❌ Bạn đã dùng hết phép năm.", "danger")
+                return redirect(url_for("employee.leave_request"))
+            if remaining_days < Decimal(requested_days):
+                flash("❌ Bạn không đủ ngày phép còn lại.", "danger")
+                return redirect(url_for("employee.leave_request"))
 
+        document_url = None
+        subtype = None
+        normalized_relation = None
+
+        if selected_type.name == "Nghỉ ốm":
+            try:
+                document_url = _save_leave_document(leave_document, "sick")
+            except ValidationError as e:
+                flash(f"❌ {str(e)}", "danger")
+                return redirect(url_for("employee.leave_request"))
+
+        if selected_type.name == "Nghỉ việc riêng có lương":
+            if personal_subtype not in PERSONAL_SUBTYPES:
+                flash("❌ Vui lòng chọn lý do nghỉ việc riêng (kết hôn/tang lễ).", "danger")
+                return redirect(url_for("employee.leave_request"))
+            if requested_days > 3:
+                flash("❌ Nghỉ việc riêng có lương chỉ tối đa 3 ngày.", "danger")
+                return redirect(url_for("employee.leave_request"))
+            subtype = personal_subtype
+
+            if personal_subtype == "PERSONAL_FUNERAL":
+                if relation not in ALLOWED_FUNERAL_RELATIONS:
+                    flash("❌ Tang lễ chỉ áp dụng cho cha/mẹ/vợ/chồng/con.", "danger")
+                    return redirect(url_for("employee.leave_request"))
+                normalized_relation = relation
+
+            try:
+                document_url = _save_leave_document(leave_document, "personal")
+            except ValidationError as e:
+                flash(f"❌ {str(e)}", "danger")
+                return redirect(url_for("employee.leave_request"))
+
+        if selected_type.name == "Nghỉ thai sản":
+            if (employee.gender or "").lower() != "female":
+                flash("❌ Nghỉ thai sản chỉ áp dụng cho nhân viên nữ.", "danger")
+                return redirect(url_for("employee.leave_request"))
+            if requested_days > 180:
+                flash("❌ Nghỉ thai sản tối đa 180 ngày.", "danger")
+                return redirect(url_for("employee.leave_request"))
+
+            overlap = (
+                LeaveRequest.query.filter(
+                    LeaveRequest.employee_id == employee.id,
+                    LeaveRequest.is_deleted.is_(False),
+                    LeaveRequest.status.in_(["pending", "approved"]),
+                    LeaveRequest.from_date <= to_obj,
+                    LeaveRequest.to_date >= from_obj,
+                )
+                .first()
+            )
+            if overlap:
+                flash("❌ Khoảng thời gian nghỉ thai sản không được trùng với đơn nghỉ khác.", "danger")
+                return redirect(url_for("employee.leave_request"))
+
+            try:
+                document_url = _save_leave_document(leave_document, "maternity")
+            except ValidationError as e:
+                flash(f"❌ {str(e)}", "danger")
+                return redirect(url_for("employee.leave_request"))
         req = LeaveRequest(
             employee_id=employee.id,
             leave_type_id=leave_type_id,
             from_date=from_obj,
             to_date=to_obj,
             reason=reason,
+            document_url=document_url,
+            subtype=subtype,
+            relation=normalized_relation,
             approved_by=employee.manager_id,
         )
         db.session.add(req)
@@ -748,14 +881,20 @@ def leave_request():
         flash("✅ Đã gửi đơn nghỉ phép thành công.", "success")
         return redirect(url_for("employee.leave_request"))
 
-    leave_types = LeaveType.query.order_by(LeaveType.name.asc()).all()
-    requests = LeaveRequest.query.filter_by(employee_id=employee.id).order_by(LeaveRequest.created_at.desc()).all()
+    requests = LeaveRequest.query.filter_by(employee_id=employee.id).order_by(LeaveRequest.created_at.desc()).all()    
+    today_holiday = Holiday.query.filter_by(date=date.today()).first()
+
     return render_template(
         "employee/leave.html",
         employee=employee,
         leave_types=leave_types,
         requests=requests,
         usage=usage,
+        annual_type_id=annual_type.id if annual_type else None,
+        holiday_type_id=holiday_type.id if holiday_type else None,
+        personal_subtypes=PERSONAL_SUBTYPES,
+        today_holiday=today_holiday,
+        allowed_funeral_relations=sorted(ALLOWED_FUNERAL_RELATIONS),
         status_badge=_status_badge,
     )
 

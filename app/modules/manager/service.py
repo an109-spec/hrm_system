@@ -159,7 +159,8 @@ class ManagerService:
             year=leave.from_date.year,
         ).first()
 
-        if usage:
+        is_annual_leave = bool(leave.leave_type and leave.leave_type.name == "Nghỉ phép năm")
+        if usage and is_annual_leave:
             days = (leave.to_date - leave.from_date).days + 1
             usage.used_days = Decimal(usage.used_days or 0) + Decimal(days)
             usage.update_balance()
