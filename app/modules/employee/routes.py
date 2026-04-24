@@ -97,6 +97,15 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     return max(total_hours, Decimal("0"))
 
     return current_time
+
+def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
+    hours, minutes = divmod(total_minutes, 60)
+    if hours > 0 and minutes > 0:
+        return f"{hours} giờ {minutes} phút"
+    if hours > 0:
+        return f"{hours} giờ"
+    return f"{minutes} phút"
+
 def _status_badge(status: str) -> tuple[str, str]:
     mapping = {
         "pending": ("⏳", "Chờ duyệt"),
@@ -369,7 +378,7 @@ def check_in_out():
             if early_minutes > 0:
                 msg += f" • Bạn đến sớm {early_minutes} phút, chúc bạn 1 ngày làm việc hiệu quả"
             elif late_minutes > 0:
-                msg += f" • Muộn {late_minutes} phút"
+                msg += f" • Muộn {_format_minutes_as_hours_minutes(late_minutes)}"
 
             return jsonify({
                 "toast": True,
