@@ -6,6 +6,7 @@ th,td { border:1px solid var(--border); padding:10px; text-align:center; }
 th { background:var(--primary); color:#fff; }
 button { border:1px solid var(--border); background:#fff; padding:6px 10px; border-radius:6px; cursor:pointer; }
 .modal { position:fixed; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; }
+.modal[hidden] { display:none !important; }
 .modal-content { width:min(700px,95vw); background:#fff; border-radius:10px; padding:16px; position:relative; }
 .close { position:absolute; right:10px; top:10px; border:none; font-size:20px; background:transparent; }
 textarea { width:100%; min-height:80px; margin-top:10px; border:1px solid var(--border); border-radius:6px; padding:8px; }

@@ -1,3 +1,5 @@
+from sqlalchemy import or_
+
 from app import create_app
 from app.extensions.db import db
 from app.models.user import User
@@ -61,7 +63,9 @@ with app.app_context():
     ]
     employee_profiles = {}
     for u in users_seed:
-        user = User.query.filter_by(username=u["username"]).first()
+        user = User.query.filter(
+            or_(User.username == u["username"], User.email == u["email"])
+        ).first()
 
         if not user:
             user = User(
@@ -89,11 +93,26 @@ with app.app_context():
             db.session.flush()
             employee_profiles[u["username"]] = employee
         else:
+            user.username = u["username"]
             user.email = u["email"]
             user.role_id = role_map[u["role"]].id
             employee = Employee.query.filter_by(user_id=user.id).first()
-            if employee:
-                employee_profiles[u["username"]] = employee
+            if not employee:
+                employee = Employee(
+                    user_id=user.id,
+                    full_name=u["full_name"],
+                    phone=u["phone"],
+                    dob=date(2000, 1, 1),
+                    gender="male",
+                    hire_date=date(2024, 1, 1),
+                    working_status="working"
+                )
+                db.session.add(employee)
+                db.session.flush()
+            else:
+                employee.full_name = u["full_name"]
+                employee.phone = u["phone"]
+            employee_profiles[u["username"]] = employee
 
     manager_emp = employee_profiles.get("manager")
     employee_test = employee_profiles.get("employee")
