@@ -48,24 +48,52 @@
     {% if current_user %}
     <aside class="sidebar-aside">
         <nav class="vertical-nav">
-            <a href="{{ url_for('employee.dashboard') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.dashboard' }}">
-                <i class="fas fa-chart-line"></i> Tổng quan hệ thống
-            </a>
-            <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
-                <i class="fas fa-user-shield"></i> Thông tin cá nhân
-            </a>
-            <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
-                <i class="fas fa-users"></i> Hồ sơ nhân viên
-            </a>
-            <a href="{{ url_for('employee.attendance') }}" class="nav-link">
-                <i class="fas fa-calendar-check"></i> Chấm công
-            </a>
-            <a href="{{ url_for('employee.leave_request') }}" class="nav-link">
-                <i class="fas fa-envelope-open-text"></i> Nghỉ phép
-            </a>
-            <a href="{{ url_for('employee.payslip') }}" class="nav-link">
-                <i class="fas fa-money-check-alt"></i> Lương
-            </a>
+            {% set role_name = (current_user.role.name|lower) if current_user.role else '' %}
+            {% if role_name == 'manager' %}
+                <a href="{{ url_for('manager.dashboard_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.dashboard_page' }}">
+                    <i class="fas fa-chart-line"></i> Tổng quan hệ thống
+                </a>
+                <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
+                    <i class="fas fa-users"></i> Nhân viên phòng ban
+                </a>
+                <a href="{{ url_for('manager.leave_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.leave_page' }}">
+                    <i class="fas fa-envelope-open-text"></i> Duyệt nghỉ phép
+                </a>
+                <a href="{{ url_for('manager.attendance_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.attendance_page' }}">
+                    <i class="fas fa-calendar-check"></i> Chấm công phòng ban
+                </a>
+                <a href="{{ url_for('manager.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.payroll_page' }}">
+                    <i class="fas fa-money-check-alt"></i> Lương phòng ban
+                </a>
+                <a href="{{ url_for('manager.contracts_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.contracts_page' }}">
+                    <i class="fas fa-file-contract"></i> Hợp đồng
+                </a>
+                <a href="{{ url_for('manager.notifications_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.notifications_page' }}">
+                    <i class="fas fa-bell"></i> Thông báo
+                </a>
+                <a href="{{ url_for('manager.profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.profile_page' }}">
+                    <i class="fas fa-user-circle"></i> Hồ sơ cá nhân
+                </a>
+            {% else %}
+                <a href="{{ url_for('employee.dashboard') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.dashboard' }}">
+                    <i class="fas fa-chart-line"></i> Tổng quan hệ thống
+                </a>
+                <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
+                    <i class="fas fa-user-shield"></i> Thông tin cá nhân
+                </a>
+                <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
+                    <i class="fas fa-users"></i> Hồ sơ nhân viên
+                </a>
+                <a href="{{ url_for('employee.attendance') }}" class="nav-link">
+                    <i class="fas fa-calendar-check"></i> Chấm công
+                </a>
+                <a href="{{ url_for('employee.leave_request') }}" class="nav-link">
+                    <i class="fas fa-envelope-open-text"></i> Nghỉ phép
+                </a>
+                <a href="{{ url_for('employee.payslip') }}" class="nav-link">
+                    <i class="fas fa-money-check-alt"></i> Lương
+                </a>
+            {% endif %}
         </nav>
     </aside>
     {% endif %}
