@@ -1,21 +1,39 @@
 from datetime import datetime
-from flask import session
-def parse_simulated_time(payload: dict) -> datetime:
-    sim_time = payload.get("simulated_now")
+from flask import has_request_context, request, session
 
-    if sim_time:
-        dt = datetime.fromisoformat(sim_time.replace("Z", "+00:00"))
+def _normalize_datetime(raw_value: str | None) -> datetime | None:
+    if not raw_value:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=None)
 
-        # 🔥 CHUẨN HOÁ: luôn bỏ timezone
-        dt = dt.replace(tzinfo=None)
+
+def parse_simulated_time(payload: dict | None = None) -> datetime:
+    payload = payload or {}
+
+    # Ưu tiên dữ liệu gửi trực tiếp từ API/body JSON
+    dt = _normalize_datetime(payload.get("simulated_now"))
+
+    # Hỗ trợ các page GET truyền simulated_now qua query string
+    if not dt and has_request_context():
+        dt = _normalize_datetime(request.args.get("simulated_now"))
+
+    # Hỗ trợ form POST (nếu có)
+    if not dt and has_request_context():
+        dt = _normalize_datetime(request.form.get("simulated_now"))
+
+    if dt:
+
 
         session["simulated_now"] = dt.isoformat()
         return dt
 
-    session_time = session.get("simulated_now")
-    if session_time:
-        dt = datetime.fromisoformat(session_time)
-        dt = dt.replace(tzinfo=None)
+    session_time = session.get("simulated_now") if has_request_context() else None
+    dt = _normalize_datetime(session_time)
+    if dt:
         return dt
 
     return datetime.now()
