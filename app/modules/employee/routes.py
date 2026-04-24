@@ -27,7 +27,12 @@ from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
 from . import employee_bp
-
+VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
+    "01-01": "Tết Dương lịch",
+    "04-30": "Ngày Giải phóng miền Nam",
+    "05-01": "Quốc tế Lao động",
+    "09-02": "Quốc khánh",
+}
 
 def _current_user() -> User | None:
     user_id = session.get("user_id")
@@ -51,11 +56,12 @@ def _ensure_login():
     return None
 
 def _get_holiday_for_date(target_date: date) -> Holiday | None:
+    default_holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(target_date.strftime("%m-%d"))
     exact_holiday = Holiday.query.filter_by(date=target_date).first()
     if exact_holiday:
         return exact_holiday
 
-    return (
+    recurring_holiday = (
         Holiday.query.filter(
             Holiday.is_recurring.is_(True),
             db.extract("month", Holiday.date) == target_date.month,
@@ -64,14 +70,27 @@ def _get_holiday_for_date(target_date: date) -> Holiday | None:
         .order_by(Holiday.id.asc())
         .first()
     )
+    if recurring_holiday:
+        return recurring_holiday
 
+    if default_holiday_name:
+        return Holiday(
+            name=default_holiday_name,
+            date=target_date,
+            is_paid=True,
+            is_recurring=True,
+        )
+
+    return None
 
 def _get_holiday_lookup() -> dict[str, str]:
-    return {
+    lookup = {
         holiday.date.strftime("%m-%d"): holiday.name
         for holiday in Holiday.query.order_by(Holiday.is_recurring.desc(), Holiday.id.asc()).all()
     }
-
+    for holiday_key, holiday_name in VN_FIXED_PUBLIC_HOLIDAYS.items():
+        lookup.setdefault(holiday_key, holiday_name)
+    return lookup
 class EmployeeDashboardService:
     @staticmethod
     def get_today_attendance(employee_id: int, target_date: date | None = None):
