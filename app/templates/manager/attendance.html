@@ -6,6 +6,10 @@
 {% block content %}
 <h2 class="page-title">🕒 Theo dõi chấm công hôm nay</h2>
 <div id="attendance-alert" class="alert-box" hidden></div>
+<div class="actions">
+  <span id="manager-clock"></span>
+  <button id="manager-attendance-btn" class="btn-reminder">🔳 QUÉT QR CHECK-IN</button>
+</div>
 <div class="filters">
   <button data-filter="ALL" class="active">Tất cả</button>
   <button data-filter="ON_TIME">🟢 Đúng giờ</button>
@@ -23,10 +27,18 @@
 <div class="actions">
   <button id="send-reminder" class="btn-reminder">🔔 Gửi nhắc nhở</button>
 </div>
-
+<div id="manager-qr-modal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.8);">
+  <div class="modal-content" style="background:#fff; margin:10% auto; padding:20px; width:90%; max-width:500px; border-radius:15px; text-align:center;">
+    <h3>Quét mã QR định danh</h3>
+    <div id="manager-qr-reader" style="width:100%; min-height:300px; background:#000;"></div>
+    <button id="manager-close-qr" class="btn-reminder" style="margin-top:15px;">Đóng</button>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/manager/attendance.js') }}"></script>
 {% endblock %}

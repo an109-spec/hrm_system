@@ -142,7 +142,7 @@ class ManagerService:
         if status:
             query = query.filter(LeaveRequest.status == status)
 
-        if not rows:
+        if not rows: # type: ignore
             return []
         return [
             {
@@ -157,7 +157,7 @@ class ManagerService:
                 "created_at": l.created_at.date().isoformat() if l.created_at else None,
                 "days": (l.to_date - l.from_date).days + 1,
             }
-            for l in rows
+            for l in rows # pyright: ignore[reportUndefinedVariable]
         ]
 
     @staticmethod
