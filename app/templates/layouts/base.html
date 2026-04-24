@@ -12,16 +12,22 @@
 </head>
 
 <body>
-
+{% set role_name = (current_user.role.name|lower) if (current_user and current_user.role) else '' %}
 <header class="app-header">
   <div class="header-left">
     {% if current_user %}
-      <span class="brand">Cổng nhân viên</span>
+      <span class="brand">
+        {% if role_name == 'admin' %}
+          Tổng quan hệ thống của quản trị viên
+        {% else %}
+          Cổng nhân viên
+        {% endif %}
+      </span>
     {% endif %}
   </div>
 
   <div class="header-right">
-    {% if current_user %}
+    {% if current_user and role_name != 'admin' %}
           <div class="avatar-sm">
         {% if avatar_url %}
           <img src="{{ avatar_url }}" alt="avatar" width="32" height="32" style="border-radius:50%; object-fit:cover;">
@@ -48,7 +54,6 @@
     {% if current_user %}
     <aside class="sidebar-aside">
         <nav class="vertical-nav">
-            {% set role_name = (current_user.role.name|lower) if current_user.role else '' %}
             {% if role_name == 'manager' %}
                 <a href="{{ url_for('manager.dashboard_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.dashboard_page' }}">
                     <i class="fas fa-chart-line"></i> Tổng quan hệ thống
