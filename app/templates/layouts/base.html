@@ -54,7 +54,7 @@
             <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
                 <i class="fas fa-user-shield"></i> Thông tin cá nhân
             </a>
-            <a href="{{ url_for('employee.dashboard') }}" class="nav-link">
+            <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
                 <i class="fas fa-users"></i> Hồ sơ nhân viên
             </a>
             <a href="{{ url_for('employee.attendance') }}" class="nav-link">

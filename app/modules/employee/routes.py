@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import os
 
@@ -11,8 +11,10 @@ from app.extensions.db import db
 from app.models import (
     Attendance,
     Complaint,
+    Contract,
     Employee,
     EmployeeLeaveUsage,
+    HistoryLog,
     LeaveRequest,
     LeaveType,
     Notification,
@@ -113,6 +115,23 @@ def _status_badge(status: str) -> tuple[str, str]:
         "rejected": ("❌", "Từ chối"),
     }
     return mapping.get(status, ("ℹ️", status))
+
+def _labelize_enum(value: str | None) -> str:
+    if not value:
+        return "Chưa cập nhật"
+    labels = {
+        "probation": "Thử việc",
+        "permanent": "Chính thức",
+        "intern": "Thực tập",
+        "contract": "Hợp đồng",
+        "working": "Đang làm việc",
+        "on_leave": "Tạm nghỉ",
+        "resigned": "Đã nghỉ việc",
+        "male": "Nam",
+        "female": "Nữ",
+        "other": "Khác",
+    }
+    return labels.get(value, value)
 
 @employee_bp.route("/dashboard")
 def dashboard():
@@ -223,6 +242,106 @@ def profile():
         complaints=complaints,
     )
 
+@employee_bp.route("/staff-profile")
+def staff_profile():
+    guard = _ensure_login()
+    if guard:
+        return guard
+
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
+        return redirect(url_for("employee.dashboard"))
+
+    latest_contract = (
+        Contract.query.filter_by(employee_id=employee.id)
+        .order_by(Contract.start_date.desc(), Contract.created_at.desc())
+        .first()
+    )
+    history_logs = (
+        HistoryLog.query.filter_by(employee_id=employee.id)
+        .order_by(HistoryLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    history_events = []
+    if employee.hire_date:
+        history_events.append(
+            {
+                "time": employee.hire_date,
+                "event": "🎉 Gia nhập công ty",
+                "detail": f"Vị trí: {employee.position.job_title if employee.position else 'Chưa có'}",
+                "source": "Employee + Position",
+            }
+        )
+    if user.created_at:
+        history_events.append(
+            {
+                "time": user.created_at,
+                "event": "🔐 Tạo tài khoản",
+                "detail": f"Username: {user.username}",
+                "source": "User",
+            }
+        )
+    if employee.updated_at:
+        history_events.append(
+            {
+                "time": employee.updated_at,
+                "event": "🔄 Cập nhật thông tin",
+                "detail": "Sửa đổi hồ sơ nhân sự",
+                "source": "Employee.updated_at",
+            }
+        )
+    if latest_contract and latest_contract.start_date:
+        history_events.append(
+            {
+                "time": latest_contract.start_date,
+                "event": "📝 Ký hợp đồng",
+                "detail": f"Mã HĐ: {latest_contract.contract_code}",
+                "source": "Contracts",
+            }
+        )
+    for log in history_logs:
+        history_events.append(
+            {
+                "time": log.created_at,
+                "event": f"📌 {log.action}",
+                "detail": log.description or "Không có mô tả",
+                "source": f"{log.entity_type or 'HistoryLog'}",
+            }
+        )
+    from datetime import timezone
+
+    def _event_sort_key(item):
+        event_time = item.get("time")
+
+        # 1. Convert về datetime
+        if isinstance(event_time, datetime):
+            dt = event_time
+        elif isinstance(event_time, date):
+            dt = datetime.combine(event_time, time.min)
+        else:
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+        # 2. FIX QUAN TRỌNG: normalize timezone
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+
+        return dt
+
+    history_events = sorted(history_events, key=_event_sort_key, reverse=True)[:20]
+
+    return render_template(
+        "employee/staff_profile.html",
+        employee=employee,
+        user=user,
+        latest_contract=latest_contract,
+        history_events=history_events,
+        enum_labelize=_labelize_enum,
+    )
 @employee_bp.route("/update-profile", methods=["POST"])
 def update_profile_ajax():
     guard = _ensure_login()
@@ -238,6 +357,15 @@ def update_profile_ajax():
         return jsonify({"error": "Không có dữ liệu"}), 400
 
     try:
+
+        dob = data.get("dob")
+        if dob:
+            employee.dob = datetime.strptime(dob, "%Y-%m-%d").date()
+
+        gender = data.get("gender")
+        if gender in {"male", "female", "other"}:
+            employee.gender = gender
+
         # Cập nhật thông tin
         employee.full_name = data.get("full_name", employee.full_name).strip()
         employee.phone = data.get("phone", employee.phone).strip()
@@ -323,7 +451,8 @@ def check_in_out():
 
         # normalize timezone
         if current_time.tzinfo is not None:
-            current_time = current_time.replace(tzinfo=None)
+            from datetime import timezone
+            current_time = current_time.astimezone(timezone.utc)
 
         session["simulated_now"] = current_time.isoformat()
 
