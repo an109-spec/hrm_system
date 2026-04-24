@@ -118,6 +118,12 @@ def dashboard():
     user = _current_user()
     now = parse_simulated_time({})
     attendance = EmployeeDashboardService.get_today_attendance(employee.id, now.date())
+    attendance_history = (
+        Attendance.query.filter_by(employee_id=employee.id)
+        .order_by(Attendance.date.desc())
+        .limit(45)
+        .all()
+    )
     leave_balance = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
     latest_salary = EmployeeDashboardService.get_latest_salary(employee.id)
     notifications = EmployeeDashboardService.get_notifications(user.id if user else 0)
@@ -130,6 +136,7 @@ def dashboard():
         latest_salary=latest_salary,
         notifications=notifications,
         now=now,
+        attendance_history=attendance_history,
     )
 
 

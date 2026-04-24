@@ -37,13 +37,13 @@
                 <p>
                     Trạng thái:
                     {% if attendance and not attendance.check_out %}
-                        <span class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
+                        <span id="attendance-status-label" class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
                             Đang làm việc
                         </span>
                     {% elif attendance and attendance.check_out %}
-                        <span class="status offline">Đã hoàn thành ca</span>
+                        <span id="attendance-status-label" class="status offline">Đã hoàn thành ca</span>
                     {% else %}
-                        <span class="status offline">Chưa vào ca</span>
+                        <span id="attendance-status-label" class="status offline">Chưa vào ca</span>
                     {% endif %}
                 </p>
             </div>
@@ -110,12 +110,31 @@
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const attendanceByDate = new Map([
+    {% if attendance %}
+    ["{{ attendance.date.isoformat() }}", {
+        hasAttendance: {{ 'true' if attendance.check_in else 'false' }},
+        hasCheckedOut: {{ 'true' if attendance.check_out else 'false' }},
+        checkIn: "{{ attendance.check_in.isoformat() if attendance.check_in else '' }}",
+        workingHours: {{ (attendance.working_hours or 0)|float }}
+    }],
+    {% endif %}
+    {% for a in attendance_history %}
+    ["{{ a.date.isoformat() }}", {
+        hasAttendance: {{ 'true' if a.check_in else 'false' }},
+        hasCheckedOut: {{ 'true' if a.check_out else 'false' }},
+        checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
+        workingHours: {{ (a.working_hours or 0)|float }}
+    }],
+    {% endfor %}
+]);
 const state = {
     now: readSharedSimTime(new Date("{{ now.isoformat() if now else '' }}")),
     hasAttendance: {{ 'true' if attendance else 'false' }},
     hasCheckedOut: {{ 'true' if attendance and attendance.check_out else 'false' }},
     checkIn: "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}",
     attendanceDate: "{{ attendance.date.isoformat() if attendance else '' }}",
+    workingHours: Number("{{ (attendance.working_hours or 0)|float if attendance else 0 }}"),
     pendingCheckoutWithoutOT: false,
 };
 
@@ -185,14 +204,27 @@ function dateKeyOf(date) {
 }
 
 function syncAttendanceStateByDate() {
-    const todayKey = dateKeyOf(getSimulatedDate());
-    if (state.attendanceDate && state.attendanceDate !== todayKey) {
+    const selectedDateKey = dateKeyOf(getSimulatedDate());
+    if (state.attendanceDate === selectedDateKey) return;
+
+    state.attendanceDate = selectedDateKey;
+    const record = attendanceByDate.get(selectedDateKey);
+
+    if (!record) {
         state.hasAttendance = false;
         state.hasCheckedOut = false;
         state.checkIn = "";
-        state.attendanceDate = todayKey;
+        state.workingHours = 0;
         renderAttendanceAction();
+        renderAttendanceStatus();
+        return;
     }
+    state.hasAttendance = Boolean(record.hasAttendance);
+    state.hasCheckedOut = Boolean(record.hasCheckedOut);
+    state.checkIn = record.checkIn || "";
+    state.workingHours = Number(record.workingHours || 0);
+    renderAttendanceAction();
+    renderAttendanceStatus();
 }
 function renderAttendanceAction() {
     const slot = document.getElementById("attendance-action-slot");
@@ -217,7 +249,22 @@ function renderAttendanceAction() {
     slot.innerHTML = `<div class="status-success">✅ ĐÃ HOÀN THÀNH</div>`;
 }
 
-const dbWorkingHours = Number("{{ '%.2f'|format(attendance.working_hours|float) if attendance else '0.00' }}");
+function renderAttendanceStatus() {
+    const statusEl = document.getElementById("attendance-status-label");
+    if (!statusEl) return;
+    if (!state.hasAttendance) {
+        statusEl.textContent = "Chưa vào ca";
+        statusEl.className = "status offline";
+        return;
+    }
+    if (state.hasCheckedOut) {
+        statusEl.textContent = "Đã hoàn thành ca";
+        statusEl.className = "status offline";
+        return;
+    }
+    statusEl.textContent = "Đang làm việc";
+    statusEl.className = "status online";
+}
 
 function updateWorkingHours() {
     const displayEl = document.getElementById('realtime-work-hours');
@@ -226,7 +273,7 @@ function updateWorkingHours() {
         return;
     }
     if (state.hasCheckedOut) {
-        displayEl.innerText = dbWorkingHours.toFixed(2) + "h";
+        displayEl.innerText = state.workingHours.toFixed(2) + "h";
         return;
     }
 
@@ -261,7 +308,7 @@ function updateWorkingHours() {
 // Chạy bộ đếm mỗi giây
 setInterval(updateWorkingHours, 1000);
 updateWorkingHours();
-
+renderAttendanceStatus();
 function initSimEditor() {
     document.querySelectorAll('.sim-editor .time-part').forEach(el => {
         el.addEventListener('wheel', (e) => {
