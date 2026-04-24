@@ -160,17 +160,19 @@
 }
 
 .notification-list { display: grid; gap: 8px; }
+.notify-subtitle { color: var(--emp-muted); margin: 4px 0 12px; }
 .notification-item {
   border: 1px solid var(--emp-border);
   border-radius: 10px;
   padding: 12px;
   background: #fff;
+  cursor: pointer;
 }
 .notification-item--new {
   border-left: 4px solid var(--emp-primary);
   background: #EFF6FF;
 }
-
+.mt-8 { margin-top: 8px; }
 .quick-links {
   display: flex;
   gap: 12px;
@@ -228,7 +230,16 @@
   font-weight: 700;
   color: var(--emp-text);
 }
-
+.holiday-banner {
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #FCD34D;
+  color: #854D0E;
+  font-weight: 700;
+  background: linear-gradient(120deg, #FEF9C3 0%, #FFEDD5 50%, #FCE7F3 100%);
+  box-shadow: 0 6px 14px rgba(251, 191, 36, 0.22);
+}
 .switch-row {
   display: flex;
   justify-content: space-between;

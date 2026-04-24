@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import os
+import re
 import uuid
 from lunardate import LunarDate
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
@@ -359,10 +360,6 @@ def profile():
         user.password_hash = generate_password_hash(new_password)
         db.session.commit()
         flash("✅ Đổi mật khẩu thành công.", "success")
-        return redirect(url_for("employee.profile"))
-
-    if request.method == "POST" and action == "notification_settings":
-        flash("✅ Đã lưu cấu hình nhận tin. (Bản demo UI)", "success")
         return redirect(url_for("employee.profile"))
 
     notifications = EmployeeDashboardService.get_notifications(user.id, limit=20)
@@ -1057,8 +1054,26 @@ def notifications():
         return guard
 
     user = _current_user()
+    employee = _current_employee()
     items = EmployeeDashboardService.get_notifications(user.id if user else 0, limit=50)
-    return render_template("employee/notifications.html", notifications=items)
+
+    complaint_map: set[int] = set()
+    if employee:
+        active_complaints = (
+            Complaint.query.filter_by(employee_id=employee.id)
+            .filter(Complaint.status.in_(["pending", "in_progress"]))
+            .all()
+        )
+        for complaint in active_complaints:
+            noti_match = re.search(r"\[Notification #(\d+)\]", complaint.title or "")
+            if noti_match:
+                complaint_map.add(int(noti_match.group(1)))
+
+    return render_template(
+        "employee/notifications.html",
+        notifications=items,
+        complaint_map=complaint_map,
+    )
 
 @employee_bp.route("/notifications/<int:noti_id>/read", methods=["POST"])
 def mark_notification_read(noti_id: int):
@@ -1077,6 +1092,50 @@ def mark_notification_read(noti_id: int):
     noti.is_read = True
     db.session.commit()
     return jsonify({"success": True, "id": noti.id, "is_read": noti.is_read})
+
+@employee_bp.route("/notifications/<int:noti_id>/feedback", methods=["POST"])
+def send_notification_feedback(noti_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+
+    user = _current_user()
+    employee = _current_employee()
+    if not user or not employee:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    noti = Notification.query.filter_by(id=noti_id, user_id=user.id).first()
+    if not noti:
+        return jsonify({"error": "Notification not found"}), 404
+
+    issue_type = request.form.get("issue_type", "other").strip() or "other"
+    detail = request.form.get("description", "").strip()
+    if not detail:
+        return jsonify({"error": "Vui lòng nhập nội dung phản hồi"}), 400
+
+    complaint_type = noti.type or issue_type
+    complaint = Complaint(
+        employee_id=employee.id,
+        type=complaint_type,
+        title=f"[Notification #{noti.id}] Phản hồi: {noti.title}",
+        description=(
+            f"Notification_ID={noti.id}\n"
+            f"User_ID={user.id}\n"
+            f"Issue_Type={issue_type}\n"
+            f"{detail}"
+        ),
+        status="pending",
+    )
+    db.session.add(complaint)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "message": "Yêu cầu của bạn đã được gửi tới phòng nhân sự. Chúng tôi sẽ phản hồi trong vòng 24h.",
+            "complaint_id": complaint.id,
+        }
+    )
 
 
 @employee_bp.route("/search")

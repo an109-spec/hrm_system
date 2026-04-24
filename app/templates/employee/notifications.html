@@ -5,26 +5,83 @@
 {% endblock %}
 {% block content %}
 <section class="emp-card">
-  <h3>🔔 Thông báo của tôi</h3>
+  <h3>🔔 NHẬT KÝ THÔNG BÁO</h3>
+  <p class="notify-subtitle">Nhấn vào từng thông báo để xem chi tiết.</p>
   <div class="notification-list">
     {% for n in notifications %}
-      <article class="notification-item {{ 'notification-item--new' if not n.is_read else '' }}" data-id="{{ n.id }}">
+      <article
+        class="notification-item {{ 'notification-item--new' if not n.is_read else '' }}"
+        data-id="{{ n.id }}"
+        data-type="{{ n.type or 'system' }}"
+        data-title="{{ n.title }}"
+        data-content="{{ n.content or '' }}"
+        data-time="{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}"
+        data-is-read="{{ 'true' if n.is_read else 'false' }}"
+        data-link="{{ n.link or '' }}"
+        onclick="openNotificationDetail(this)"
+      >
         <div class="row-between">
-          <p><strong>{{ n.title }}</strong></p>
+          <p><strong>
+            {% if n.type == "salary" %}
+              Biến động thu nhập
+            {% elif n.type == "leave" %}
+              Trạng thái nghỉ phép
+            {% else %}
+              Thông báo hệ thống
+            {% endif %}
+          </strong></p>
           {% if not n.is_read %}<span class="dot-red"></span>{% endif %}
         </div>
         <p>{{ n.content }}</p>
         <small>{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
-        {% if not n.is_read %}
-        <div>
-          <button class="btn btn-secondary btn-sm" onclick="markRead({{ n.id }}, this)">Đánh dấu đã đọc</button>
-        </div>
+        {% if n.id in complaint_map %}
+          <div class="mt-8">
+            <span class="pill pill-warning">⏳ Đang xử lý khiếu nại</span>
+          </div>
         {% endif %}
       </article>
     {% else %}
       <p>Không có thông báo.</p>
     {% endfor %}
   </div>
+</section>
+<section class="emp-card" id="notification-detail" style="display:none;">
+  <div class="row-between">
+    <h3>Thẻ: Thông báo</h3>
+    <button class="btn btn-secondary btn-sm" onclick="closeNotificationDetail()">[X] Đóng</button>
+  </div>
+  <p><strong>LOẠI THÔNG BÁO:</strong> <span id="detailType">-</span></p>
+  <p><strong>TIÊU ĐỀ:</strong> <span id="detailTitle">-</span></p>
+  <p><strong>THỜI GIAN:</strong> <span id="detailTime">-</span></p>
+  <p><strong>NỘI DUNG:</strong></p>
+  <div class="payslip-detail" id="detailContent">-</div>
+  <p><strong>TRẠNG THÁI ĐỌC:</strong> <span id="detailRead">-</span></p>
+  <div class="mt-8">
+    <a id="detailLink" href="#" class="btn btn-primary btn-sm" style="display:none;">Xem chi tiết</a>
+    <button class="btn btn-warning btn-sm" onclick="toggleFeedbackForm()">📩 GỬI PHẢN HỒI / KHIẾU NẠI</button>
+    <button class="btn btn-secondary btn-sm" onclick="closeNotificationDetail()">[ &lt;-- Quay lại ] Danh sách thông báo</button>
+  </div>
+  <form id="feedbackForm" class="emp-form-grid mt-8" style="display:none;" onsubmit="submitFeedback(event)">
+    <input type="hidden" name="notification_id" id="feedbackNotificationId">
+    <label>
+      1. Loại vấn đề
+      <select name="issue_type" required>
+        <option value="salary_data_error">Sai sót dữ liệu (Lương/Ngày công)</option>
+        <option value="content_question">Thắc mắc về nội dung</option>
+        <option value="system_error">Lỗi hiển thị/Hệ thống</option>
+        <option value="other" selected>Khác</option>
+      </select>
+    </label>
+    <label>
+      2. Nội dung chi tiết
+      <textarea name="description" rows="4" placeholder="Nhập nội dung bạn muốn phản hồi tại đây..." required></textarea>
+    </label>
+    <div class="inline-form">
+      <button type="button" class="btn btn-secondary btn-sm" disabled title="Chưa hỗ trợ tải tệp trong màn này">📎 Chọn ảnh hoặc tài liệu minh chứng</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFeedbackForm()">Hủy bỏ</button>
+      <button type="submit" class="btn btn-primary btn-sm">Gửi phản hồi</button>
+    </div>
+  </form>
 </section>
 {% endblock %}
 
@@ -37,6 +94,68 @@ async function markRead(id, button){
     window.location.reload();
   }
   button.disabled = false;
+}
+function normalizeType(type) {
+  if(type === "salary") return "Biến động thu nhập";
+  if(type === "leave") return "Trạng thái nghỉ phép";
+  return "Thông báo hệ thống";
+}
+
+async function openNotificationDetail(el){
+  const id = Number(el.dataset.id);
+  document.getElementById("notification-detail").style.display = "block";
+  document.getElementById("detailType").textContent = normalizeType(el.dataset.type);
+  document.getElementById("detailTitle").textContent = el.dataset.title;
+  document.getElementById("detailTime").textContent = el.dataset.time;
+  document.getElementById("detailContent").textContent = el.dataset.content || "(Không có nội dung)";
+  document.getElementById("detailRead").textContent = el.dataset.isRead === "true" ? "Đã đọc" : "Mới";
+  document.getElementById("feedbackNotificationId").value = String(id);
+
+  const detailLink = document.getElementById("detailLink");
+  if(el.dataset.link){
+    detailLink.href = el.dataset.link;
+    detailLink.style.display = "inline-flex";
+  } else {
+    detailLink.style.display = "none";
+  }
+
+  if(el.dataset.isRead !== "true"){
+    await fetch(`/employee/notifications/${id}/read`, { method: "POST" });
+    el.dataset.isRead = "true";
+    const dot = el.querySelector(".dot-red");
+    if(dot) dot.remove();
+    el.classList.remove("notification-item--new");
+    document.getElementById("detailRead").textContent = "Đã đọc";
+  }
+}
+
+function closeNotificationDetail(){
+  document.getElementById("notification-detail").style.display = "none";
+  document.getElementById("feedbackForm").style.display = "none";
+}
+
+function toggleFeedbackForm(){
+  const form = document.getElementById("feedbackForm");
+  form.style.display = form.style.display === "none" ? "grid" : "none";
+}
+
+async function submitFeedback(event){
+  event.preventDefault();
+  const form = event.target;
+  const id = form.querySelector("#feedbackNotificationId").value;
+  const body = new FormData(form);
+
+  const res = await fetch(`/employee/notifications/${id}/feedback`, {
+    method: "POST",
+    body
+  });
+  const data = await res.json();
+  if(res.ok){
+    alert(data.message || "Yêu cầu của bạn đã được gửi tới phòng nhân sự. Chúng tôi sẽ phản hồi trong vòng 24h.");
+    window.location.reload();
+    return;
+  }
+  alert(data.error || "Không thể gửi phản hồi");
 }
 </script>
 {% endblock %}

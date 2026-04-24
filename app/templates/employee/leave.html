@@ -36,7 +36,7 @@
 <section class="emp-card">
   <h3>📤 Đăng ký nghỉ phép mới</h3>
   {% if today_holiday %}
-  <p style="color:#166534;font-weight:600;">🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}.</p>
+  <p class="holiday-banner">🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}.</p>
   {% endif %}
   <form method="post" enctype="multipart/form-data" class="emp-form-grid">
     <label>Loại nghỉ
