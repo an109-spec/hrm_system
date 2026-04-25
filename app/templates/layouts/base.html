@@ -53,36 +53,10 @@
   </div>
 </header>
 <div class="app-container container">
-    {% set admin_profile_endpoints = ['admin.admin_profile_page', 'admin.admin_staff_profile_page'] %}
-    {% if current_user and (role_name != 'admin' or request.endpoint in admin_profile_endpoints) %}
+    {% if current_user and role_name != 'admin' %}
     <aside class="sidebar-aside">
         <nav class="vertical-nav">
-            {% if role_name == 'admin' and request.endpoint in admin_profile_endpoints %}
-                <a href="{{ url_for('admin.admin_dashboard_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_dashboard_page' }}">
-                    <i class="fas fa-chart-line"></i> Tổng quan hệ thống
-                </a>
-                <a href="{{ url_for('admin.admin_employees_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_employees_page' }}">
-                    <i class="fas fa-users"></i> Quản lý nhân viên
-                </a>
-                <a href="{{ url_for('admin.admin_departments_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_departments_page' }}">
-                    <i class="fas fa-building"></i> Quản lý phòng ban
-                </a>
-                <a href="{{ url_for('admin.admin_positions_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_positions_page' }}">
-                    <i class="fas fa-briefcase"></i> Quản lý chức danh
-                </a>
-                <a href="{{ url_for('admin.admin_attendance_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_attendance_page' }}">
-                    <i class="fas fa-calendar-check"></i> Chấm công
-                </a>
-                <a href="{{ url_for('admin.admin_salary_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_salary_page' }}">
-                    <i class="fas fa-money-check-alt"></i> Lương
-                </a>
-                <a href="{{ url_for('admin.admin_profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_profile_page' }}">
-                    <i class="fas fa-user-shield"></i> Thông tin cá nhân
-                </a>
-                <a href="{{ url_for('admin.admin_staff_profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_staff_profile_page' }}">
-                    <i class="fas fa-id-card"></i> Hồ sơ admin
-                </a>
-            {% elif role_name == 'manager' %}
+            {% if role_name == 'manager' %}
                 <a href="{{ url_for('manager.dashboard_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.dashboard_page' }}">
                     <i class="fas fa-chart-line"></i> Tổng quan hệ thống
                 </a>
