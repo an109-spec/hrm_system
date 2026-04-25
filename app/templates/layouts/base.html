@@ -27,22 +27,24 @@
   </div>
 
   <div class="header-right">
-    {% if current_user and role_name != 'admin' %}
-          <div class="avatar-sm">
-        {% if avatar_url %}
-          <img src="{{ avatar_url }}" alt="avatar" width="32" height="32" style="border-radius:50%; object-fit:cover;">
-        {% elif current_employee %}
-          {{ current_employee.full_name[0] }}
-        {% else %}
-          {{ current_user.username[0] }}
-        {% endif %}
-      </div>
-      <a href="{{ url_for('employee.notifications') }}" class="header-link">
-        🔔 Thông báo
-        {% if unread_notifications %}
-          <span class="badge">{{ unread_notifications }}</span>
-        {% endif %}
-      </a>
+    {% if current_user %}
+      {% if role_name != 'admin' %}
+        <div class="avatar-sm">
+          {% if avatar_url %}
+            <img src="{{ avatar_url }}" alt="avatar" width="32" height="32" style="border-radius:50%; object-fit:cover;">
+          {% elif current_employee %}
+            {{ current_employee.full_name[0] }}
+          {% else %}
+            {{ current_user.username[0] }}
+          {% endif %}
+        </div>
+        <a href="{{ url_for('employee.notifications') }}" class="header-link">
+          🔔 Thông báo
+          {% if unread_notifications %}
+            <span class="badge">{{ unread_notifications }}</span>
+          {% endif %}
+        </a>
+      {% endif %}
 
       <form action="{{ url_for('auth.logout') }}" method="post">
         <button type="submit" class="btn-logout">Đăng xuất</button>

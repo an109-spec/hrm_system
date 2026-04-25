@@ -74,6 +74,14 @@ def _ensure_login():
         return redirect(url_for("auth.login", next=request.url))
     return None
 
+def _redirect_when_missing_employee():
+    user = _current_user()
+    role_name = (user.role.name.lower() if user and user.role else "")
+    if role_name == "admin":
+        return redirect(url_for("admin.admin_dashboard_page"))
+    return redirect(url_for("auth.login"))
+
+
 def _get_holiday_for_date(target_date: date) -> Holiday | None:
     default_holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(target_date.strftime("%m-%d"))
     lunar_holiday_lookup = _build_lunar_public_holidays_for_year(target_date.year)
@@ -277,7 +285,8 @@ def dashboard():
 
     employee = _current_employee()
     if not employee:
-        return render_template("employee/dashboard.html", employee=None)
+        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
+        return _redirect_when_missing_employee()
 
     user = _current_user()
     now = parse_simulated_time({})
@@ -318,7 +327,7 @@ def profile():
 
     if not employee or not user:
         flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return redirect(url_for("employee.dashboard"))
+        return _redirect_when_missing_employee()
 
     action = request.form.get("action")
 
@@ -387,7 +396,7 @@ def staff_profile():
     user = _current_user()
     if not employee or not user:
         flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return redirect(url_for("employee.dashboard"))
+        return _redirect_when_missing_employee()
 
     latest_contract = (
         Contract.query.filter_by(employee_id=employee.id)
