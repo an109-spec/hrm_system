@@ -6,14 +6,23 @@
 {% block content %}
 <div class="admin-wrap">
   <aside class="admin-sidebar">
-    <a href="/admin/dashboard">Tổng quan hệ thống</a>
-    <a href="/admin/employees">Quản lý nhân viên</a>
-    <a href="/admin/departments">Quản lý phòng ban</a>
-    <a href="/admin/positions">Quản lý chức danh</a>
-    <a href="/admin/attendance">Chấm công</a>
-    <a href="/admin/salary">Lương</a>
+    <a href="/admin/dashboard" class="{{ 'active' if request.endpoint == 'admin.admin_dashboard_page' }}">📊 Tổng quan hệ thống</a>
+    <a href="/admin/employees" class="{{ 'active' if request.endpoint == 'admin.admin_employees_page' }}">Quản lý nhân viên</a>
+    <a href="/admin/departments" class="{{ 'active' if request.endpoint == 'admin.admin_departments_page' }}">Quản lý phòng ban</a>
+    <a href="/admin/positions" class="{{ 'active' if request.endpoint == 'admin.admin_positions_page' }}">Quản lý chức danh</a>
+    <a href="/admin/attendance" class="{{ 'active' if request.endpoint == 'admin.admin_attendance_page' }}">Chấm công</a>
+    <a href="/admin/salary" class="{{ 'active' if request.endpoint == 'admin.admin_salary_page' }}">Lương</a>
+    <a href="#" class="muted-link">CÀI ĐẶT TRANG ADMIN</a>
   </aside>
   <section class="admin-main">
+    <div class="admin-toolbar">
+      <label>📅 Tháng/Năm</label>
+      <input id="month" type="number" min="1" max="12" placeholder="Tháng">
+      <input id="year" type="number" min="2000" max="2100" placeholder="Năm">
+      <label>🏢 Phòng ban</label>
+      <select id="department"></select>
+      <button onclick="loadDashboard()">Lọc</button>
+    </div>
     {% block admin_content %}{% endblock %}
   </section>
 </div>

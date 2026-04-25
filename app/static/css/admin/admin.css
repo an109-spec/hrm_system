@@ -1,14 +1,18 @@
-:root {--bg:#FFFFFF;--card:#F9FAFB;--border:#E5E7EB;--text:#111827;--success:#16A34A;--warning:#D97706;--danger:#DC2626;--info:#2563EB;}
+:root {--bg:#f3f3f3;--card:#d9d9d9;--border:#c9c9c9;--text:#111827;--success:#16A34A;--warning:#D97706;--danger:#DC2626;--info:#2563EB;}
 body{background:var(--bg);color:var(--text)}
-.admin-wrap{max-width:1280px;display:grid;grid-template-columns:260px 1fr;gap:16px;margin:12px auto}
-.admin-sidebar{border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--card);display:flex;flex-direction:column;gap:8px}
-.admin-sidebar a{text-decoration:none;color:var(--text)}
-.admin-main{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
-.card{grid-column:span 12;border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--card)}
-.grid{grid-column:span 12;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
-.grid .card{grid-column:span 4}
-.filters{grid-column:span 12;display:flex;gap:8px;align-items:center}
-input,select,button{padding:8px;border:1px solid var(--border);border-radius:8px;background:#fff}
-button{cursor:pointer}
-table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--border);text-align:left}
+.admin-wrap{display:grid;grid-template-columns:260px 1fr;gap:18px;margin:12px 0}
+.admin-sidebar{background:#cfcfcf;padding:24px 14px;display:flex;flex-direction:column;gap:12px;min-height:78vh}
+.admin-sidebar a{text-decoration:none;color:#111;font-size:22px;padding:4px 8px;border-radius:4px}
+.admin-sidebar a.active{color:#2563EB}
+.admin-sidebar .muted-link{font-size:20px;margin-top:10px}
+.admin-main{display:flex;flex-direction:column;gap:18px}
+.admin-toolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.admin-toolbar label{font-size:16px}
+.admin-toolbar input,.admin-toolbar select,.admin-toolbar button{padding:8px;border:1px solid var(--border);border-radius:4px;background:#fff}
+.admin-overview{display:flex;flex-direction:column;gap:16px}
+.card{border:1px solid var(--border);padding:14px 16px;background:var(--card)}
+.admin-section p{margin:8px 0}
+ul#activities{padding-left:18px;margin:8px 0}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid var(--border);text-align:left}
 .badge{padding:2px 8px;border-radius:99px;color:#fff;font-size:12px}.b-success{background:var(--success)}.b-warning{background:var(--warning)}.b-danger{background:var(--danger)}.b-info{background:var(--info)}

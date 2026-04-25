@@ -3,7 +3,23 @@ const now=new Date();
 function setDefaults(){const m=document.getElementById('month');const y=document.getElementById('year');if(m&&!m.value)m.value=now.getMonth()+1;if(y&&!y.value)y.value=now.getFullYear();}
 async function loadDepartmentsSelect(){const el=document.getElementById('department');if(!el)return;const rows=await api('/api/departments');el.innerHTML='<option value="">Tất cả phòng ban</option>'+rows.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}
 
-async function loadDashboard(){setDefaults();const m=month.value,y=year.value,d=department?.value||'';const data=await api(`/api/dashboard/overview?month=${m}&year=${y}&department_id=${d}`);const overview=document.getElementById('overview');overview.innerHTML='';const cards=[['Nhân sự',data.employee],['Chấm công',data.attendance],['Lương',data.salary],['Cảnh báo',data.alerts]];cards.forEach(c=>{const div=document.createElement('div');div.className='card';div.innerHTML=`<h3>${c[0]}</h3><pre>${JSON.stringify(c[1],null,2)}</pre>`;overview.appendChild(div)});document.getElementById('activities').innerHTML=data.activities.map(a=>`<li>${a.time||''} - ${a.action}</li>`).join('')}
+async function loadDashboard(){setDefaults();const m=month.value,y=year.value,d=department?.value||'';const data=await api(`/api/dashboard/overview?month=${m}&year=${y}&department_id=${d}`);const employeeStats=document.getElementById('employeeStats');const attendanceStats=document.getElementById('attendanceStats');const salaryStats=document.getElementById('salaryStats');const activities=document.getElementById('activities');if(!employeeStats||!attendanceStats||!salaryStats||!activities)return;
+employeeStats.innerHTML=`
+  <p><strong>👥 Nhân sự</strong></p>
+  <p>Tổng nhân sự: ${data.employee.total ?? 0}</p>
+  <p>Nhân viên mới: ${data.employee.new ?? 0}</p>
+  <p>Nghỉ việc: ${data.employee.resigned ?? 0}</p>
+  <p>Sắp hết hạn hợp đồng: ${data.employee.expiring_contract ?? 0}</p>`;
+attendanceStats.innerHTML=`
+  <p>Tỉ lệ chuyên cần toàn công ty: ${data.attendance.attendance_rate ?? 0}%</p>
+  <p>Phòng ban nào có tỉ lệ đi muộn cao nhất: ${data.attendance.hotspot_department?.department_id ?? 'N/A'}</p>
+  <p>Tổng lượt đi muộn: ${data.attendance.late_count ?? 0}</p>
+  <p>Tổng lượt vắng mặt: ${data.attendance.absent_count ?? 0}</p>`;
+salaryStats.innerHTML=`
+  <p>Tổng quỹ lương tháng hiện tại: ${Number(data.salary.total_salary ?? 0).toLocaleString('vi-VN')} VND</p>
+  <p>Số lượng bản ghi lương: ${data.salary.salary_records ?? 0}</p>
+  <p>Thuế & Bảo hiểm: Theo dữ liệu bảng lương hiện tại</p>`;
+activities.innerHTML=data.activities.map(a=>`<li>[${a.time||'--'}] ${a.action}</li>`).join('') || '<li>Chưa có dữ liệu.</li>'}
 
 async function loadEmployees(){const res=await api('/api/departments');const rows=await api('/api/dashboard/employees');const tr=document.getElementById('employeeRows');const emps=await fetch('/api/departments').then(()=>[]).catch(()=>[]); // placeholder
 tr.innerHTML='<tr><td colspan="6">Dùng API /api/admin/users/{id}/lock và /role để thao tác từ màn này.</td></tr>'}
@@ -24,7 +40,7 @@ async function loadSalaryAggregate(){setDefaults();const g=document.getElementBy
 async function lockSalary(){setDefaults();await api('/api/admin/salaries/lock',{method:'POST',body:JSON.stringify({month:+month.value,year:+year.value})});loadSalaryAggregate()}
 async function unlockSalary(){setDefaults();await api('/api/admin/salaries/unlock',{method:'POST',body:JSON.stringify({month:+month.value,year:+year.value})});loadSalaryAggregate()}
 
-document.addEventListener('DOMContentLoaded',async()=>{setDefaults();if(window.ADMIN_PAGE==='dashboard'){await loadDepartmentsSelect();await loadDashboard();}
+document.addEventListener('DOMContentLoaded',async()=>{setDefaults();await loadDepartmentsSelect();if(window.ADMIN_PAGE==='dashboard'){await loadDashboard();}
 if(window.ADMIN_PAGE==='employees'){await loadEmployees();}
 if(window.ADMIN_PAGE==='departments'){await loadDepartments();}
 if(window.ADMIN_PAGE==='positions'){await loadPositions();}
