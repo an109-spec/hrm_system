@@ -19,6 +19,8 @@
       <span class="brand">
         {% if role_name == 'admin' %}
           Tổng quan hệ thống của quản trị viên
+        {% elif role_name == 'hr' %}
+          Cổng quản trị nhân sự (HR)
         {% else %}
           Cổng nhân viên
         {% endif %}
@@ -86,6 +88,16 @@
                 </a>
                 <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
                     <i class="fas fa-user-circle"></i> Thông tin trưởng phòng
+                </a>
+            {% elif role_name == 'hr' %}
+                <a href="{{ url_for('hr.employees_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.employees_page' }}">
+                    <i class="fas fa-users-cog"></i> Quản lý nhân viên
+                </a>
+                <a href="{{ url_for('employee.notifications') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.notifications' }}">
+                    <i class="fas fa-bell"></i> Thông báo
+                </a>
+                <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
+                    <i class="fas fa-user-circle"></i> Hồ sơ cá nhân
                 </a>
             {% else %}
                 <a href="{{ url_for('employee.dashboard') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.dashboard' }}">

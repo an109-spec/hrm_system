@@ -1,0 +1,167 @@
+{% extends "layouts/base.html" %}
+{% block title %}HR - Quản lý nhân viên{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr/employees.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hr-employee-page">
+  <header class="hr-page-header">
+    <h1>HR - Quản lý nhân viên</h1>
+    <p>Quản trị hồ sơ nhân sự, tài khoản và hợp đồng theo phạm vi HR.</p>
+  </header>
+
+  <section class="hr-toolbar card">
+    <div class="toolbar-filters">
+      <div class="field-grow">
+        <label for="searchInput">Tìm kiếm</label>
+        <input id="searchInput" type="text" placeholder="Tên, email hoặc số điện thoại">
+      </div>
+      <div>
+        <label for="departmentFilter">Phòng ban</label>
+        <select id="departmentFilter"><option value="">Tất cả</option></select>
+      </div>
+      <div>
+        <label for="positionFilter">Chức danh</label>
+        <select id="positionFilter"><option value="">Tất cả</option></select>
+      </div>
+      <div>
+        <label for="statusFilter">Trạng thái làm việc</label>
+        <select id="statusFilter">
+          <option value="">Tất cả</option>
+          <option value="working">Đang làm</option>
+          <option value="on_leave">Nghỉ phép</option>
+          <option value="resigned">Đã nghỉ việc</option>
+        </select>
+      </div>
+      <button id="btnCreateEmployee" class="btn btn-primary">+ Tạo nhân viên</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <table class="employee-table">
+      <thead>
+        <tr>
+          <th>Mã nhân viên</th>
+          <th>Tên nhân viên</th>
+          <th>Email</th>
+          <th>Số điện thoại</th>
+          <th>Phòng ban</th>
+          <th>Chức danh</th>
+          <th>Tên tài khoản</th>
+          <th>Trạng thái nhân viên</th>
+          <th>Trạng thái tài khoản</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="employeeTableBody"></tbody>
+    </table>
+  </section>
+
+  <section class="layout-3col">
+    <article class="card panel" id="employeeDetailPanel">
+      <h3>Chi tiết nhân viên</h3>
+      <div class="avatar-placeholder" id="detailAvatar">A</div>
+      <dl class="detail-grid" id="employeeDetailGrid"></dl>
+    </article>
+
+    <article class="card panel">
+      <h3>HR - Chỉnh sửa nhanh</h3>
+      <form id="quickEditForm" class="form-grid">
+        <input type="hidden" id="quickEmployeeId">
+        <label>Họ tên<input type="text" id="quickFullName"></label>
+        <label>SĐT<input type="text" id="quickPhone"></label>
+        <label class="full">Địa chỉ<textarea id="quickAddress" rows="2"></textarea></label>
+        <label>Phòng ban<select id="quickDepartment"></select></label>
+        <label>Chức danh<select id="quickPosition"></select></label>
+        <label>Quản lý<select id="quickManager"></select></label>
+        <label>Trạng thái<select id="quickStatus">
+          <option value="working">Đang làm việc</option>
+          <option value="on_leave">Nghỉ phép</option>
+          <option value="resigned">Đã nghỉ việc</option>
+        </select></label>
+        <div class="actions full">
+          <button type="submit" class="btn btn-primary">Lưu</button>
+          <button type="button" id="btnDeactivate" class="btn btn-ghost">Khoá / Mở tài khoản</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card panel">
+      <h3>Hợp đồng</h3>
+      <form id="contractForm" class="form-grid">
+        <label>Mã hợp đồng<input type="text" id="contractCode" readonly placeholder="Tự động khi lưu"></label>
+        <label>Lương cơ bản<input type="number" id="basicSalary" min="0" step="1000"></label>
+        <label>Ngày bắt đầu<input type="date" id="contractStart"></label>
+        <label>Ngày kết thúc<input type="date" id="contractEnd"></label>
+        <label>Loại hợp đồng
+          <select id="contractType">
+            <option value="">Chọn loại hợp đồng</option>
+            <option value="trial">Thử việc</option>
+            <option value="official">Chính thức</option>
+            <option value="internship">Thực tập</option>
+          </select>
+        </label>
+        <label class="full">Ghi chú<textarea id="contractNote" rows="3"></textarea></label>
+        <div class="actions full">
+          <button type="submit" class="btn btn-primary">Tạo hợp đồng</button>
+        </div>
+      </form>
+      <p class="hint" id="contractHint">⚠️ Chọn nhân viên trước khi tạo hợp đồng.</p>
+    </article>
+  </section>
+
+  <section class="card panel">
+    <h3>HR - Tạo nhân viên mới</h3>
+    <form id="createEmployeeForm" class="form-grid create-grid">
+      <h4 class="full">Thông tin cá nhân</h4>
+      <label class="full">Họ tên<input type="text" id="newFullName" required></label>
+      <label>Ngày sinh<input type="date" id="newDob" required></label>
+      <label>Giới tính
+        <select id="newGender">
+          <option value="male">Nam</option>
+          <option value="female">Nữ</option>
+          <option value="other">Khác</option>
+        </select>
+      </label>
+      <label>SĐT<input type="text" id="newPhone" required></label>
+      <label class="full">Địa chỉ<textarea id="newAddress" rows="2"></textarea></label>
+
+      <h4 class="full">Thông tin công việc</h4>
+      <label>Phòng ban<select id="newDepartment"></select></label>
+      <label>Chức danh<select id="newPosition"></select></label>
+      <label>Quản lý<select id="newManager"></select></label>
+      <label>Ngày vào làm<input type="date" id="newHireDate"></label>
+      <label>Loại nhân sự
+        <select id="newEmploymentType">
+          <option value="probation">Probation</option>
+          <option value="permanent">Permanent</option>
+          <option value="intern">Intern</option>
+        </select>
+      </label>
+
+      <h4 class="full">Tài khoản</h4>
+      <label class="full checkbox"><input type="checkbox" id="createAccount"> Có tạo account đăng nhập</label>
+      <label>Username<input type="text" id="newUsername"></label>
+      <label>Email<input type="email" id="newEmail"></label>
+      <label>Password<input type="password" id="newPassword"></label>
+
+      <h4 class="full">Hợp đồng</h4>
+      <label class="full checkbox"><input type="checkbox" id="createContractNow"> Có tạo hợp đồng luôn không</label>
+
+      <div class="actions full">
+        <button type="submit" class="btn btn-primary">Lưu</button>
+        <button type="button" id="btnSaveAndContinue" class="btn">Lưu & tạo tiếp</button>
+        <button type="reset" class="btn btn-ghost">Huỷ</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="hrToast" class="hr-toast" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hr/employees.js') }}"></script>
+{% endblock %}

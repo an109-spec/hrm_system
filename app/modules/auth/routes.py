@@ -27,6 +27,8 @@ def _redirect_after_login(user, next_url: str | None):
     role_name = (user.role.name if getattr(user, "role", None) else "Employee").strip().lower()
     if role_name == "admin":
         return redirect(url_for("admin.admin_dashboard_page"))
+    if role_name == "hr":
+        return redirect(url_for("hr.employees_page"))
     if role_name == "manager":
         return redirect(url_for("manager.dashboard_page"))
     return redirect(url_for("employee.dashboard"))

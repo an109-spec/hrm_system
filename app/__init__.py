@@ -27,10 +27,7 @@ from app.modules.salary import salary_bp
 from app.modules.upload import upload_bp
 from app.modules.manager import manager_bp
 from app.modules.admin import admin_bp
-# Dự kiến các module mới cho HRM
-# from app.modules.employee import employee_bp 
-# from app.modules.payroll import payroll_bp
-# from app.modules.attendance import attendance_bp
+from app.modules.hr import hr_bp
 
 from app.cli import register_cli
 
@@ -161,3 +158,4 @@ def register_blueprints(app):
     app.register_blueprint(upload_bp)
     app.register_blueprint(manager_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(hr_bp)
