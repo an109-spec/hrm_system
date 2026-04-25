@@ -17,6 +17,10 @@ from .dto import (
     PayrollComplaintHandleDTO,
     PayrollExportDTO,
     PayrollFilterDTO,
+    AttendanceAdjustmentDTO,
+    AttendanceExportDTO,
+    AttendanceFilterDTO,
+    OvertimeApprovalDTO,
     TerminateContractDTO,
     UpdateContractDTO,
     UpdateEmployeeDTO,
@@ -68,6 +72,14 @@ def payroll_page():
     if guard:
         return guard
     return render_template("hr/payroll.html", employee=_current_employee())
+
+@hr_bp.route("/attendance", methods=["GET"])
+def attendance_page():
+    guard = _guard_hr_access()
+    if guard:
+        return guard
+    return render_template("hr/attendance.html", employee=_current_employee())
+
 
 @hr_bp.route("/api/meta", methods=["GET"])
 def meta_api():
@@ -252,6 +264,144 @@ def payroll_complaint_handle_api(complaint_id: int):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+@hr_bp.route("/api/attendance/meta", methods=["GET"])
+def attendance_meta_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(HRService.get_attendance_meta())
+
+
+@hr_bp.route("/api/attendance", methods=["GET"])
+def attendance_list_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    dto = AttendanceFilterDTO(
+        search=request.args.get("search") or None,
+        department_id=request.args.get("department_id", type=int),
+        status=request.args.get("status") or "all",
+        month=request.args.get("month", type=int),
+        year=request.args.get("year", type=int),
+        shift_type=request.args.get("shift_type") or "all",
+    )
+    return jsonify(HRService.get_attendance_list(dto))
+
+
+@hr_bp.route("/api/attendance/summary", methods=["GET"])
+def attendance_summary_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    dto = AttendanceFilterDTO(
+        department_id=request.args.get("department_id", type=int),
+        month=request.args.get("month", type=int),
+        year=request.args.get("year", type=int),
+    )
+    return jsonify(HRService.attendance_summary_dashboard(dto))
+
+
+@hr_bp.route("/api/attendance/<int:employee_id>/detail", methods=["GET"])
+def attendance_detail_api(employee_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        return jsonify(
+            HRService.attendance_detail(
+                employee_id,
+                month=request.args.get("month", type=int),
+                year=request.args.get("year", type=int),
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@hr_bp.route("/api/attendance/<int:attendance_id>/adjust", methods=["PUT"])
+def attendance_adjustment_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    payload = request.get_json(silent=True) or {}
+    dto = AttendanceAdjustmentDTO(
+        attendance_id=attendance_id,
+        check_in=payload.get("check_in"),
+        check_out=payload.get("check_out"),
+        status=payload.get("status"),
+        note=payload.get("note"),
+    )
+    try:
+        return jsonify(HRService.adjust_attendance(dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/attendance/<int:attendance_id>/audit", methods=["GET"])
+def attendance_audit_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(HRService.attendance_audit_history(attendance_id))
+
+
+@hr_bp.route("/api/attendance/overtime", methods=["GET"])
+def overtime_list_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(
+        HRService.overtime_pending_list(
+            month=request.args.get("month", type=int),
+            year=request.args.get("year", type=int),
+        )
+    )
+
+
+@hr_bp.route("/api/attendance/overtime/<int:attendance_id>/review", methods=["POST"])
+def overtime_review_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    payload = request.get_json(silent=True) or {}
+    dto = OvertimeApprovalDTO(attendance_id=attendance_id, action=payload.get("action", ""), note=payload.get("note"))
+    try:
+        return jsonify(HRService.review_overtime(dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/attendance/abnormal", methods=["GET"])
+def abnormal_attendance_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(
+        HRService.detect_abnormal_attendance(
+            month=request.args.get("month", type=int),
+            year=request.args.get("year", type=int),
+        )
+    )
+
+
+@hr_bp.route("/api/attendance/export", methods=["GET"])
+def attendance_export_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        dto = AttendanceExportDTO(
+            month=int(request.args.get("month") or 0),
+            year=int(request.args.get("year") or 0),
+            export_scope=request.args.get("scope") or "company",
+            department_id=request.args.get("department_id", type=int),
+            export_format=request.args.get("format") or "excel",
+        )
+        stream, filename, mimetype = HRService.export_attendance(dto)
+        stream.seek(0)
+        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @hr_bp.route("/api/employees", methods=["GET"])

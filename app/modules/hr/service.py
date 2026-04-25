@@ -16,6 +16,7 @@ from app.models import (
     Department,
     Employee,
     EmployeeAllowance,
+    EmployeeLeaveUsage,
     HistoryLog,
     LeaveRequest,
     Position,
@@ -39,6 +40,10 @@ from app.modules.hr.dto import (
     PayrollComplaintHandleDTO,
     PayrollExportDTO,
     PayrollFilterDTO,
+    AttendanceAdjustmentDTO,
+    AttendanceExportDTO,
+    AttendanceFilterDTO,
+    OvertimeApprovalDTO,
 )
 
 
@@ -1183,3 +1188,475 @@ class HRService:
             }
             for log in logs
         ]
+
+    ATTENDANCE_STATUS_LABELS = {
+        "normal": "Bình thường",
+        "late": "Đi muộn",
+        "early": "Về sớm",
+        "late_early": "Đi muộn / Về sớm",
+        "leave_approved": "Nghỉ phép",
+        "absent_unexcused": "Vắng không phép",
+        "overtime": "Tăng ca",
+        "abnormal": "Bất thường",
+    }
+
+    ATTENDANCE_STATUS_BADGES = {
+        "normal": "badge-success",
+        "late": "badge-warning",
+        "early": "badge-warning",
+        "late_early": "badge-warning",
+        "leave_approved": "badge-info",
+        "absent_unexcused": "badge-danger",
+        "overtime": "badge-primary",
+        "abnormal": "badge-danger",
+    }
+
+    @staticmethod
+    def _attendance_status_label(status_key: str) -> str:
+        return HRService.ATTENDANCE_STATUS_LABELS.get(status_key, status_key)
+
+    @staticmethod
+    def _attendance_status_badge(status_key: str) -> str:
+        return HRService.ATTENDANCE_STATUS_BADGES.get(status_key, "badge-neutral")
+
+    @staticmethod
+    def _month_window(month: int | None, year: int | None) -> tuple[date, date]:
+        today = date.today()
+        target_month = month or today.month
+        target_year = year or today.year
+        return HRService._month_range(target_month, target_year)
+
+    @staticmethod
+    def _attendance_status_from_record(record: Attendance | None, has_leave: bool) -> str:
+        if has_leave:
+            return "leave_approved"
+        if not record:
+            return "absent_unexcused"
+        if not record.check_in or not record.check_out:
+            return "abnormal"
+
+        late_ref = record.check_in.replace(hour=8, minute=30, second=0, microsecond=0)
+        early_ref = record.check_out.replace(hour=17, minute=30, second=0, microsecond=0)
+        is_late = record.check_in > late_ref
+        is_early = record.check_out < early_ref
+
+        if HRService._decimal(record.overtime_hours) > 0:
+            return "overtime"
+        if is_late and is_early:
+            return "late_early"
+        if is_late:
+            return "late"
+        if is_early:
+            return "early"
+        return "normal"
+
+    @staticmethod
+    def _attendance_working_hours(record: Attendance | None) -> float:
+        if not record:
+            return 0.0
+        if record.working_hours not in (None, ""):
+            return float(record.working_hours or 0)
+        if record.check_in and record.check_out:
+            return float(HRService._decimal((record.check_out - record.check_in).total_seconds() / 3600))
+        return 0.0
+
+    @staticmethod
+    def _attendance_row_payload(
+        employee: Employee,
+        work_day: date,
+        record: Attendance | None,
+        has_leave: bool,
+    ) -> dict:
+        status_key = HRService._attendance_status_from_record(record, has_leave)
+        return {
+            "attendance_id": record.id if record else None,
+            "employee_id": employee.id,
+            "employee_code": f"EMP{employee.id:05d}",
+            "employee_name": employee.full_name,
+            "department": employee.department.name if employee.department else "--",
+            "department_id": employee.department_id,
+            "position": employee.position.job_title if employee.position else "--",
+            "work_date": work_day.isoformat(),
+            "check_in": record.check_in.isoformat() if record and record.check_in else None,
+            "check_out": record.check_out.isoformat() if record and record.check_out else None,
+            "working_hours": HRService._attendance_working_hours(record),
+            "overtime_hours": float(record.overtime_hours or 0) if record else 0.0,
+            "late_or_early": status_key in {"late", "early", "late_early"},
+            "status": status_key,
+            "status_label": HRService._attendance_status_label(status_key),
+            "status_badge": HRService._attendance_status_badge(status_key),
+            "shift_type": (record.attendance_type if record and record.attendance_type else "normal"),
+            "is_abnormal": status_key == "abnormal",
+        }
+
+    @staticmethod
+    def _approved_leave_dates(employee_id: int, start: date, end: date) -> set[date]:
+        approved = LeaveRequest.query.filter(
+            LeaveRequest.employee_id == employee_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.from_date <= end,
+            LeaveRequest.to_date >= start,
+        ).all()
+        result: set[date] = set()
+        for item in approved:
+            current = max(item.from_date, start)
+            edge = min(item.to_date, end)
+            while current <= edge:
+                result.add(current)
+                current += timedelta(days=1)
+        return result
+
+    @staticmethod
+    def attendance_summary_dashboard(filters: AttendanceFilterDTO) -> dict:
+        today = date.today()
+        employee_query = Employee.query.filter_by(is_deleted=False)
+        if filters.department_id:
+            employee_query = employee_query.filter(Employee.department_id == filters.department_id)
+        employees = employee_query.all()
+        employee_ids = [e.id for e in employees]
+
+        records = Attendance.query.filter(Attendance.date == today, Attendance.employee_id.in_(employee_ids or [0])).all()
+        by_emp = {item.employee_id: item for item in records}
+
+        late_count = 0
+        present_count = 0
+        abnormal_count = 0
+        overtime_pending = 0
+        on_leave = 0
+
+        for emp in employees:
+            leave_dates = HRService._approved_leave_dates(emp.id, today, today)
+            has_leave = today in leave_dates
+            if has_leave:
+                on_leave += 1
+            row = HRService._attendance_row_payload(emp, today, by_emp.get(emp.id), has_leave)
+            if row["status"] == "late":
+                late_count += 1
+            if row["status"] in {"normal", "overtime", "late", "early", "late_early"}:
+                present_count += 1
+            if row["is_abnormal"]:
+                abnormal_count += 1
+            if row["overtime_hours"] > 0 and row["shift_type"] != "overtime":
+                overtime_pending += 1
+
+        return {
+            "today_present": present_count,
+            "late_count": late_count,
+            "leave_count": on_leave,
+            "overtime_pending": overtime_pending,
+            "abnormal_count": abnormal_count,
+            "has_abnormal": abnormal_count > 0,
+        }
+
+    @staticmethod
+    def get_attendance_list(filters: AttendanceFilterDTO) -> dict:
+        start, end = HRService._month_window(filters.month, filters.year)
+        employees_query = Employee.query.filter_by(is_deleted=False)
+        if filters.department_id:
+            employees_query = employees_query.filter(Employee.department_id == filters.department_id)
+        employees = employees_query.order_by(Employee.full_name.asc()).all()
+
+        rows: list[dict] = []
+        for emp in employees:
+            leave_dates = HRService._approved_leave_dates(emp.id, start, end)
+            records = Attendance.query.filter(
+                Attendance.employee_id == emp.id,
+                Attendance.date >= start,
+                Attendance.date <= end,
+            ).order_by(Attendance.date.desc()).all()
+            if records:
+                for record in records:
+                    rows.append(HRService._attendance_row_payload(emp, record.date, record, record.date in leave_dates))
+            else:
+                rows.append(HRService._attendance_row_payload(emp, end, None, end in leave_dates))
+
+        if filters.search:
+            keyword = filters.search.strip().lower()
+            rows = [
+                row for row in rows
+                if keyword in (row["employee_name"] or "").lower()
+                or keyword in (row["employee_code"] or "").lower()
+                or keyword in (row["department"] or "").lower()
+            ]
+
+        if filters.status and filters.status != "all":
+            rows = [row for row in rows if row["status"] == filters.status]
+
+        if filters.shift_type and filters.shift_type != "all":
+            rows = [row for row in rows if (row["shift_type"] or "normal") == filters.shift_type]
+
+        summary = HRService.attendance_summary_dashboard(filters)
+        return {"items": rows, "summary": summary}
+
+    @staticmethod
+    def attendance_detail(employee_id: int, month: int | None = None, year: int | None = None) -> dict:
+        employee = Employee.query.filter_by(id=employee_id, is_deleted=False).first()
+        if not employee:
+            raise ValueError("Không tìm thấy nhân viên")
+
+        start, end = HRService._month_window(month, year)
+        records = Attendance.query.filter(
+            Attendance.employee_id == employee_id,
+            Attendance.date >= start,
+            Attendance.date <= end,
+        ).all()
+        leave_rows = LeaveRequest.query.filter(
+            LeaveRequest.employee_id == employee_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.from_date <= end,
+            LeaveRequest.to_date >= start,
+        ).all()
+        leave_usage = EmployeeLeaveUsage.query.filter_by(employee_id=employee_id, year=end.year).first()
+
+        late_count = 0
+        early_count = 0
+        abnormal_count = 0
+        total_hours = Decimal("0")
+        overtime_hours = Decimal("0")
+        worked_days = 0
+        absent_days = 0
+
+        leave_dates = HRService._approved_leave_dates(employee_id, start, end)
+        record_by_day = {item.date: item for item in records}
+
+        day_cursor = start
+        while day_cursor <= end:
+            record = record_by_day.get(day_cursor)
+            row = HRService._attendance_row_payload(employee, day_cursor, record, day_cursor in leave_dates)
+            if row["status"] in {"late", "late_early"}:
+                late_count += 1
+            if row["status"] in {"early", "late_early"}:
+                early_count += 1
+            if row["status"] == "abnormal":
+                abnormal_count += 1
+            if row["status"] == "absent_unexcused":
+                absent_days += 1
+            if row["status"] in {"normal", "late", "early", "late_early", "overtime"}:
+                worked_days += 1
+            total_hours += Decimal(str(row["working_hours"]))
+            overtime_hours += Decimal(str(row["overtime_hours"]))
+            day_cursor += timedelta(days=1)
+
+        leave_days = 0
+        unpaid_leave_days = 0
+        for leave in leave_rows:
+            overlap_start = max(start, leave.from_date)
+            overlap_end = min(end, leave.to_date)
+            days = (overlap_end - overlap_start).days + 1
+            if days > 0:
+                leave_days += days
+                if leave.leave_type and not leave.leave_type.is_paid:
+                    unpaid_leave_days += days
+
+        return {
+            "employee_id": employee.id,
+            "employee_name": employee.full_name,
+            "employee_code": f"EMP{employee.id:05d}",
+            "department": employee.department.name if employee.department else "--",
+            "position": employee.position.job_title if employee.position else "--",
+            "period": {"month": end.month, "year": end.year},
+            "breakdown": {
+                "standard_work_days": calendar.monthrange(end.year, end.month)[1],
+                "actual_work_days": worked_days,
+                "leave_days": leave_days,
+                "unpaid_leave_days": unpaid_leave_days,
+                "total_working_hours": float(total_hours),
+                "total_overtime_hours": float(overtime_hours),
+                "late_count": late_count,
+                "early_count": early_count,
+                "penalty_days": absent_days + unpaid_leave_days,
+                "abnormal_count": abnormal_count,
+                "leave_quota_remaining": leave_usage.remaining_days if leave_usage else None,
+            },
+        }
+
+    @staticmethod
+    def adjust_attendance(data: AttendanceAdjustmentDTO, actor_user_id: int | None = None) -> dict:
+        record = Attendance.query.get(data.attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+
+        before = {
+            "check_in": record.check_in.isoformat() if record.check_in else None,
+            "check_out": record.check_out.isoformat() if record.check_out else None,
+            "status": HRService._attendance_status_from_record(record, False),
+        }
+
+        if data.check_in:
+            record.check_in = datetime.fromisoformat(data.check_in.replace("Z", "+00:00")).replace(tzinfo=None)
+        if data.check_out:
+            record.check_out = datetime.fromisoformat(data.check_out.replace("Z", "+00:00")).replace(tzinfo=None)
+        if record.check_in and record.check_out and record.check_out >= record.check_in:
+            record.working_hours = Decimal(str((record.check_out - record.check_in).total_seconds() / 3600)).quantize(Decimal("0.01"))
+
+        if data.status == "overtime" and HRService._decimal(record.overtime_hours) == 0 and record.check_in and record.check_out:
+            overtime_ref = record.check_out.replace(hour=17, minute=30, second=0, microsecond=0)
+            if record.check_out > overtime_ref:
+                record.overtime_hours = Decimal(str((record.check_out - overtime_ref).total_seconds() / 3600)).quantize(Decimal("0.01"))
+        if data.status == "abnormal":
+            record.check_out = None
+            record.working_hours = 0
+
+        record.attendance_type = data.status or record.attendance_type
+        after_status = HRService._attendance_status_from_record(record, False)
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="ATTENDANCE_ADJUSTMENT",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=f"Điều chỉnh chấm công. Trước: {before}. Sau: check_in={record.check_in}, check_out={record.check_out}, status={after_status}. Ghi chú: {data.note or ''}".strip(),
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        employee = Employee.query.get(record.employee_id)
+        return HRService._attendance_row_payload(employee, record.date, record, False)
+
+    @staticmethod
+    def attendance_audit_history(attendance_id: int) -> list[dict]:
+        logs = (
+            HistoryLog.query.filter_by(entity_type="attendance", entity_id=attendance_id)
+            .order_by(HistoryLog.created_at.desc())
+            .all()
+        )
+        return [
+            {
+                "id": log.id,
+                "action": log.action,
+                "description": log.description,
+                "performed_by": log.performed_by,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
+
+    @staticmethod
+    def overtime_pending_list(month: int | None = None, year: int | None = None) -> list[dict]:
+        start, end = HRService._month_window(month, year)
+        records = Attendance.query.join(Employee, Attendance.employee_id == Employee.id).filter(
+            Attendance.date >= start,
+            Attendance.date <= end,
+            Employee.is_deleted.is_(False),
+            Attendance.overtime_hours > 0,
+        ).order_by(Attendance.date.desc()).all()
+
+        rows = []
+        for record in records:
+            hr_status = "approved" if (record.attendance_type or "") == "overtime" else "pending"
+            rows.append(
+                {
+                    "attendance_id": record.id,
+                    "employee_id": record.employee_id,
+                    "employee_name": record.employee.full_name if record.employee else "--",
+                    "employee_code": f"EMP{record.employee_id:05d}",
+                    "date": record.date.isoformat(),
+                    "overtime_hours": float(record.overtime_hours or 0),
+                    "reason": "Tăng ca theo dữ liệu chấm công/máy chấm công",
+                    "manager_approved": True,
+                    "hr_status": hr_status,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def review_overtime(data: OvertimeApprovalDTO, actor_user_id: int | None = None) -> dict:
+        record = Attendance.query.get(data.attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy dữ liệu tăng ca")
+        action = (data.action or "").lower()
+        if action not in {"approve", "reject"}:
+            raise ValueError("Action không hợp lệ")
+
+        if action == "approve":
+            record.attendance_type = "overtime"
+        else:
+            record.attendance_type = "ot_rejected"
+            record.overtime_hours = Decimal("0.00")
+
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="OVERTIME_REVIEW",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=f"HR {('duyệt' if action == 'approve' else 'từ chối')} tăng ca. {data.note or ''}".strip(),
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"attendance_id": record.id, "action": action, "attendance_type": record.attendance_type}
+
+    @staticmethod
+    def detect_abnormal_attendance(month: int | None = None, year: int | None = None) -> list[dict]:
+        data = HRService.get_attendance_list(AttendanceFilterDTO(month=month, year=year))
+        return [item for item in data["items"] if item["is_abnormal"]]
+
+    @staticmethod
+    def export_attendance(data: AttendanceExportDTO) -> tuple[io.BytesIO, str, str]:
+        attendance_data = HRService.get_attendance_list(
+            AttendanceFilterDTO(
+                department_id=data.department_id if data.export_scope == "department" else None,
+                month=data.month,
+                year=data.year,
+                status="all",
+            )
+        )["items"]
+
+        if data.export_format == "pdf":
+            html_rows = "".join(
+                f"<tr><td>{row['employee_code']}</td><td>{row['employee_name']}</td><td>{row['department']}</td><td>{row['work_date']}</td><td>{row['working_hours']}</td><td>{row['status_label']}</td></tr>"
+                for row in attendance_data
+            )
+            html = f"""
+            <html><body><h2>Attendance {data.month}/{data.year}</h2>
+            <table border='1' cellspacing='0' cellpadding='6'>
+            <tr><th>Mã NV</th><th>Nhân viên</th><th>Phòng ban</th><th>Ngày</th><th>Giờ làm</th><th>Trạng thái</th></tr>
+            {html_rows}</table></body></html>
+            """
+            stream = io.BytesIO(html.encode("utf-8"))
+            return stream, f"attendance_{data.month}_{data.year}.pdf", "application/pdf"
+
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(
+            ["Mã NV", "Tên nhân viên", "Phòng ban", "Chức danh", "Ngày", "Giờ vào", "Giờ ra", "Tổng giờ làm", "OT", "Trạng thái"]
+        )
+        for row in attendance_data:
+            writer.writerow(
+                [
+                    row["employee_code"],
+                    row["employee_name"],
+                    row["department"],
+                    row["position"],
+                    row["work_date"],
+                    row["check_in"] or "--",
+                    row["check_out"] or "--",
+                    row["working_hours"],
+                    row["overtime_hours"],
+                    row["status_label"],
+                ]
+            )
+        output = io.BytesIO(stream.getvalue().encode("utf-8-sig"))
+        return output, f"attendance_{data.month}_{data.year}.csv", "text/csv"
+
+    @staticmethod
+    def get_attendance_meta() -> dict:
+        meta = HRService.get_filter_meta()
+        meta["attendance_statuses"] = [
+            {"value": "all", "label": "Tất cả"},
+            {"value": "normal", "label": "Bình thường"},
+            {"value": "late", "label": "Đi muộn"},
+            {"value": "early", "label": "Về sớm"},
+            {"value": "leave_approved", "label": "Nghỉ phép"},
+            {"value": "absent_unexcused", "label": "Vắng không phép"},
+            {"value": "overtime", "label": "Tăng ca"},
+            {"value": "abnormal", "label": "Bất thường"},
+        ]
+        meta["shift_types"] = [
+            {"value": "all", "label": "Tất cả"},
+            {"value": "normal", "label": "Ca chuẩn"},
+            {"value": "overtime", "label": "Ca tăng ca"},
+            {"value": "holiday", "label": "Ca ngày lễ"},
+        ]
+        return meta

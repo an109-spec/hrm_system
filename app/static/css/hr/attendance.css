@@ -1,0 +1,30 @@
+.hr-attendance-page { display: grid; gap: 16px; }
+.page-header, .toolbar, .table-card, .panel, .shortcut-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; }
+.page-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.page-header h1 { margin: 0; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.toolbar { display: grid; grid-template-columns: repeat(4, minmax(180px,1fr)); gap: 12px; }
+.toolbar label { display: grid; gap: 6px; font-size: 13px; color: #334155; }
+.toolbar input, .toolbar select, .form-grid input, .form-grid select, .form-grid textarea { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; width: 100%; }
+.summary-grid { display: grid; grid-template-columns: repeat(5,minmax(150px,1fr)); gap: 12px; }
+.summary-card { background:#0f172a; color:#fff; padding:14px; border-radius: 12px; display:grid; gap:6px; }
+.summary-card span { opacity:.82; font-size:13px; }
+.summary-card strong { font-size:26px; }
+.table-wrap { overflow:auto; }
+.attendance-table { width:100%; border-collapse: collapse; min-width: 1280px; }
+.attendance-table th, .attendance-table td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-size: 13px; text-align: left; }
+.badge { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+.badge-success { background:#dcfce7; color:#166534; }
+.badge-warning { background:#fef3c7; color:#92400e; }
+.badge-danger { background:#fee2e2; color:#991b1b; }
+.badge-info { background:#dbeafe; color:#1e3a8a; }
+.badge-primary { background:#e0e7ff; color:#3730a3; }
+.badge-neutral { background:#e2e8f0; color:#334155; }
+.panel-grid { display:grid; grid-template-columns: repeat(3,minmax(260px,1fr)); gap:16px; }
+.full-width { grid-column: 1 / -1; }
+.form-grid { display:grid; gap:10px; grid-template-columns: repeat(2, minmax(120px,1fr)); }
+.form-grid .full, .form-grid h4, .actions { grid-column:1 / -1; }
+.breakdown { display:grid; grid-template-columns: 1fr auto; gap:8px 14px; }
+.list-box, .audit-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height: 280px; overflow:auto; }
+.list-box li, .audit-list li { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#f8fafc; }
+.hr-toast { position: fixed; right: 20px; top: 20px; background:#0f172a; color:#fff; border-radius:8px; padding:10px 14px; z-index: 80; }

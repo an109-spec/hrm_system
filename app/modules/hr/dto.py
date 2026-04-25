@@ -133,3 +133,38 @@ class PayrollComplaintHandleDTO:
     action: str
     message: Optional[str] = None
     payroll_status: Optional[str] = None
+
+
+@dataclass
+class AttendanceFilterDTO:
+    search: Optional[str] = None
+    department_id: Optional[int] = None
+    status: Optional[str] = "all"
+    month: Optional[int] = None
+    year: Optional[int] = None
+    shift_type: Optional[str] = "all"
+
+
+@dataclass
+class AttendanceAdjustmentDTO:
+    attendance_id: int
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
+
+
+@dataclass
+class OvertimeApprovalDTO:
+    attendance_id: int
+    action: str
+    note: Optional[str] = None
+
+
+@dataclass
+class AttendanceExportDTO:
+    month: int
+    year: int
+    export_scope: str = "company"
+    department_id: Optional[int] = None
+    export_format: str = "excel"

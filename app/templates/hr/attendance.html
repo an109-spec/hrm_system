@@ -1,0 +1,135 @@
+{% extends "layouts/base.html" %}
+{% block title %}HR - Quản lý chấm công{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hr-attendance-page">
+  <header class="page-header card">
+    <div>
+      <h1>HR - Quản lý chấm công</h1>
+      <p>Quản lý chấm công toàn công ty, duyệt tăng ca, xử lý bất thường và đồng bộ payroll.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="btnExportAttendance">Xuất bảng chấm công</button>
+      <button class="btn btn-primary" id="btnApproveOTShortcut">Duyệt tăng ca</button>
+      <button class="btn btn-danger" id="btnAbnormalShortcut">Xử lý bất thường</button>
+    </div>
+  </header>
+
+  <section class="toolbar card">
+    <label>Tìm kiếm
+      <input id="searchInput" type="text" placeholder="Tên, mã nhân viên, phòng ban">
+    </label>
+    <label>Phòng ban
+      <select id="departmentFilter"><option value="">Tất cả</option></select>
+    </label>
+    <label>Trạng thái chấm công
+      <select id="statusFilter"><option value="all">Tất cả</option></select>
+    </label>
+    <label>Tháng
+      <select id="monthFilter"></select>
+    </label>
+    <label>Năm
+      <select id="yearFilter"></select>
+    </label>
+    <label>Loại ca
+      <select id="shiftTypeFilter"><option value="all">Tất cả</option></select>
+    </label>
+    <label>Phạm vi export
+      <select id="exportScopeFilter">
+        <option value="company">Toàn công ty</option>
+        <option value="department">Theo phòng ban</option>
+      </select>
+    </label>
+    <label>Định dạng
+      <select id="exportFormatFilter">
+        <option value="excel">Excel</option>
+        <option value="pdf">PDF</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="summary-grid">
+    <article class="summary-card"><span>Đi làm hôm nay</span><strong id="sumPresent">0</strong></article>
+    <article class="summary-card"><span>Đi muộn</span><strong id="sumLate">0</strong></article>
+    <article class="summary-card"><span>Nghỉ phép</span><strong id="sumLeave">0</strong></article>
+    <article class="summary-card"><span>OT chờ duyệt</span><strong id="sumOtPending">0</strong></article>
+    <article class="summary-card"><span>Chấm công bất thường</span><strong id="sumAbnormal">0</strong></article>
+  </section>
+
+  <section class="card shortcut-card" id="abnormalShortcutCard" hidden>
+    <strong>Phát hiện bản ghi chấm công bất thường cần xử lý.</strong>
+    <button class="btn btn-danger" id="btnProcessNow">Xử lý ngay</button>
+  </section>
+
+  <section class="card table-card">
+    <div class="table-wrap">
+      <table class="attendance-table">
+        <thead>
+          <tr>
+            <th>Mã nhân viên</th><th>Tên nhân viên</th><th>Phòng ban</th><th>Chức danh</th><th>Ngày làm việc</th>
+            <th>Giờ vào</th><th>Giờ ra</th><th>Tổng giờ làm</th><th>Tăng ca</th><th>Đi muộn / về sớm</th><th>Trạng thái</th><th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="attendanceTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel-grid">
+    <article class="card panel">
+      <h3>Panel A — Điều chỉnh chấm công thủ công</h3>
+      <form id="attendanceAdjustForm" class="form-grid">
+        <input type="hidden" id="attendanceId">
+        <label>Giờ vào<input id="adjustCheckIn" type="datetime-local"></label>
+        <label>Giờ ra<input id="adjustCheckOut" type="datetime-local"></label>
+        <label>Trạng thái
+          <select id="adjustStatus">
+            <option value="normal">Bình thường</option>
+            <option value="late">Đi muộn</option>
+            <option value="early">Về sớm</option>
+            <option value="leave_approved">Nghỉ phép</option>
+            <option value="absent_unexcused">Vắng không phép</option>
+            <option value="overtime">Tăng ca</option>
+            <option value="abnormal">Bất thường</option>
+          </select>
+        </label>
+        <label class="full">Ghi chú điều chỉnh
+          <textarea id="adjustNote" rows="3" placeholder="Quên check-in, lỗi máy chấm công, công tác ngoài công ty..."></textarea>
+        </label>
+        <div class="actions full">
+          <button type="button" id="btnEditAttendance" class="btn">Chỉnh sửa</button>
+          <button type="submit" class="btn btn-primary">Lưu</button>
+          <button type="button" id="btnSaveAudit" class="btn">Lưu lịch sử thay đổi</button>
+        </div>
+      </form>
+      <h4>Audit log chấm công</h4>
+      <ul id="attendanceAuditList" class="audit-list"></ul>
+    </article>
+
+    <article class="card panel">
+      <h3>Panel B — Chi tiết công làm việc</h3>
+      <dl id="attendanceBreakdown" class="breakdown"></dl>
+    </article>
+
+    <article class="card panel">
+      <h3>Panel C — Duyệt tăng ca</h3>
+      <ul id="otList" class="list-box"></ul>
+    </article>
+
+    <article class="card panel full-width">
+      <h3>Panel D — Xử lý bất thường</h3>
+      <ul id="abnormalList" class="list-box"></ul>
+    </article>
+  </section>
+
+  <div id="hrToast" class="hr-toast" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hr/attendance.js') }}"></script>
+{% endblock %}

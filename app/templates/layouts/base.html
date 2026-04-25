@@ -104,7 +104,7 @@
                 <a href="{{ url_for('employee.notifications') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.notifications' }}">
                     <i class="fas fa-bell"></i> Thông báo
                 </a>
-                <a href="{{ url_for('employee.attendance') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.attendance' }}">
+                <a href="{{ url_for('hr.attendance_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.attendance_page' }}">
                     <i class="fas fa-calendar-check"></i> Quản lý chấm công
                 </a>
                 <a href="{{ url_for('hr.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.payroll_page' }}">
