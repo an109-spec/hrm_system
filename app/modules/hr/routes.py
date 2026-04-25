@@ -4,7 +4,17 @@ from flask import jsonify, redirect, render_template, request, session, url_for
 
 from app.models import Employee, User
 from . import hr_bp
-from .dto import AccountStatusDTO, CreateContractDTO, CreateEmployeeDTO, EmployeeFilterDTO, UpdateEmployeeDTO
+from .dto import (
+    AccountStatusDTO,
+    ContractFilterDTO,
+    CreateContractDTO,
+    CreateEmployeeDTO,
+    EmployeeFilterDTO,
+    ExtendContractDTO,
+    TerminateContractDTO,
+    UpdateContractDTO,
+    UpdateEmployeeDTO,
+)
 from .service import HRService
 
 
@@ -38,6 +48,14 @@ def employees_page():
     if guard:
         return guard
     return render_template("hr/employees.html", employee=_current_employee())
+
+@hr_bp.route("/contracts", methods=["GET"])
+def contracts_page():
+    guard = _guard_hr_access()
+    if guard:
+        return guard
+    return render_template("hr/contracts.html", employee=_current_employee())
+
 
 
 @hr_bp.route("/api/meta", methods=["GET"])
@@ -131,6 +149,41 @@ def update_employee_api(employee_id: int):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+@hr_bp.route("/api/contracts", methods=["GET"])
+def list_contracts_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    filters = ContractFilterDTO(
+        search=request.args.get("search") or None,
+        contract_status=request.args.get("contract_status") or "all",
+        contract_type=request.args.get("contract_type") or "all",
+    )
+    return jsonify(HRService.get_contracts(filters))
+
+
+@hr_bp.route("/api/contracts/reminders", methods=["GET"])
+def contract_reminders_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    return jsonify(HRService.get_contract_reminders())
+
+
+@hr_bp.route("/api/contracts/<int:contract_id>", methods=["GET"])
+def contract_detail_api(contract_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.get_contract_detail(contract_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
 
 @hr_bp.route("/api/contracts", methods=["POST"])
 def create_contract_api():
@@ -153,6 +206,66 @@ def create_contract_api():
         return jsonify({"id": contract.id, "contract_code": contract.contract_code, "message": "Tạo hợp đồng thành công"}), 201
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+@hr_bp.route("/api/contracts/<int:contract_id>", methods=["PUT"])
+def update_contract_api(contract_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = UpdateContractDTO(
+        basic_salary=payload.get("basic_salary"),
+        start_date=payload.get("start_date"),
+        end_date=payload.get("end_date"),
+        contract_type=payload.get("contract_type"),
+        note=payload.get("note"),
+    )
+
+    try:
+        contract = HRService.update_contract(contract_id, dto)
+        return jsonify({"id": contract.id, "message": "Cập nhật hợp đồng thành công"})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/contracts/<int:contract_id>/extend", methods=["POST"])
+def extend_contract_api(contract_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = ExtendContractDTO(
+        end_date=payload.get("end_date", ""),
+        note=payload.get("note"),
+    )
+
+    try:
+        contract = HRService.extend_contract(contract_id, dto)
+        return jsonify({"id": contract.id, "message": "Gia hạn hợp đồng thành công"})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/contracts/<int:contract_id>/terminate", methods=["POST"])
+def terminate_contract_api(contract_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = TerminateContractDTO(
+        end_date=payload.get("end_date"),
+        note=payload.get("note"),
+    )
+
+    try:
+        contract = HRService.terminate_contract(contract_id, dto)
+        return jsonify({"id": contract.id, "message": "Đã kết thúc hợp đồng"})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
 
 
 @hr_bp.route("/api/accounts/<int:employee_id>/status", methods=["PATCH"])

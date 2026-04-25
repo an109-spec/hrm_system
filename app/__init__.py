@@ -75,9 +75,12 @@ def create_app():
         unread_notifications = 0
 
         user_id = session.get("user_id")
-
-        if user_id:
-            current_user = db.session.get(User, user_id)
+        try:
+            normalized_user_id = int(user_id) if user_id is not None else None
+        except (TypeError, ValueError):
+            normalized_user_id = None
+        if normalized_user_id:
+            current_user = User.query.get(normalized_user_id)
             if current_user:
                 current_employee = Employee.query.filter_by(user_id=current_user.id).first()
                 if current_employee and current_employee.avatar:

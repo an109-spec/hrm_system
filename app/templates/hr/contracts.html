@@ -1,0 +1,113 @@
+{% block title %}HR - Quản lý hợp đồng{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr/contracts.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hr-contract-page">
+  <header class="page-header">
+    <div>
+      <h1>Quản lý hợp đồng</h1>
+      <p>Quản trị vòng đời hợp đồng lao động, nhắc lịch và xử lý gia hạn theo chuẩn HR.</p>
+    </div>
+    <button id="btnCreateContract" class="btn btn-primary">+ Tạo hợp đồng</button>
+  </header>
+
+  <section class="toolbar card">
+    <label>
+      Tìm kiếm
+      <input id="searchInput" type="text" placeholder="Mã hợp đồng / Tên nhân viên / Mã nhân viên">
+    </label>
+
+    <label>
+      Trạng thái hợp đồng
+      <select id="statusFilter"></select>
+    </label>
+
+    <label>
+      Loại hợp đồng
+      <select id="typeFilter"></select>
+    </label>
+  </section>
+
+  <section class="dashboard-grid">
+    <article class="card contract-list-card">
+      <div class="summary-strip" id="summaryStrip"></div>
+      <div class="table-wrap">
+        <table class="contract-table">
+          <thead>
+            <tr>
+              <th>Mã nhân viên</th>
+              <th>Tên nhân viên</th>
+              <th>Loại hợp đồng</th>
+              <th>Ngày bắt đầu</th>
+              <th>Ngày hết hạn</th>
+              <th>Trạng thái hợp đồng</th>
+              <th>Lương cơ bản</th>
+              <th>Phụ cấp</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="contractTableBody"></tbody>
+        </table>
+      </div>
+    </article>
+
+    <aside class="card reminder-panel">
+      <div class="panel-head">
+        <h3>Nhắc lịch hợp đồng</h3>
+        <button id="btnRefreshReminder" class="btn btn-ghost">Làm mới</button>
+      </div>
+      <div class="reminder-stats" id="reminderStats"></div>
+      <ul class="reminder-list" id="reminderList"></ul>
+    </aside>
+  </section>
+
+  <section class="card editor-card">
+    <h3 id="formTitle">Tạo hợp đồng mới</h3>
+    <form id="contractForm" class="editor-grid">
+      <input type="hidden" id="contractId">
+      <label>
+        Nhân viên
+        <select id="employeeSelect" required></select>
+      </label>
+      <label>
+        Loại hợp đồng
+        <select id="contractType" required>
+          <option value="trial">Thử việc</option>
+          <option value="official">Chính thức</option>
+          <option value="internship">Thực tập</option>
+          <option value="seasonal">Thời vụ</option>
+        </select>
+      </label>
+      <label>
+        Lương cơ bản
+        <input id="basicSalary" type="number" min="0" step="1000" required>
+      </label>
+      <label>
+        Ngày bắt đầu
+        <input id="startDate" type="date" required>
+      </label>
+      <label>
+        Ngày hết hạn
+        <input id="endDate" type="date">
+      </label>
+      <label class="full">
+        Ghi chú
+        <textarea id="note" rows="2" placeholder="Nội dung thêm (nếu có)"></textarea>
+      </label>
+      <div class="actions full">
+        <button type="submit" class="btn btn-primary" id="btnSubmitForm">Lưu hợp đồng</button>
+        <button type="button" class="btn" id="btnSwitchCreate">Chuyển sang tạo mới</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="hrToast" class="hr-toast" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hr/contracts.js') }}"></script>
+{% endblock %}

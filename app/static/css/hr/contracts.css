@@ -1,0 +1,262 @@
+.hr-contract-page {
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e4e9f2;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 26px;
+  color: #0f172a;
+}
+
+.page-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.btn-ghost {
+  background: #fff;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.summary-box {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.summary-box strong {
+  display: block;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.summary-box span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+.contract-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 980px;
+}
+
+.contract-table th,
+.contract-table td {
+  border: 1px solid #edf2f7;
+  padding: 10px;
+  text-align: left;
+}
+
+.contract-table th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge.expiring {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.expired,
+.badge.terminated {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-group .btn {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.reminder-panel {
+  position: sticky;
+  top: 20px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-head h3 {
+  margin: 0;
+}
+
+.reminder-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.reminder-stat {
+  border-radius: 10px;
+  padding: 8px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.reminder-stat strong {
+  display: block;
+  font-size: 16px;
+}
+
+.reminder-stat.critical { background: #fee2e2; color: #7f1d1d; }
+.reminder-stat.warning { background: #fef3c7; color: #854d0e; }
+.reminder-stat.info { background: #dbeafe; color: #1e3a8a; }
+
+.reminder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: 640px;
+  overflow: auto;
+}
+
+.reminder-item {
+  border-left: 4px solid transparent;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.reminder-item.critical { border-left-color: #dc2626; }
+.reminder-item.warning { border-left-color: #d97706; }
+.reminder-item.info { border-left-color: #2563eb; }
+
+.reminder-item p {
+  margin: 2px 0;
+  font-size: 13px;
+}
+
+.reminder-item .meta {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.editor-card h3 {
+  margin: 0 0 12px;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.editor-grid .full {
+  grid-column: 1 / -1;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.hr-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: #0f172a;
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 8px;
+  z-index: 100;
+}

@@ -11,6 +11,11 @@ class EmployeeFilterDTO:
     position_id: Optional[int] = None
     working_status: Optional[str] = None
 
+@dataclass
+class ContractFilterDTO:
+    search: Optional[str] = None
+    contract_status: Optional[str] = "all"
+    contract_type: Optional[str] = "all"
 
 @dataclass
 class CreateEmployeeDTO:
@@ -49,6 +54,26 @@ class CreateContractDTO:
     start_date: str
     end_date: Optional[str] = None
     contract_type: Optional[str] = None
+    note: Optional[str] = None
+
+@dataclass
+class UpdateContractDTO:
+    basic_salary: Optional[float] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    contract_type: Optional[str] = None
+    note: Optional[str] = None
+
+
+@dataclass
+class ExtendContractDTO:
+    end_date: str
+    note: Optional[str] = None
+
+
+@dataclass
+class TerminateContractDTO:
+    end_date: Optional[str] = None
     note: Optional[str] = None
 
 
