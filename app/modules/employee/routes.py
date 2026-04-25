@@ -65,7 +65,25 @@ def _current_employee() -> Employee | None:
     if user and user.employee_profile:
         return user.employee_profile
     if user:
-        return Employee.query.filter_by(user_id=user.id).first()
+        employee = Employee.query.filter_by(user_id=user.id).first()
+        if employee:
+            return employee
+
+        # Tài khoản legacy (đặc biệt là admin seed cũ) có thể chưa có hồ sơ Employee.
+        # Tạo hồ sơ mặc định để không bị lỗi "Không tìm thấy hồ sơ nhân viên"
+        # khi truy cập trang hồ sơ/thông tin cá nhân.
+        employee = Employee(
+            user_id=user.id,
+            full_name=(user.username or user.email or f"User {user.id}").strip(),
+            phone=None,
+            dob=date(2000, 1, 1),
+            gender="other",
+            hire_date=date.today(),
+            working_status="working",
+        )
+        db.session.add(employee)
+        db.session.commit()
+        return employee
     return Employee.query.order_by(Employee.id.asc()).first()
 
 
