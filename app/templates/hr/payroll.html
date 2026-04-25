@@ -1,0 +1,123 @@
+{% extends "layouts/base.html" %}
+{% block title %}HR - Tính lương{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hr-payroll-page">
+  <header class="page-header card">
+    <div>
+      <h1>HR - Tính lương</h1>
+      <p>Quản lý toàn bộ nghiệp vụ payroll: tính lương, chỉnh sửa phụ cấp/khấu trừ, gửi duyệt và xử lý khiếu nại.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" id="btnCalculate">Tính lương tháng</button>
+      <button class="btn" id="btnExport">Xuất phiếu lương</button>
+    </div>
+  </header>
+
+  <section class="toolbar card">
+    <label>Tìm kiếm
+      <input id="searchInput" type="text" placeholder="Tên nhân viên / Mã nhân viên / Phòng ban">
+    </label>
+    <label>Phòng ban
+      <select id="departmentFilter"><option value="">Tất cả</option></select>
+    </label>
+    <label>Trạng thái payroll
+      <select id="statusFilter"><option value="all">Tất cả</option></select>
+    </label>
+    <label>Tháng
+      <select id="monthFilter"></select>
+    </label>
+    <label>Năm
+      <select id="yearFilter"></select>
+    </label>
+  </section>
+
+  <section class="summary-grid">
+    <article class="summary-card"><span>Tổng quỹ lương tháng</span><strong id="sumPayrollFund">0₫</strong></article>
+    <article class="summary-card"><span>Payroll chờ duyệt</span><strong id="sumPending">0</strong></article>
+    <article class="summary-card"><span>Khiếu nại lương</span><strong id="sumComplaints">0</strong></article>
+    <article class="summary-card"><span>Nhân viên chưa tính lương</span><strong id="sumMissing">0</strong></article>
+  </section>
+
+  <section class="card shortcut-card" id="complaintShortcut" hidden>
+    <strong>Có khiếu nại lương cần xử lý.</strong>
+    <button class="btn btn-danger" id="btnProcessComplaints">Xử lý khiếu nại lương</button>
+  </section>
+
+  <section class="card table-card">
+    <div class="table-wrap">
+      <table class="payroll-table">
+        <thead>
+          <tr>
+            <th>Mã nhân viên</th><th>Tên nhân viên</th><th>Phòng ban</th><th>Chức danh</th><th>Lương cơ bản</th>
+            <th>Ngày công thực tế</th><th>Số ngày nghỉ</th><th>Số giờ tăng ca</th><th>Phụ cấp</th><th>Phạt</th>
+            <th>Tổng thực nhận</th><th>Trạng thái</th><th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="payrollTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel-grid">
+    <article class="card panel">
+      <h3>Panel A — Chỉnh sửa phụ cấp / khấu trừ thủ công</h3>
+      <form id="adjustmentForm" class="form-grid">
+        <input type="hidden" id="salaryId">
+        <h4>Phụ cấp</h4>
+        <label>Phụ cấp xăng xe<input type="number" id="fuelAllowance" min="0" step="1000"></label>
+        <label>Phụ cấp ăn trưa<input type="number" id="mealAllowance" min="0" step="1000"></label>
+        <label>Phụ cấp trách nhiệm<input type="number" id="responsibilityAllowance" min="0" step="1000"></label>
+        <label>Phụ cấp khác<input type="number" id="otherAllowance" min="0" step="1000"></label>
+
+        <h4>Khấu trừ</h4>
+        <label>Phạt đi muộn<input type="number" id="latePenalty" min="0" step="1000"></label>
+        <label>Phạt về sớm<input type="number" id="earlyPenalty" min="0" step="1000"></label>
+        <label>Nghỉ không phép<input type="number" id="unpaidLeavePenalty" min="0" step="1000"></label>
+        <label>Phạt nội bộ khác<input type="number" id="otherPenalty" min="0" step="1000"></label>
+
+        <label class="full">Ghi chú<textarea id="adjustmentNote" rows="2"></textarea></label>
+        <div class="actions full">
+          <button class="btn" type="button" id="btnEditAdjustments">Chỉnh sửa</button>
+          <button class="btn btn-primary" type="submit" id="btnSaveAdjustments">Lưu</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card panel">
+      <h3>Panel B — Chi tiết bảng lương</h3>
+      <dl class="breakdown" id="breakdownPanel"></dl>
+    </article>
+
+    <article class="card panel">
+      <h3>Panel C — Gửi duyệt cho Admin</h3>
+      <div class="approval-box">
+        <button class="btn btn-primary" id="btnSubmitApproval">Gửi duyệt</button>
+        <p>Trạng thái duyệt: <strong id="approvalStatus">--</strong></p>
+        <div class="actions">
+          <button class="btn" data-approval="approve">Đã duyệt</button>
+          <button class="btn" data-approval="reject">Chưa duyệt</button>
+          <button class="btn" data-approval="finalize">Đã chốt</button>
+        </div>
+      </div>
+      <h4>Lịch sử chỉnh sửa payroll</h4>
+      <ul class="audit-list" id="auditList"></ul>
+    </article>
+  </section>
+
+  <section class="card panel">
+    <h3>Khiếu nại lương</h3>
+    <ul class="complaint-list" id="complaintList"></ul>
+  </section>
+
+  <div id="hrToast" class="hr-toast" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hr/payroll.js') }}"></script>
+{% endblock %}

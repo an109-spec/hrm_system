@@ -104,6 +104,12 @@
                 <a href="{{ url_for('employee.notifications') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.notifications' }}">
                     <i class="fas fa-bell"></i> Thông báo
                 </a>
+                <a href="{{ url_for('employee.attendance') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.attendance' }}">
+                    <i class="fas fa-calendar-check"></i> Quản lý chấm công
+                </a>
+                <a href="{{ url_for('hr.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.payroll_page' }}">
+                    <i class="fas fa-money-check-alt"></i> Tính lương
+                </a>
                 <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
                     <i class="fas fa-user-circle"></i> Hồ sơ cá nhân
                 </a>

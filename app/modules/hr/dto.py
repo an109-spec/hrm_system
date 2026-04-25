@@ -81,3 +81,55 @@ class TerminateContractDTO:
 class AccountStatusDTO:
     employee_id: int
     is_active: bool
+
+
+@dataclass
+class PayrollFilterDTO:
+    search: Optional[str] = None
+    department_id: Optional[int] = None
+    status: Optional[str] = None
+    month: Optional[int] = None
+    year: Optional[int] = None
+
+
+@dataclass
+class PayrollCalculationDTO:
+    month: int
+    year: int
+    department_id: Optional[int] = None
+
+
+@dataclass
+class PayrollAdjustmentDTO:
+    fuel_allowance: float = 0
+    meal_allowance: float = 0
+    responsibility_allowance: float = 0
+    other_allowance: float = 0
+    late_penalty: float = 0
+    early_penalty: float = 0
+    unpaid_leave_penalty: float = 0
+    other_penalty: float = 0
+    note: Optional[str] = None
+
+
+@dataclass
+class PayrollApprovalDTO:
+    action: str
+    note: Optional[str] = None
+
+
+@dataclass
+class PayrollExportDTO:
+    month: int
+    year: int
+    export_scope: str = "company"
+    department_id: Optional[int] = None
+    export_format: str = "excel"
+
+
+@dataclass
+class PayrollComplaintHandleDTO:
+    complaint_id: int
+    action: str
+    message: Optional[str] = None
+    payroll_status: Optional[str] = None

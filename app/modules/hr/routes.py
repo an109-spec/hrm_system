@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import jsonify, redirect, render_template, request, session, url_for
+from flask import jsonify, redirect, render_template, request, send_file, session, url_for
 
 from app.models import Employee, User
 from . import hr_bp
@@ -11,6 +11,12 @@ from .dto import (
     CreateEmployeeDTO,
     EmployeeFilterDTO,
     ExtendContractDTO,
+    PayrollAdjustmentDTO,
+    PayrollApprovalDTO,
+    PayrollCalculationDTO,
+    PayrollComplaintHandleDTO,
+    PayrollExportDTO,
+    PayrollFilterDTO,
     TerminateContractDTO,
     UpdateContractDTO,
     UpdateEmployeeDTO,
@@ -56,7 +62,12 @@ def contracts_page():
         return guard
     return render_template("hr/contracts.html", employee=_current_employee())
 
-
+@hr_bp.route("/payroll", methods=["GET"])
+def payroll_page():
+    guard = _guard_hr_access()
+    if guard:
+        return guard
+    return render_template("hr/payroll.html", employee=_current_employee())
 
 @hr_bp.route("/api/meta", methods=["GET"])
 def meta_api():
@@ -65,6 +76,182 @@ def meta_api():
         return jsonify({"error": "forbidden"}), 403
 
     return jsonify(HRService.get_filter_meta())
+
+@hr_bp.route("/api/payroll/meta", methods=["GET"])
+def payroll_meta_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    return jsonify(HRService.get_payroll_meta())
+
+
+@hr_bp.route("/api/payroll/calculate", methods=["POST"])
+def calculate_payroll_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    month = int(payload.get("month") or 0)
+    year = int(payload.get("year") or 0)
+    if month < 1 or month > 12 or year < 2000:
+        return jsonify({"error": "Tháng/năm không hợp lệ"}), 400
+
+    dto = PayrollCalculationDTO(
+        month=month,
+        year=year,
+        department_id=payload.get("department_id"),
+    )
+    result = HRService.calculate_monthly_payroll(dto, actor_user_id=session.get("user_id"))
+    return jsonify(result)
+
+
+@hr_bp.route("/api/payroll", methods=["GET"])
+def payroll_list_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    dto = PayrollFilterDTO(
+        search=request.args.get("search") or None,
+        department_id=request.args.get("department_id", type=int),
+        status=request.args.get("status") or "all",
+        month=request.args.get("month", type=int),
+        year=request.args.get("year", type=int),
+    )
+    return jsonify(HRService.get_payroll_list(dto))
+
+
+@hr_bp.route("/api/payroll/<int:salary_id>", methods=["GET"])
+def payroll_detail_api(salary_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.get_payroll_detail(salary_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@hr_bp.route("/api/payroll/<int:salary_id>/adjustments", methods=["PUT"])
+def payroll_adjustments_api(salary_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = PayrollAdjustmentDTO(
+        fuel_allowance=float(payload.get("fuel_allowance") or 0),
+        meal_allowance=float(payload.get("meal_allowance") or 0),
+        responsibility_allowance=float(payload.get("responsibility_allowance") or 0),
+        other_allowance=float(payload.get("other_allowance") or 0),
+        late_penalty=float(payload.get("late_penalty") or 0),
+        early_penalty=float(payload.get("early_penalty") or 0),
+        unpaid_leave_penalty=float(payload.get("unpaid_leave_penalty") or 0),
+        other_penalty=float(payload.get("other_penalty") or 0),
+        note=payload.get("note"),
+    )
+
+    try:
+        data = HRService.update_allowance_deduction(salary_id, dto, actor_user_id=session.get("user_id"))
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/payroll/<int:salary_id>/submit", methods=["POST"])
+def payroll_submit_api(salary_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.submit_payroll_approval(salary_id, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/payroll/<int:salary_id>/approve", methods=["POST"])
+def payroll_approve_api(salary_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = PayrollApprovalDTO(action=payload.get("action", ""), note=payload.get("note"))
+    try:
+        return jsonify(HRService.approve_payroll_flow(salary_id, dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/payroll/export", methods=["GET"])
+def payroll_export_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        dto = PayrollExportDTO(
+            month=int(request.args.get("month") or 0),
+            year=int(request.args.get("year") or 0),
+            export_scope=request.args.get("scope") or "company",
+            department_id=request.args.get("department_id", type=int),
+            export_format=request.args.get("format") or "excel",
+        )
+        stream, filename, mimetype = HRService.export_payslip(dto)
+        stream.seek(0)
+        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/payroll/<int:salary_id>/audit", methods=["GET"])
+def payroll_audit_api(salary_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    return jsonify(HRService.payroll_audit_history(salary_id))
+
+
+@hr_bp.route("/api/payroll/complaints", methods=["GET"])
+def payroll_complaints_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    return jsonify(HRService.get_payroll_complaints(month=month, year=year))
+
+
+@hr_bp.route("/api/payroll/complaints/<int:complaint_id>/handle", methods=["POST"])
+def payroll_complaint_handle_api(complaint_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = PayrollComplaintHandleDTO(
+        complaint_id=complaint_id,
+        action=payload.get("action", ""),
+        message=payload.get("message"),
+        payroll_status=payload.get("payroll_status"),
+    )
+
+    try:
+        result = HRService.handle_complaint(
+            dto,
+            handler_employee_id=_current_employee().id if _current_employee() else None,
+            actor_user_id=session.get("user_id"),
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
 
 
 @hr_bp.route("/api/employees", methods=["GET"])
