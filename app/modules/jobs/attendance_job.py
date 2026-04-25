@@ -1,4 +1,5 @@
 from datetime import date
+from operator import or_
 from app.extensions.db import db
 from app.models.employee import Employee
 from app.models.attendance import Attendance
@@ -13,7 +14,13 @@ class AttendanceJob:
         """
         today = date.today()
 
-        employees = Employee.query.filter_by(is_deleted=False).all()
+        employees = Employee.query.filter(
+            Employee.is_deleted.is_(False),
+            or_(
+                Employee.is_attendance_required.is_(True),
+                Employee.is_attendance_required.is_(None),
+            ),
+        ).all()
 
         for emp in employees:
             attendance = Attendance.query.filter_by(

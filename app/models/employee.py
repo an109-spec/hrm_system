@@ -45,7 +45,7 @@ class Employee(BaseModel):
     hire_date = db.Column(db.Date, nullable=True)
     employment_type = db.Column(employment_enum, default='probation', server_default='probation')
     working_status = db.Column(working_status_enum, default='working', server_default='working')
-
+    is_attendance_required = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
     # Relationships
     # Mối quan hệ với người quản lý và nhân viên cấp dưới
     user = relationship('User', back_populates='employee_profile')

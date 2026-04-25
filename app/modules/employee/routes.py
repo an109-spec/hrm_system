@@ -99,6 +99,11 @@ def _redirect_when_missing_employee():
         return redirect(url_for("admin.admin_dashboard_page"))
     return redirect(url_for("auth.login"))
 
+def _is_attendance_required(employee: Employee | None) -> bool:
+    if not employee:
+        return False
+    return employee.is_attendance_required is not False
+
 
 def _get_holiday_for_date(target_date: date) -> Holiday | None:
     default_holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(target_date.strftime("%m-%d"))
@@ -605,6 +610,12 @@ def check_in_out():
             "message": "Không tìm thấy nhân viên"
         }), 404
 
+    if not _is_attendance_required(employee):
+        return jsonify({
+            "toast": True,
+            "type": "info",
+            "message": "Vai trò hiện tại không áp dụng chấm công bắt buộc."
+        }), 200
     # =========================
     # PARSE REQUEST
     # =========================

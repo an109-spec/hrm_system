@@ -1,7 +1,7 @@
 from datetime import datetime, time 
 from decimal import Decimal
 from app.extensions import db
-from app.models import Attendance, AttendanceStatus
+from app.models import Attendance, AttendanceStatus, Employee
 from app.common.exceptions import ValidationError
 
 
@@ -19,6 +19,9 @@ class AttendanceService:
         return Decimal(str(AttendanceService.recalculate_hours(check_in, capped_checkout)))
     @staticmethod
     def check_in_out(employee_id: int, sim_time_str: str = None):
+        employee = Employee.query.get(employee_id)
+        if employee and employee.is_attendance_required is False:
+            return {"message": "Nhân sự này không áp dụng chấm công bắt buộc."}
         if not sim_time_str:
             raise ValidationError("Thiếu simulated_now")
         now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))

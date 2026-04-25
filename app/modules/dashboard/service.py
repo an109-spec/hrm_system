@@ -22,7 +22,12 @@ from .dto import (
 from app.models.leave import LeaveRequest
 
 class DashboardService:
-
+    @staticmethod
+    def _attendance_required_employee_ids_query():
+        return db.session.query(Employee.id).filter(
+            Employee.is_deleted.is_(False),
+            Employee.is_attendance_required.isnot(False),
+        )
     # =========================
     # OVERVIEW
     # =========================
@@ -46,20 +51,23 @@ class DashboardService:
     @staticmethod
     def get_today_attendance():
         today = date.today()
-
+        attendance_scope = Attendance.employee_id.in_(DashboardService._attendance_required_employee_ids_query())
         present = db.session.query(func.count(Attendance.id)) \
             .join(Attendance.status) \
-            .filter(Attendance.date == today, 
+            .filter(Attendance.date == today,
+                    attendance_scope,
                     Attendance.status.has(status_name='PRESENT')).scalar()
 
         late = db.session.query(func.count(Attendance.id)) \
             .join(Attendance.status) \
             .filter(Attendance.date == today,
+                    attendance_scope,
                     Attendance.status.has(status_name='LATE')).scalar()
 
         absent = db.session.query(func.count(Attendance.id)) \
             .join(Attendance.status) \
             .filter(Attendance.date == today,
+                    attendance_scope,
                     Attendance.status.has(status_name='ABSENT')).scalar()
 
         return AttendanceTodayDTO.to_dict(present, late, absent)
@@ -134,7 +142,10 @@ class DashboardService:
 
         for d in last_7_days:
             count = db.session.query(func.count(Attendance.id)) \
-                .filter(Attendance.date == d).scalar()
+                .filter(
+                    Attendance.date == d,
+                    Attendance.employee_id.in_(DashboardService._attendance_required_employee_ids_query()),
+                ).scalar()
 
             data.append({
                 "date": d.isoformat(),

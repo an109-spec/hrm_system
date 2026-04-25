@@ -76,6 +76,7 @@ class HRService:
             "position_id": employee.position_id,
             "username": account.username if account else None,
             "working_status": employee.working_status,
+            "is_attendance_required": HRService._is_attendance_required(employee),
             "account_status": "active" if account and account.is_active else "inactive",
         }
 
@@ -145,6 +146,20 @@ class HRService:
             if row.final_amount is not None:
                 total += Decimal(str(row.final_amount))
         return total
+
+    @staticmethod
+    def _is_attendance_required(employee: Employee) -> bool:
+        return employee.is_attendance_required is not False
+
+    @staticmethod
+    def _attendance_required_employee_query(query):
+        return query.filter(
+            or_(
+                Employee.is_attendance_required.is_(True),
+                Employee.is_attendance_required.is_(None),
+            )
+        )
+
 
     @staticmethod
     def _serialize_contract(contract: Contract, *, today: date | None = None) -> dict:
@@ -256,6 +271,7 @@ class HRService:
             "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
             "employment_type": employee.employment_type,
             "working_status": employee.working_status,
+            "is_attendance_required": HRService._is_attendance_required(employee),
             "account": {
                 "username": employee.user.username if employee.user else None,
                 "email": employee.user.email if employee.user else None,
@@ -796,15 +812,30 @@ class HRService:
             salary = Salary(employee_id=employee.id, month=month, year=year, net_salary=0, status="draft")
             db.session.add(salary)
 
-        metrics = HRService._attendance_metrics(employee.id, month, year)
         standard_work_days = Decimal("22")
         base_salary = HRService._decimal(contract.basic_salary)
-
+        attendance_required = HRService._is_attendance_required(employee)
+        metrics = (
+            HRService._attendance_metrics(employee.id, month, year)
+            if attendance_required
+            else {
+                "total_work_days": standard_work_days,
+                "overtime_hours": Decimal("0"),
+                "late_minutes": Decimal("0"),
+                "early_minutes": Decimal("0"),
+                "leave_days": 0,
+                "unpaid_leave_days": 0,
+            }
+        )
         total_allowance = HRService._sum_allowance(employee.id)
-        overtime_amount = (base_salary / standard_work_days / Decimal("8")) * metrics["overtime_hours"]
+        overtime_amount = (
+            (base_salary / standard_work_days / Decimal("8")) * metrics["overtime_hours"]
+            if attendance_required
+            else Decimal("0")
+        )
 
         late_penalty = Decimal("0")
-        if metrics["late_minutes"] > 0:
+        if attendance_required and metrics["late_minutes"] > 0:
             if metrics["late_minutes"] < 15:
                 late_penalty = Decimal("50000")
             elif metrics["late_minutes"] <= 30:
@@ -812,8 +843,12 @@ class HRService:
             else:
                 late_penalty = Decimal("300000")
 
-        early_penalty = Decimal("30000") if metrics["early_minutes"] > 0 else Decimal("0")
-        unpaid_leave_penalty = (base_salary / standard_work_days) * Decimal(str(metrics["unpaid_leave_days"]))
+        early_penalty = Decimal("30000") if attendance_required and metrics["early_minutes"] > 0 else Decimal("0")
+        unpaid_leave_penalty = (
+            (base_salary / standard_work_days) * Decimal(str(metrics["unpaid_leave_days"]))
+            if attendance_required
+            else Decimal("0")
+        )
 
         note_payload = HRService._salary_note_payload(salary)
         manual_allowances = note_payload.get("manual_allowances", {})
@@ -821,8 +856,12 @@ class HRService:
 
         manual_allowance_total = sum(HRService._decimal(v) for v in manual_allowances.values())
         manual_deduction_total = sum(HRService._decimal(v) for v in manual_deductions.values())
-
-        taxable_income = (base_salary / standard_work_days) * metrics["total_work_days"] + overtime_amount + total_allowance + manual_allowance_total
+        attendance_income = (
+            (base_salary / standard_work_days) * metrics["total_work_days"] + overtime_amount
+            if attendance_required
+            else base_salary
+        )
+        taxable_income = attendance_income + total_allowance + manual_allowance_total
         social_insurance = taxable_income * Decimal("0.08")
         health_insurance = taxable_income * Decimal("0.015")
         unemployment_insurance = taxable_income * Decimal("0.01")
@@ -847,6 +886,7 @@ class HRService:
 
         note_payload["breakdown"] = {
             "base_salary": float(base_salary),
+            "attendance_required": attendance_required,
             "allowance": float(total_allowance),
             "manual_allowance": float(manual_allowance_total),
             "overtime_amount": float(overtime_amount),
@@ -1310,6 +1350,9 @@ class HRService:
     def attendance_summary_dashboard(filters: AttendanceFilterDTO) -> dict:
         today = date.today()
         employee_query = Employee.query.filter_by(is_deleted=False)
+        employee_query = HRService._attendance_required_employee_query(
+            Employee.query.filter_by(is_deleted=False)
+        )
         if filters.department_id:
             employee_query = employee_query.filter(Employee.department_id == filters.department_id)
         employees = employee_query.all()
@@ -1352,6 +1395,9 @@ class HRService:
     def get_attendance_list(filters: AttendanceFilterDTO) -> dict:
         start, end = HRService._month_window(filters.month, filters.year)
         employees_query = Employee.query.filter_by(is_deleted=False)
+        employees_query = HRService._attendance_required_employee_query(
+            Employee.query.filter_by(is_deleted=False)
+        )
         if filters.department_id:
             employees_query = employees_query.filter(Employee.department_id == filters.department_id)
         employees = employees_query.order_by(Employee.full_name.asc()).all()
@@ -1393,7 +1439,8 @@ class HRService:
         employee = Employee.query.filter_by(id=employee_id, is_deleted=False).first()
         if not employee:
             raise ValueError("Không tìm thấy nhân viên")
-
+        if not HRService._is_attendance_required(employee):
+            raise ValueError("Nhân viên này không thuộc diện bắt buộc chấm công")
         start, end = HRService._month_window(month, year)
         records = Attendance.query.filter(
             Attendance.employee_id == employee_id,
