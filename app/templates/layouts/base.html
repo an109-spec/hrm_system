@@ -53,7 +53,7 @@
   </div>
 </header>
 <div class="app-container container">
-    {% set admin_profile_endpoints = ['employee.profile', 'employee.staff_profile'] %}
+    {% set admin_profile_endpoints = ['admin.admin_profile_page', 'admin.admin_staff_profile_page'] %}
     {% if current_user and (role_name != 'admin' or request.endpoint in admin_profile_endpoints) %}
     <aside class="sidebar-aside">
         <nav class="vertical-nav">
@@ -76,10 +76,10 @@
                 <a href="{{ url_for('admin.admin_salary_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_salary_page' }}">
                     <i class="fas fa-money-check-alt"></i> Lương
                 </a>
-                <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
+                <a href="{{ url_for('admin.admin_profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_profile_page' }}">
                     <i class="fas fa-user-shield"></i> Thông tin cá nhân
                 </a>
-                <a href="{{ url_for('employee.staff_profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.staff_profile' }}">
+                <a href="{{ url_for('admin.admin_staff_profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'admin.admin_staff_profile_page' }}">
                     <i class="fas fa-id-card"></i> Hồ sơ admin
                 </a>
             {% elif role_name == 'manager' %}

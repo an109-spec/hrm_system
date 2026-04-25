@@ -1,0 +1,193 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Hồ sơ admin{% endblock %}
+
+{% block admin_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/staff_profile.css') }}">
+{% endblock %}
+
+{% block admin_content %}
+<div class="profile-container">
+  <h2 class="page-title">👤 Hồ sơ Admin</h2>
+
+  <section class="profile-summary">
+    <div class="summary-avatar-col">
+      <div class="avatar-wrapper" onclick="document.getElementById('avatarInput').click()">
+        {% if employee.avatar %}
+          <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar" alt="avatar">
+        {% else %}
+          <div class="avatar-placeholder">{{ employee.full_name[0] }}</div>
+        {% endif %}
+      </div>
+      <input type="file" id="avatarInput" hidden>
+      <button class="btn btn-primary" id="uploadAvatarBtn" type="button">Cập nhật ảnh</button>
+    </div>
+
+    <div class="summary-info-col">
+      <p><strong>Họ và tên:</strong> {{ employee.full_name }}</p>
+      <p><strong>Mã nhân viên:</strong> #{{ employee.id }}</p>
+      <p><strong>Loại:</strong> <span class="pill">{{ enum_labelize(employee.employment_type) }}</span></p>
+      <p><strong>Trạng thái:</strong> <span class="pill status">{{ enum_labelize(employee.working_status) }}</span></p>
+    </div>
+  </section>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="tab-identify">📑 Thông tin</button>
+    <button class="tab" data-tab="tab-job">💼 Công việc</button>
+    <button class="tab" data-tab="tab-account">🔐 Tài khoản</button>
+    <button class="tab" data-tab="tab-system">🧩 Hệ thống</button>
+    <button class="tab" data-tab="tab-history">🕒 Lịch sử công tác</button>
+  </div>
+
+  <section class="tab-pane active" id="tab-identify">
+    <h3>Thông tin định danh & Liên hệ</h3>
+    <form id="profileForm" class="form-grid">
+      <div class="field">
+        <label>Họ và tên</label>
+        <input name="full_name" value="{{ employee.full_name }}" readonly class="readonly-input">
+      </div>
+      <div class="field">
+        <label>Ngày sinh</label>
+        <input name="dob" type="date" value="{{ employee.dob.strftime('%Y-%m-%d') if employee.dob else '' }}" readonly class="readonly-input">
+        <small>Tuổi: {{ employee.age if employee.age is not none else 'N/A' }}</small>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input value="{{ user.email }}" readonly class="readonly-input" name="email">
+      </div>
+      <div class="field">
+        <label>Giới tính</label>
+        <div class="radio-group">
+          <label><input type="radio" name="gender" value="male" {% if employee.gender == 'male' %}checked{% endif %} disabled> Nam</label>
+          <label><input type="radio" name="gender" value="female" {% if employee.gender == 'female' %}checked{% endif %} disabled> Nữ</label>
+          <label><input type="radio" name="gender" value="other" {% if employee.gender == 'other' %}checked{% endif %} disabled> Khác</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Số điện thoại</label>
+        <input name="phone" value="{{ employee.phone or '' }}" readonly class="readonly-input">
+      </div>
+      <div class="field full-row">
+        <label>Địa chỉ</label>
+        <input value="{{ employee.address_detail or employee.address or 'Chưa cập nhật' }}" readonly class="readonly-input" id="addressTextDisplay">
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="editInfoBtn" class="btn btn-primary">Chỉnh sửa thông tin</button>
+        <button type="button" id="toggleAddressBtn" class="btn">Chỉnh sửa địa chỉ</button>
+        <button type="submit" id="saveInfoBtn" class="btn btn-success hidden">Lưu thay đổi</button>
+        <button type="button" id="cancelInfoBtn" class="btn hidden">Hủy</button>
+      </div>
+
+      <div class="address-editor hidden" id="addressEditor">
+        <h4>ĐỊA CHỈ LIÊN HỆ</h4>
+        <div class="address-grid" id="addressData" data-province="{{ employee.province_id or '' }}" data-district="{{ employee.district_id or '' }}" data-ward="{{ employee.ward_id or '' }}">
+          <div class="field">
+            <label>Tỉnh/Thành phố</label>
+            <select id="province" name="province"><option value="">Chọn Tỉnh/Thành</option></select>
+          </div>
+          <div class="field">
+            <label>Quận/Huyện</label>
+            <select id="district" name="district"><option value="">Chọn Quận/Huyện</option></select>
+          </div>
+          <div class="field">
+            <label>Phường/Xã</label>
+            <select id="ward" name="ward"><option value="">Chọn Phường/Xã</option></select>
+          </div>
+          <div class="field full-row">
+            <label>Địa chỉ chi tiết</label>
+            <input id="detailAddress" name="address_detail" value="{{ employee.address_detail or '' }}" placeholder="Số nhà, tên đường...">
+          </div>
+          <div class="form-actions full-row">
+            <button type="submit" class="btn btn-success">Lưu thay đổi</button>
+            <button type="button" id="cancelAddressBtn" class="btn">Hủy</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="tab-pane" id="tab-job">
+    <h3>Quản lý Tổ chức</h3>
+    <div class="detail-grid">
+      <p><strong>Phòng ban:</strong> {{ employee.department.name if employee.department else 'Chưa cập nhật' }}</p>
+      <p><strong>Chức danh:</strong> {{ employee.position.job_title if employee.position else 'Chưa cập nhật' }}</p>
+      <p><strong>Quản lý trực tiếp:</strong> {{ employee.manager.full_name if employee.manager else 'Chưa cập nhật' }}</p>
+      <p><strong>Ngày vào làm:</strong> {{ employee.hire_date.strftime('%d/%m/%Y') if employee.hire_date else 'Chưa cập nhật' }}</p>
+      <p><strong>Loại hợp đồng:</strong> {{ enum_labelize(employee.employment_type) }}</p>
+    </div>
+
+    <h3>Dải lương & Yêu cầu</h3>
+    <div class="detail-grid">
+      <p><strong>Vai trò:</strong> {{ user.role.name if user.role else 'Nhân viên' }}</p>
+      <p><strong>Chức danh:</strong> {{ employee.position.job_title if employee.position else 'Chưa cập nhật' }}</p>
+      <p><strong>Dải lương quy định:</strong>
+        {% if employee.position and employee.position.min_salary and employee.position.max_salary %}
+          {{ "{:,}".format(employee.position.min_salary|int) }} ➔ {{ "{:,}".format(employee.position.max_salary|int) }} VND
+        {% else %}
+          Chưa cập nhật
+        {% endif %}
+      </p>
+      <p><strong>Yêu cầu công việc:</strong> {{ employee.position.requirements if employee.position and employee.position.requirements else 'Chưa cập nhật' }}</p>
+    </div>
+  </section>
+
+  <section class="tab-pane" id="tab-account">
+    <h3>Tài khoản</h3>
+    <div class="detail-grid">
+      <p><strong>Tên đăng nhập:</strong> {{ user.username }}</p>
+      <p><strong>Email:</strong> {{ user.email }}</p>
+      <p><strong>Vai trò:</strong> {{ user.role.name if user.role else 'Nhân viên' }}</p>
+    </div>
+
+    <form class="form-grid" method="POST" action="{{ url_for('admin.admin_profile_page') }}">
+      <input type="hidden" name="action" value="change_password">
+      <div class="field"><label>Mật khẩu hiện tại</label><input type="password" name="current_password" required></div>
+      <div class="field"><label>Mật khẩu mới</label><input type="password" name="new_password" required></div>
+      <div class="field"><label>Xác nhận mật khẩu</label><input type="password" name="confirm_password" required></div>
+      <button type="submit" class="btn btn-primary">Đổi mật khẩu</button>
+    </form>
+  </section>
+
+  <section class="tab-pane" id="tab-system">
+    <h3>Lịch sử & Hệ thống</h3>
+    <div class="detail-grid">
+      <p><strong>Ngày tạo hồ sơ:</strong> {{ employee.created_at.strftime('%d/%m/%Y %H:%M') if employee.created_at else 'N/A' }}</p>
+      <p><strong>Lần cuối cập nhật:</strong> {{ employee.updated_at.strftime('%d/%m/%Y %H:%M') if employee.updated_at else 'N/A' }}</p>
+      <p><strong>ID tài khoản liên kết:</strong> {{ employee.user_id or 'N/A' }}</p>
+      <p><strong>Trạng thái lưu trữ:</strong> {{ 'Đã xóa mềm' if employee.is_deleted else 'Đang lưu trữ' }}</p>
+    </div>
+  </section>
+
+  <section class="tab-pane" id="tab-history">
+    <h3>🕒 Lịch sử công tác (History)</h3>
+    <div class="table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Sự kiện</th>
+            <th>Chi tiết</th>
+            <th>Nguồn dữ liệu</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in history_events %}
+            <tr>
+              <td>{{ item.time.strftime('%d/%m/%Y %H:%M') }}</td>
+              <td>{{ item.event }}</td>
+              <td>{{ item.detail }}</td>
+              <td>{{ item.source }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4">Chưa có dữ liệu lịch sử.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block admin_scripts %}
+<script src="{{ url_for('static', filename='js/employee/staff_profile.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Hồ sơ admin{% endblock %}
+
+{% block admin_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/profile.css') }}">
+{% endblock %}
+
+{% block admin_content %}
+<div class="profile-container">
+  <div class="profile-header">
+    <h2>Hồ sơ cá nhân</h2>
+    <p>Quản lý thông tin và bảo mật</p>
+  </div>
+
+  <div class="profile-card">
+    <div class="profile-left">
+      <div class="avatar-wrapper" onclick="document.getElementById('avatarInput').click()">
+        {% if employee.avatar %}
+          <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar">
+        {% else %}
+          <div class="avatar-placeholder">
+            {{ employee.full_name[0] }}
+          </div>
+        {% endif %}
+      </div>
+      <input type="file" id="avatarInput" hidden>
+
+      <div class="avatar-actions">
+        <button onclick="document.getElementById('avatarInput').click()">Chọn ảnh</button>
+        <button class="primary" id="uploadAvatarBtn">Cập nhật ảnh</button>
+      </div>
+    </div>
+
+    <div class="profile-right">
+      <h3>{{ employee.full_name }}</h3>
+      <p>ID: #{{ employee.id }}</p>
+      <p>Vai trò: {{ user.role.name if user.role else 'Nhân viên' }}</p>
+      <p>Email: {{ user.email }}</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="info">Thông tin</button>
+    <button class="tab" data-tab="security">Bảo mật</button>
+    <button class="tab" data-tab="complaint">Khiếu nại</button>
+  </div>
+
+  <div class="tab-content">
+    <div class="tab-pane active" id="info">
+      <form class="form-grid" id="profileForm">
+        <div class="input-group">
+          <label>Họ tên</label>
+          <input name="full_name" value="{{ employee.full_name }}" readonly class="readonly-input">
+        </div>
+        <div class="input-group">
+          <label>Email</label>
+          <input value="{{ user.email }}" readonly class="readonly-input">
+        </div>
+        <div class="input-group">
+          <label>SĐT</label>
+          <input name="phone" value="{{ employee.phone or '' }}" readonly class="readonly-input">
+        </div>
+
+        <div class="address-section">
+          <label>ĐỊA CHỈ LIÊN HỆ</label>
+          <div class="address-grid" id="addressData" data-province="{{ employee.province_id or '' }}" data-district="{{ employee.district_id or '' }}" data-ward="{{ employee.ward_id or '' }}">
+            <select id="province" name="province" disabled><option value="">Chọn Tỉnh/Thành</option></select>
+            <select id="district" name="district" disabled><option value="">Chọn Quận/Huyện</option></select>
+            <select id="ward" name="ward" disabled><option value="">Chọn Phường/Xã</option></select>
+
+            <input id="detailAddress" name="address_detail" value="{{ employee.address_detail or '' }}" placeholder="Số nhà, tên đường..." readonly class="readonly-input">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" id="editBtn" class="primary">Chỉnh sửa</button>
+          <div id="saveCancelActions" style="display: none;">
+            <button type="submit" class="success-btn">Lưu thay đổi</button>
+            <button type="button" id="cancelBtn" class="secondary">Hủy</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="tab-pane" id="security">
+      <form class="form-grid" method="POST" action="{{ url_for('admin.admin_profile_page') }}">
+        <input type="hidden" name="action" value="change_password">
+        <label>Mật khẩu hiện tại
+          <input type="password" name="current_password" required>
+        </label>
+        <label>Mật khẩu mới
+          <input type="password" name="new_password" required>
+        </label>
+        <label>Xác nhận mật khẩu
+          <input type="password" name="confirm_password" required>
+        </label>
+        <button type="submit" class="primary">Đổi mật khẩu</button>
+      </form>
+    </div>
+
+    <div class="tab-pane" id="complaint">
+      <form class="form-grid">
+        <input placeholder="Tiêu đề">
+        <textarea placeholder="Nội dung"></textarea>
+        <button class="primary">Gửi</button>
+      </form>
+
+      <div class="list">
+        {% for c in complaints %}
+        <div class="item">
+          <div>
+            <strong>{{ c.title }}</strong>
+            <small>{{ c.created_at.strftime('%d/%m %H:%M') }}</small>
+          </div>
+          <span class="badge {{ c.status }}">
+            {{ c.status }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block admin_scripts %}
+<script src="{{ url_for('static', filename='js/employee/profile.js') }}"></script>
+{% endblock %}

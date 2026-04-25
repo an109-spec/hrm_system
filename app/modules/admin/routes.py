@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 from io import StringIO
 import csv
 
-from flask import jsonify, render_template, request, session, redirect, url_for, Response
+from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
 from sqlalchemy import func
-
+from werkzeug.security import check_password_hash, generate_password_hash
 from app.extensions.db import db
 from app.models import (
     Attendance,
     AttendanceStatus,
     Complaint,
+    Contract,
     Department,
     Employee,
     HistoryLog,
@@ -107,6 +108,170 @@ def admin_salary_page():
         return guard
     return render_template("admin/salary.html")
 
+def _current_employee() -> Employee | None:
+    user = _current_user()
+    if user and user.employee_profile:
+        return user.employee_profile
+    if user:
+        return Employee.query.filter_by(user_id=user.id).first()
+    return None
+
+
+def _labelize_enum(value: str | None) -> str:
+    if not value:
+        return "Chưa cập nhật"
+    labels = {
+        "probation": "Thử việc",
+        "permanent": "Chính thức",
+        "intern": "Thực tập",
+        "contract": "Hợp đồng",
+        "working": "Đang làm việc",
+        "on_leave": "Tạm nghỉ",
+        "resigned": "Đã nghỉ việc",
+        "male": "Nam",
+        "female": "Nữ",
+        "other": "Khác",
+    }
+    return labels.get(value, value)
+
+
+@admin_bp.route("/admin/profile", methods=["GET", "POST"])
+def admin_profile_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
+        return redirect(url_for("admin.admin_dashboard_page"))
+
+    action = request.form.get("action")
+    if request.method == "POST" and action == "change_password":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not check_password_hash(user.password_hash, current_password):
+            flash("❌ Mật khẩu hiện tại không đúng.", "danger")
+            return redirect(url_for("admin.admin_profile_page"))
+
+        if len(new_password) < 8:
+            flash("❌ Mật khẩu mới cần tối thiểu 8 ký tự.", "danger")
+            return redirect(url_for("admin.admin_profile_page"))
+
+        if new_password != confirm_password:
+            flash("❌ Xác nhận mật khẩu không khớp.", "danger")
+            return redirect(url_for("admin.admin_profile_page"))
+
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        flash("✅ Đổi mật khẩu thành công.", "success")
+        return redirect(url_for("admin.admin_profile_page"))
+
+    complaints = (
+        Complaint.query.filter_by(employee_id=employee.id)
+        .order_by(Complaint.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template("admin/profile.html", employee=employee, user=user, complaints=complaints)
+
+
+@admin_bp.get("/admin/staff-profile")
+def admin_staff_profile_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
+        return redirect(url_for("admin.admin_dashboard_page"))
+
+    latest_contract = (
+        Contract.query.filter_by(employee_id=employee.id)
+        .order_by(Contract.start_date.desc(), Contract.created_at.desc())
+        .first()
+    )
+    history_logs = (
+        HistoryLog.query.filter_by(employee_id=employee.id)
+        .order_by(HistoryLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    history_events = []
+    if employee.hire_date:
+        history_events.append(
+            {
+                "time": employee.hire_date,
+                "event": "🎉 Gia nhập công ty",
+                "detail": f"Vị trí: {employee.position.job_title if employee.position else 'Chưa có'}",
+                "source": "Employee + Position",
+            }
+        )
+    if user.created_at:
+        history_events.append(
+            {
+                "time": user.created_at,
+                "event": "🔐 Tạo tài khoản",
+                "detail": f"Username: {user.username}",
+                "source": "User",
+            }
+        )
+    if employee.updated_at:
+        history_events.append(
+            {
+                "time": employee.updated_at,
+                "event": "🔄 Cập nhật thông tin",
+                "detail": "Sửa đổi hồ sơ nhân sự",
+                "source": "Employee.updated_at",
+            }
+        )
+    if latest_contract and latest_contract.start_date:
+        history_events.append(
+            {
+                "time": latest_contract.start_date,
+                "event": "📝 Ký hợp đồng",
+                "detail": f"Mã HĐ: {latest_contract.contract_code}",
+                "source": "Contracts",
+            }
+        )
+    for log in history_logs:
+        history_events.append(
+            {
+                "time": log.created_at,
+                "event": f"📌 {log.action}",
+                "detail": log.description or "Không có mô tả",
+                "source": f"{log.entity_type or 'HistoryLog'}",
+            }
+        )
+
+    def _event_sort_key(item):
+        event_time = item.get("time")
+        if isinstance(event_time, datetime):
+            dt = event_time
+        elif isinstance(event_time, date):
+            dt = datetime.combine(event_time, time.min)
+        else:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
+
+    history_events = sorted(history_events, key=_event_sort_key, reverse=True)[:20]
+    return render_template(
+        "admin/staff_profile.html",
+        employee=employee,
+        user=user,
+        latest_contract=latest_contract,
+        history_events=history_events,
+        enum_labelize=_labelize_enum,
+    )
 
 # -------------------------
 # Auth/me
