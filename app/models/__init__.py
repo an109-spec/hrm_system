@@ -22,6 +22,7 @@ from app.models.attendance import Attendance
 from app.models.leave import LeaveRequest
 from app.models.leave_usage import EmployeeLeaveUsage
 from app.models.contract import Contract
+from app.models.contract_proposal import ContractProposal
 from app.models.allowance import EmployeeAllowance
 from app.models.salary import Salary
 from app.models.notification import Notification
@@ -45,6 +46,7 @@ __all__ = [
     'LeaveRequest',
     'EmployeeLeaveUsage',
     'Contract',
+    'ContractProposal',
     'AllowanceType',
     'EmployeeAllowance',
     'Salary',

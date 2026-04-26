@@ -200,11 +200,69 @@ def contract_expiring_api():
     return jsonify(ManagerService.get_contract_expiring(manager.id))
 
 
-@manager_bp.route("/contracts/renew", methods=["POST"])
-def renew_contract_api():
+@manager_bp.route("/contracts/overview", methods=["GET"])
+def contracts_overview_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(
+        ManagerService.get_department_contract_overview(
+            manager.id,
+            employee_name=request.args.get("employee_name"),
+            employee_code=request.args.get("employee_code"),
+            contract_type=request.args.get("contract_type"),
+            contract_status=request.args.get("contract_status"),
+            end_date_from=request.args.get("end_date_from"),
+            end_date_to=request.args.get("end_date_to"),
+            department=request.args.get("department"),
+            position=request.args.get("position"),
+        )
+    )
+
+
+@manager_bp.route("/contracts/<int:contract_id>", methods=["GET"])
+def contract_detail_manager_api(contract_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    try:
+        return jsonify(ManagerService.get_contract_detail_for_manager(manager.id, contract_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/contracts/<int:contract_id>/proposals", methods=["POST"])
+def contract_proposal_manager_api(contract_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
     data = request.get_json(silent=True) or {}
-    contract = ManagerService.renew_contract(data)
-    return jsonify({"id": contract.id, "message": "Renewed"})
+    try:
+        return jsonify(
+            ManagerService.create_contract_proposal(
+                manager.id,
+                contract_id=contract_id,
+                proposal_type=data.get("proposal_type", ""),
+                reason=data.get("reason", ""),
+                proposed_date=data.get("proposed_date"),
+                proposed_duration_months=data.get("proposed_duration_months"),
+                professional_note=data.get("professional_note"),
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/contracts/<int:contract_id>/review-confirm", methods=["POST"])
+def contract_review_confirm_manager_api(contract_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(ManagerService.confirm_contract_review(manager.id, contract_id, data.get("note")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @manager_bp.route("/salary", methods=["GET"])

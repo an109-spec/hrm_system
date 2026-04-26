@@ -53,11 +53,21 @@ window.ManagerAPI = {
 
   contractsExpiring: () => fetch('/manager/contracts/expiring').then(parseJsonResponse),
 
-  renewContract: (payload) =>
-    fetch('/manager/contracts/renew', {
+  contractsOverview: (params = {}) =>
+    fetch(`/manager/contracts/overview?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  contractDetail: (contractId) =>
+    fetch(`/manager/contracts/${contractId}`).then(parseJsonResponse),
+  createContractProposal: (contractId, payload) =>
+    fetch(`/manager/contracts/${contractId}/proposals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
+    }).then(parseJsonResponse),
+  confirmContractReview: (contractId, note = '') =>
+    fetch(`/manager/contracts/${contractId}/review-confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note })
     }).then(parseJsonResponse),
 
   salary: (month, year) =>

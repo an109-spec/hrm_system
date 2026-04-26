@@ -1,14 +1,22 @@
-:root { --primary:#2C3E50; --success:#2E7D32; --warning:#F9A825; --danger:#C62828; --info:#1565C0; --bg:#FFFFFF; --border:#E0E0E0; }
-.contract-warning { background:var(--bg); border:1px solid var(--border); border-left:5px solid var(--warning); border-radius:10px; padding:14px; }
-.contract-warning ul { list-style:none; padding:0; margin:0; }
-.contract-warning li { border-bottom:1px solid var(--border); padding:10px 0; display:flex; justify-content:space-between; gap:8px; align-items:center; }
-.contract-warning button { border:1px solid var(--info); color:var(--info); background:#fff; border-radius:6px; padding:6px 10px; }
-.state.error { color:var(--danger); margin-top:8px; }
-.modal { position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,0.4); }
-.modal[hidden] { display:none !important; }
-.modal-content { width:min(480px,95vw); background:#fff; border-radius:10px; padding:16px; display:grid; gap:8px; position:relative; }
-.modal-content input { border:1px solid var(--border); border-radius:6px; padding:8px; }
-.close { position:absolute; right:12px; top:6px; font-size:22px; cursor:pointer; }
-.modal-actions { display:flex; gap:8px; justify-content:flex-end; }
-.btn-success { background:var(--success); color:#fff; border:none; padding:8px 12px; border-radius:6px; }
-.btn-danger { background:var(--danger); color:#fff; border:none; padding:8px 12px; border-radius:6px; }
+.manager-contract-page { display: grid; gap: 16px; }
+.page-title { margin: 0; }
+.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.summary-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; }
+.summary-card h4 { margin: 0 0 8px; font-size: 14px; color: #4b5563; }
+.summary-card p { margin: 0; font-size: 24px; font-weight: 700; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; }
+.filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.filter-grid input, .filter-grid select { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; }
+.actions { margin-top: 10px; display: flex; gap: 8px; }
+.actions button { border: 0; background: #1d4ed8; color: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.actions .secondary { background: #6b7280; }
+.table-wrap { overflow-x: auto; }
+.contract-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.contract-table th, .contract-table td { border-bottom: 1px solid #e5e7eb; padding: 8px; text-align: left; vertical-align: top; }
+.contract-table td.actions { min-width: 340px; display: grid; gap: 6px; }
+.contract-table td.actions button { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; text-align: left; }
+.state.error { color: #b91c1c; }
+@media (max-width: 1200px) {
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

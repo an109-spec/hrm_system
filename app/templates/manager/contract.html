@@ -1,29 +1,66 @@
 {% extends "layouts/base.html" %}
-{% block title %}Hợp đồng{% endblock %}
+{% block title %}Manager - Hợp đồng{% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/manager/contract.css') }}">
 {% endblock %}
 
 {% block content %}
-<h2 class="page-title">📄 Hợp đồng sắp hết hạn</h2>
-<div class="contract-warning"><h3>⚠️ Sắp hết hạn (&lt; 30 ngày)</h3><ul id="contract-list"></ul></div>
-<div id="contract-error" class="state error" hidden></div>
-<div id="contract-modal" class="modal" hidden>
-  <div class="modal-content">
-    <span class="close" id="close-modal">&times;</span>
+<section class="manager-contract-page">
+  <h2 class="page-title">📄 Manager → Hợp đồng (Review & Proposal)</h2>
 
-    <h3>📝 Gia hạn hợp đồng</h3>
+  <section class="summary-grid" id="summaryCards">
+    <article class="summary-card"><h4>Tổng hợp đồng phòng ban</h4><p id="sum-total">0</p></article>
+    <article class="summary-card"><h4>Sắp hết hạn</h4><p id="sum-expiring">0</p></article>
+    <article class="summary-card"><h4>Đang thử việc</h4><p id="sum-probation">0</p></article>
+    <article class="summary-card"><h4>Chờ gia hạn</h4><p id="sum-pending-renewal">0</p></article>
+    <article class="summary-card"><h4>Đề xuất nghỉ việc</h4><p id="sum-termination">0</p></article>
+  </section>
 
-    <input id="emp_id" placeholder="Employee ID" readonly>
-    <input id="old_code" placeholder="Mã hợp đồng cũ" readonly>
-    <input id="code" placeholder="Mã hợp đồng mới">
-    <input id="salary" type="number" placeholder="Lương cơ bản mới">
-    <input id="start" type="date">
-    <input id="end" type="date">
-    <div class="modal-actions"><button class="btn-success" id="submit-renew">✅ Xác nhận gia hạn</button><button class="btn-danger" id="cancel-renew">❌ Hủy</button></div>
-  </div>
-</div>
+  <section class="card filters">
+    <div class="filter-grid">
+      <input id="f-employee-name" placeholder="Tên nhân viên">
+      <input id="f-employee-code" placeholder="Mã nhân viên">
+      <select id="f-contract-type">
+        <option value="all">Loại hợp đồng</option>
+        <option value="probation">Thử việc</option>
+        <option value="permanent">Chính thức</option>
+        <option value="seasonal">Thời vụ</option>
+        <option value="collaborator">Cộng tác viên</option>
+        <option value="intern">Thực tập</option>
+        <option value="fixed_term">Xác định thời hạn</option>
+        <option value="indefinite">Không xác định thời hạn</option>
+      </select>
+      <select id="f-contract-status">
+        <option value="all">Trạng thái hợp đồng</option>
+        <option value="active">Đang hiệu lực</option>
+        <option value="expiring">Sắp hết hạn</option>
+        <option value="expired">Hết hạn</option>
+        <option value="pending_renewal">Chờ gia hạn</option>
+        <option value="pending_probation_conversion">Chờ chuyển chính thức</option>
+        <option value="proposed_termination">Đề xuất chấm dứt</option>
+        <option value="ended">Đã kết thúc</option>
+      </select>
+      <input id="f-end-date-from" type="date" title="Ngày hết hạn từ">
+      <input id="f-end-date-to" type="date" title="Ngày hết hạn đến">
+      <input id="f-department" placeholder="Phòng ban">
+      <input id="f-position" placeholder="Chức danh">
+    </div>
+    <div class="actions"><button id="btn-search">Tìm kiếm</button><button id="btn-reset" class="secondary">Đặt lại</button></div>
+  </section>
+
+  <section class="card table-wrap">
+    <table class="contract-table">
+      <thead>
+        <tr>
+          <th>Mã NV</th><th>Họ tên</th><th>Chức danh</th><th>Loại HĐ</th><th>Bắt đầu</th><th>Kết thúc</th><th>Còn lại</th><th>Trạng thái</th><th>Lần gia hạn gần nhất</th><th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="contractRows"></tbody>
+    </table>
+  </section>
+  <div id="contract-error" class="state error" hidden></div>
+</section>
 
 {% endblock %}
 
