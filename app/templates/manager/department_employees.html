@@ -6,24 +6,61 @@
 
 {% block content %}
 <h2 class="page-title">👥 Nhân viên phòng ban</h2>
-
+<p class="page-subtitle"></p>
 <div id="dept-emp-error" class="alert-box" hidden></div>
 
-<table class="summary-table">
-  <thead>
-    <tr>
-      <th>Trạng thái hiện tại</th>
-      <th>Số lượng</th>
-      <th>Tỉ lệ</th>
-      <th>Hành động</th>
-    </tr>
-  </thead>
-  <tbody id="status-summary-body"></tbody>
-</table>
+<section class="cards-grid" id="summary-cards"></section>
 
-<section id="quick-action-panel" class="quick-panel" hidden>
-  <h3 id="quick-action-title"></h3>
-  <div id="quick-action-list" class="quick-list"></div>
+<section class="panel">
+  <h3>Bộ lọc</h3>
+  <form id="employee-filter-form" class="filter-grid">
+    <input name="name" placeholder="Tên nhân viên">
+    <input name="employee_code" placeholder="Mã nhân viên">
+    <input name="position" placeholder="Chức danh">
+    <select name="working_status">
+      <option value="">Trạng thái làm việc</option>
+      <option value="working">Đang làm việc</option>
+      <option value="on_leave">Nghỉ phép</option>
+      <option value="resigned">Nghỉ việc</option>
+    </select>
+    <select name="contract_type">
+      <option value="">Loại hợp đồng</option>
+      <option value="probation">Thử việc</option>
+      <option value="permanent">Chính thức</option>
+      <option value="contract">Hợp đồng</option>
+      <option value="intern">Thực tập</option>
+    </select>
+    <select name="probation">
+      <option value="">Probation</option>
+      <option value="yes">Đang thử việc</option>
+      <option value="no">Không thử việc</option>
+    </select>
+    <input name="department" placeholder="Phòng ban">
+    <label><input type="checkbox" name="leave_today" value="1"> Nghỉ hôm nay</label>
+    <label><input type="checkbox" name="has_complaint" value="1"> Có complaint</label>
+    <button type="submit" class="btn-action">Lọc dữ liệu</button>
+  </form>
+</section>
+
+<section class="panel">
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>Mã NV</th>
+        <th>Họ tên</th>
+        <th>Chức danh</th>
+        <th>Phòng ban</th>
+        <th>Ngày vào làm</th>
+        <th>HĐ</th>
+        <th>Trạng thái</th>
+        <th>chấm công hôm nay</th>
+        <th>Nghỉ tháng này</th>
+        <th>Bảng lương</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody id="employee-table-body"></tbody>
+  </table>
 </section>
 {% endblock %}
 

@@ -65,6 +65,78 @@ def department_employees_page():
     manager = _current_manager()
     return render_template("manager/department_employees.html", employee=manager)
 
+@manager_bp.route("/department-employees/summary", methods=["GET"])
+def department_employee_summary_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_department_employee_summary(manager.id))
+
+
+@manager_bp.route("/department-employees/list", methods=["GET"])
+def department_employee_list_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_department_employee_list(manager.id, request.args))
+
+
+@manager_bp.route("/department-employees/<int:employee_id>/detail", methods=["GET"])
+def department_employee_detail_api(employee_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    try:
+        return jsonify(ManagerService.get_department_employee_detail(manager.id, employee_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/department-employees/<int:employee_id>/proposal", methods=["POST"])
+def department_employee_proposal_api(employee_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    proposal_type = (data.get("proposal_type") or "").strip().lower()
+    reason = (data.get("reason") or "").strip()
+    if proposal_type not in {"promotion", "transfer", "probation_conversion", "termination"}:
+        return jsonify({"error": "proposal_type không hợp lệ"}), 400
+    if not reason:
+        return jsonify({"error": "Lý do đề xuất là bắt buộc"}), 400
+    try:
+        payload = ManagerService.get_department_employee_detail(manager.id, employee_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    from app.models.history import HistoryLog
+    from app.models.notification import Notification
+    from app.models.user import User
+    from app.models.role import Role
+
+    db.session.add(
+        HistoryLog(
+            employee_id=employee_id,
+            action=f"MANAGER_{proposal_type.upper()}_PROPOSAL",
+            entity_type="employee",
+            entity_id=employee_id,
+            description=reason,
+            performed_by=manager.id,
+        )
+    )
+    hr_users = User.query.join(Role, User.role_id == Role.id).filter(Role.role_name.in_(["hr", "admin"]), User.is_active.is_(True)).all()
+    for user in hr_users:
+        db.session.add(
+            Notification(
+                user_id=user.id,
+                title="Đề xuất nhân sự mới từ Manager",
+                content=f"{payload.get('full_name')} - {proposal_type}: {reason}",
+                type="manager_proposal",
+                link="/hr/employees",
+            )
+        )
+    db.session.commit()
+    return jsonify({"message": "Đã gửi đề xuất tới HR/Admin"})
+
 @manager_bp.route("/leave-management")
 def leave_page():
     guard = _guard_login()

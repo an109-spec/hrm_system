@@ -15,6 +15,16 @@ async function parseJsonResponse(response) {
 
 window.ManagerAPI = {
   dashboard: () => fetch('/manager/dashboard').then(parseJsonResponse),
+ departmentEmployeeSummary: () => fetch('/manager/department-employees/summary').then(parseJsonResponse),
+  departmentEmployeeList: (params = {}) =>
+    fetch(`/manager/department-employees/list?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  departmentEmployeeDetail: (employeeId) => fetch(`/manager/department-employees/${employeeId}/detail`).then(parseJsonResponse),
+  createDepartmentEmployeeProposal: (employeeId, payload) =>
+    fetch(`/manager/department-employees/${employeeId}/proposal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(parseJsonResponse),
   departmentAttendanceSummary: (params = {}) =>
     fetch(`/manager/department-attendance/summary?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
   departmentAttendanceList: (params = {}) =>
