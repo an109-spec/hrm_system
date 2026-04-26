@@ -455,7 +455,15 @@ function readSharedSimTime(fallback) {
     const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
     if (!raw) return fallback;
     const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    if (Number.isNaN(parsed.getTime())) return fallback;
+    const toDateKey = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    // Chỉ dùng giờ mô phỏng khi cùng ngày với server để tránh lệch
+    // trạng thái chấm công "hôm nay" do localStorage cũ.
+    if (toDateKey(parsed) !== toDateKey(fallback)) return fallback;
+
+    return parsed;
   } catch (_) {
     return fallback;
   }
