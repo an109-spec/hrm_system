@@ -44,6 +44,7 @@ from app.modules.hr.dto import (
     AttendanceExportDTO,
     AttendanceFilterDTO,
     OvertimeApprovalDTO,
+    AbnormalAttendanceResolveDTO,
 )
 
 
@@ -1330,6 +1331,47 @@ class HRService:
         }
 
     @staticmethod
+    def _abnormal_reasons(record: Attendance | None) -> list[str]:
+        if not record:
+            return ["Không có dữ liệu công"]
+        reasons: list[str] = []
+        if not record.check_in:
+            reasons.append("Thiếu check-in")
+        if not record.check_out:
+            reasons.append("Thiếu check-out")
+        if record.check_in and record.check_out and record.check_out < record.check_in:
+            reasons.append("Sai thời gian check-in/check-out")
+        duplicate = (
+            Attendance.query.filter(
+                Attendance.employee_id == record.employee_id,
+                Attendance.date == record.date,
+                Attendance.id != record.id,
+            ).count()
+        )
+        if duplicate > 0:
+            reasons.append("Có bản ghi chấm công trùng")
+        if not reasons:
+            reasons.append("Dữ liệu bất thường cần HR xác minh")
+        return reasons
+
+    @staticmethod
+    def _sync_payroll_for_attendance(employee_id: int, work_day: date, actor_user_id: int | None) -> None:
+        employee = Employee.query.filter_by(id=employee_id, is_deleted=False).first()
+        if not employee:
+            return
+        try:
+            salary, _ = HRService._compute_salary(employee, work_day.month, work_day.year)
+            HRService._append_audit_log(
+                salary=salary,
+                action="ATTENDANCE_SYNC",
+                description=f"Đồng bộ payroll từ chấm công ngày {work_day.isoformat()}",
+                user_id=actor_user_id,
+            )
+        except ValueError:
+            return
+
+
+    @staticmethod
     def _approved_leave_dates(employee_id: int, start: date, end: date) -> set[date]:
         approved = LeaveRequest.query.filter(
             LeaveRequest.employee_id == employee_id,
@@ -1518,6 +1560,22 @@ class HRService:
         }
 
     @staticmethod
+    def attendance_record_detail(attendance_id: int) -> dict:
+        record = Attendance.query.get(attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+        employee = Employee.query.filter_by(id=record.employee_id, is_deleted=False).first()
+        if not employee:
+            raise ValueError("Không tìm thấy nhân viên")
+        row = HRService._attendance_row_payload(employee, record.date, record, False)
+        return {
+            **row,
+            "attendance_type": record.attendance_type or "normal",
+            "reason_flags": HRService._abnormal_reasons(record) if row["is_abnormal"] else [],
+        }
+
+
+    @staticmethod
     def adjust_attendance(data: AttendanceAdjustmentDTO, actor_user_id: int | None = None) -> dict:
         record = Attendance.query.get(data.attendance_id)
         if not record:
@@ -1556,9 +1614,29 @@ class HRService:
                 performed_by=actor_user_id,
             )
         )
+        HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
         db.session.commit()
         employee = Employee.query.get(record.employee_id)
         return HRService._attendance_row_payload(employee, record.date, record, False)
+
+    @staticmethod
+    def save_attendance_history(attendance_id: int, note: str | None, actor_user_id: int | None = None) -> dict:
+        record = Attendance.query.get(attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="ATTENDANCE_HISTORY_NOTE",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=(note or "Lưu lịch sử thay đổi thủ công bởi HR").strip(),
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"attendance_id": record.id, "saved": True}
+
 
     @staticmethod
     def attendance_audit_history(attendance_id: int) -> list[dict]:
@@ -1631,6 +1709,7 @@ class HRService:
                 performed_by=actor_user_id,
             )
         )
+        HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
         db.session.commit()
         return {"attendance_id": record.id, "action": action, "attendance_type": record.attendance_type}
 
@@ -1638,6 +1717,54 @@ class HRService:
     def detect_abnormal_attendance(month: int | None = None, year: int | None = None) -> list[dict]:
         data = HRService.get_attendance_list(AttendanceFilterDTO(month=month, year=year))
         return [item for item in data["items"] if item["is_abnormal"]]
+    @staticmethod
+    def resolve_abnormal_attendance(data: AbnormalAttendanceResolveDTO, actor_user_id: int | None = None) -> dict:
+        record = Attendance.query.get(data.attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+        action = (data.action or "").lower()
+        if action not in {"confirm_valid", "manual_edit", "reject"}:
+            raise ValueError("Hành động xử lý bất thường không hợp lệ")
+        before_status = HRService._attendance_status_from_record(record, False)
+
+        if action == "manual_edit":
+            if data.check_in:
+                record.check_in = datetime.fromisoformat(data.check_in.replace("Z", "+00:00")).replace(tzinfo=None)
+            if data.check_out:
+                record.check_out = datetime.fromisoformat(data.check_out.replace("Z", "+00:00")).replace(tzinfo=None)
+            if data.status:
+                record.attendance_type = data.status
+        elif action == "confirm_valid":
+            if not record.check_in:
+                record.check_in = datetime.combine(record.date, datetime.min.time()).replace(hour=8, minute=30)
+            if not record.check_out:
+                record.check_out = datetime.combine(record.date, datetime.min.time()).replace(hour=17, minute=30)
+            if not record.attendance_type or record.attendance_type == "abnormal":
+                record.attendance_type = "normal"
+        else:
+            record.attendance_type = "abnormal_rejected"
+
+        if record.check_in and record.check_out and record.check_out >= record.check_in:
+            record.working_hours = Decimal(str((record.check_out - record.check_in).total_seconds() / 3600)).quantize(Decimal("0.01"))
+
+        after_status = HRService._attendance_status_from_record(record, False)
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="ABNORMAL_ATTENDANCE_RESOLVE",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=(
+                    f"Xử lý bất thường: {action}. Trước={before_status}; Sau={after_status}. "
+                    f"Ghi chú: {data.note or ''}"
+                ).strip(),
+                performed_by=actor_user_id,
+            )
+        )
+        HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
+        db.session.commit()
+        employee = Employee.query.get(record.employee_id)
+        return HRService._attendance_row_payload(employee, record.date, record, False)
 
     @staticmethod
     def export_attendance(data: AttendanceExportDTO) -> tuple[io.BytesIO, str, str]:

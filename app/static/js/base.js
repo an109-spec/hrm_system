@@ -54,6 +54,45 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   window.showToast = showToast;
+  const fireSafe = (options) => {
+    if (window.Swal) return window.Swal.fire(options);
+    if (options.icon === 'error') showToast(options.text || options.title || 'Có lỗi xảy ra', 'danger');
+    else showToast(options.text || options.title || 'Thông báo', options.icon || 'info');
+    return Promise.resolve({ isConfirmed: true });
+  };
+
+  window.appDialogs = {
+    async confirm({ title, text, icon = 'question', confirmText = 'Xác nhận', cancelText = 'Hủy', requireReason = false, reasonLabel = 'Lý do' }) {
+      const result = await fireSafe({
+        title, text, icon,
+        showCancelButton: true,
+        confirmButtonText: confirmText,
+        cancelButtonText: cancelText,
+        input: requireReason ? 'text' : undefined,
+        inputLabel: requireReason ? reasonLabel : undefined,
+      });
+      return { confirmed: !!result.isConfirmed, reason: result.value || '' };
+    },
+    success({ title = 'Thành công', text = '' }) {
+      return fireSafe({ icon: 'success', title, text, confirmButtonText: 'Đóng' });
+    },
+    error({ title = 'Thất bại', text = '' }) {
+      return fireSafe({ icon: 'error', title, text, confirmButtonText: 'Đóng' });
+    },
+    async prompt({ title, label, placeholder = '', confirmText = 'Xác nhận' }) {
+      const result = await fireSafe({
+        title,
+        input: 'text',
+        inputLabel: label,
+        inputPlaceholder: placeholder,
+        showCancelButton: true,
+        confirmButtonText: confirmText,
+        cancelButtonText: 'Hủy',
+      });
+      return { confirmed: !!result.isConfirmed, value: result.value || '' };
+    },
+  };
+
 
   // Tự động bắt các tin nhắn flash từ Flask gửi xuống
   document.querySelectorAll('[data-flash-message]').forEach((item) => {

@@ -13,6 +13,7 @@
 .table-wrap { overflow:auto; }
 .attendance-table { width:100%; border-collapse: collapse; min-width: 1280px; }
 .attendance-table th, .attendance-table td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-size: 13px; text-align: left; }
+.attendance-table tr.is-selected { background: #eff6ff; }
 .badge { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:600; }
 .badge-success { background:#dcfce7; color:#166534; }
 .badge-warning { background:#fef3c7; color:#92400e; }
@@ -27,4 +28,5 @@
 .breakdown { display:grid; grid-template-columns: 1fr auto; gap:8px 14px; }
 .list-box, .audit-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height: 280px; overflow:auto; }
 .list-box li, .audit-list li { border:1px solid #e2e8f0; border-radius:10px; padding:10px; background:#f8fafc; }
+.form-grid input:disabled, .form-grid select:disabled, .form-grid textarea:disabled { background:#f1f5f9; cursor:not-allowed; }
 .hr-toast { position: fixed; right: 20px; top: 20px; background:#0f172a; color:#fff; border-radius:8px; padding:10px 14px; z-index: 80; }

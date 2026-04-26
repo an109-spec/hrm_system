@@ -20,7 +20,8 @@ from .dto import (
     AttendanceAdjustmentDTO,
     AttendanceExportDTO,
     AttendanceFilterDTO,
-    OvertimeApprovalDTO,
+    OvertimeApprovalDTO,    
+    AbnormalAttendanceResolveDTO,
     TerminateContractDTO,
     UpdateContractDTO,
     UpdateEmployeeDTO,
@@ -344,6 +345,28 @@ def attendance_audit_api(attendance_id: int):
         return jsonify({"error": "forbidden"}), 403
     return jsonify(HRService.attendance_audit_history(attendance_id))
 
+@hr_bp.route("/api/attendance/<int:attendance_id>/record", methods=["GET"])
+def attendance_record_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        return jsonify(HRService.attendance_record_detail(attendance_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@hr_bp.route("/api/attendance/<int:attendance_id>/history", methods=["POST"])
+def attendance_history_save_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify(HRService.save_attendance_history(attendance_id, payload.get("note"), actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
 
 @hr_bp.route("/api/attendance/overtime", methods=["GET"])
 def overtime_list_api():
@@ -382,6 +405,26 @@ def abnormal_attendance_api():
             year=request.args.get("year", type=int),
         )
     )
+
+@hr_bp.route("/api/attendance/abnormal/<int:attendance_id>/resolve", methods=["POST"])
+def abnormal_attendance_resolve_api(attendance_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    payload = request.get_json(silent=True) or {}
+    dto = AbnormalAttendanceResolveDTO(
+        attendance_id=attendance_id,
+        action=payload.get("action", ""),
+        note=payload.get("note"),
+        check_in=payload.get("check_in"),
+        check_out=payload.get("check_out"),
+        status=payload.get("status"),
+    )
+    try:
+        return jsonify(HRService.resolve_abnormal_attendance(dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
 
 
 @hr_bp.route("/api/attendance/export", methods=["GET"])

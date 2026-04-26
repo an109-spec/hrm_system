@@ -168,3 +168,13 @@ class AttendanceExportDTO:
     export_scope: str = "company"
     department_id: Optional[int] = None
     export_format: str = "excel"
+
+
+@dataclass
+class AbnormalAttendanceResolveDTO:
+    attendance_id: int
+    action: str
+    note: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    status: Optional[str] = None
