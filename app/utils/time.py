@@ -1,6 +1,10 @@
 from datetime import datetime
 from flask import has_request_context, request, session
 
+def get_demo_system_time() -> datetime:
+    """Nguồn thời gian chuẩn cho toàn hệ thống (server-side)."""
+    return datetime.now()
+
 def _normalize_datetime(raw_value: str | None) -> datetime | None:
     if not raw_value:
         return None
@@ -36,4 +40,4 @@ def parse_simulated_time(payload: dict | None = None) -> datetime:
     if dt:
         return dt
 
-    return datetime.now()
+    return get_demo_system_time()

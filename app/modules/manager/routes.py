@@ -36,6 +36,14 @@ def dashboard_page():
 
 
 @manager_bp.route("/attendance")
+def self_attendance_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    return redirect(url_for("employee.attendance"))
+
+
+@manager_bp.route("/department-attendance")
 def attendance_page():
     guard = _guard_login()
     if guard:
@@ -44,7 +52,7 @@ def attendance_page():
     now = parse_simulated_time({})
     today_holiday = _get_holiday_for_date(now.date())
     return render_template(
-        "manager/attendance.html",
+        "manager/department_attendance.html",
         employee=manager,
         today_holiday=today_holiday,
     )
@@ -110,12 +118,49 @@ def dashboard_api():
     return jsonify(ManagerService.get_dashboard(manager.id))
 
 
-@manager_bp.route("/attendance/today", methods=["GET"])
+@manager_bp.route("/department-attendance/summary", methods=["GET"])
+def department_attendance_summary_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_department_attendance_summary(manager.id, request.args))
+
+
+@manager_bp.route("/department-attendance/list", methods=["GET"])
 def attendance_today_api():
     manager = _current_manager()
     if not manager:
         return jsonify({"error": "Manager not found"}), 404
-    return jsonify(ManagerService.get_today_attendance(manager.id))
+    return jsonify(ManagerService.get_department_attendance_rows(manager.id, request.args))
+
+
+@manager_bp.route("/department-attendance/<int:employee_id>/detail", methods=["GET"])
+def department_attendance_detail_api(employee_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    try:
+        return jsonify(ManagerService.get_department_attendance_detail(manager.id, employee_id, request.args))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/department-attendance/<int:attendance_id>/abnormal-review", methods=["POST"])
+def department_attendance_abnormal_review_api(attendance_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        result = ManagerService.review_abnormal_attendance(
+            manager.id,
+            attendance_id=attendance_id,
+            action=data.get("action", ""),
+            note=data.get("note"),
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @manager_bp.route("/attendance/month", methods=["GET"])

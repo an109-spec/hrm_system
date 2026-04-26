@@ -15,7 +15,19 @@ async function parseJsonResponse(response) {
 
 window.ManagerAPI = {
   dashboard: () => fetch('/manager/dashboard').then(parseJsonResponse),
-  attendanceToday: () => fetch('/manager/attendance/today').then(parseJsonResponse),
+  departmentAttendanceSummary: (params = {}) =>
+    fetch(`/manager/department-attendance/summary?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  departmentAttendanceList: (params = {}) =>
+    fetch(`/manager/department-attendance/list?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  departmentAttendanceDetail: (employeeId, params = {}) =>
+    fetch(`/manager/department-attendance/${employeeId}/detail?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  reviewAbnormalAttendance: (attendanceId, action, note = '') =>
+    fetch(`/manager/department-attendance/${attendanceId}/abnormal-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, note })
+    }).then(parseJsonResponse),
+  attendanceToday: () => fetch('/manager/department-attendance/list').then(parseJsonResponse),
   attendanceMonth: (month, year) =>
     fetch(`/manager/attendance/month?month=${month}&year=${year}`).then(parseJsonResponse),
 

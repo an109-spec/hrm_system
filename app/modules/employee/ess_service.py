@@ -153,7 +153,7 @@ class EmployeeESSService:
         )
         db.session.add(request_ot)
         if employee.manager and employee.manager.user_id:
-            db.session.add(Notification(user_id=employee.manager.user_id, title="Yêu cầu tăng ca mới", content=f"{employee.full_name} gửi OT {ot_date.isoformat()} ({hours}h)", type="overtime", link="/manager/attendance"))
+            db.session.add(Notification(user_id=employee.manager.user_id, title="Yêu cầu tăng ca mới", content=f"{employee.full_name} gửi OT {ot_date.isoformat()} ({hours}h)", type="overtime", link="/manager/department-attendance"))
         db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h", performed_by=actor_user_id))
         db.session.commit()
         return {"message": "Đã gửi yêu cầu tăng ca thành công"}

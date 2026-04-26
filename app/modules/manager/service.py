@@ -21,6 +21,7 @@ from app.models.complaint import Complaint
 from app.models.position import Position
 from app.models.role import Role
 from app.models.user import User
+from app.utils.time import parse_simulated_time
 class ManagerService:
 
     PAYROLL_REVIEWABLE_STATUSES = {"pending_manager", "manager_review"}
@@ -82,7 +83,7 @@ class ManagerService:
             raise ValueError("Hành động không hợp lệ")
 
         request_ot.manager_decision_by = manager_id
-        request_ot.manager_decision_at = datetime.utcnow()
+        request_ot.manager_decision_at = parse_simulated_time({})
         request_ot.manager_note = note
         if action == "approve":
             request_ot.status = "pending_hr"
@@ -144,7 +145,7 @@ class ManagerService:
         employees = ManagerService._get_subordinates(manager_id)
         ids = [e.id for e in employees]
 
-        today = date.today()
+        today = parse_simulated_time({}).date()
         leave_ids = ManagerService._approved_leave_employee_ids(ids, today)
         late_count = 0
         absent_count = 0
@@ -179,30 +180,146 @@ class ManagerService:
 
 
     @staticmethod
-    def get_today_attendance(manager_id: int) -> list[dict]:
+    def get_department_attendance_rows(manager_id: int, filters: dict | None = None) -> list[dict]:
         employees = ManagerService._get_subordinates(manager_id)
         ids = [e.id for e in employees]
-        today = date.today()
+        now = parse_simulated_time(dict(filters or {}))
+        today = now.date()
         leave_ids = ManagerService._approved_leave_employee_ids(ids, today)
         data: list[dict] = []
-
+        keyword = (filters or {}).get("keyword", "").strip().lower()
+        department_filter = (filters or {}).get("department", "").strip().lower()
+        status_filter = (filters or {}).get("status", "").strip().upper()
+        abnormal_only = str((filters or {}).get("abnormal", "")).lower() in {"1", "true", "yes"}
+        overtime_only = str((filters or {}).get("overtime", "")).lower() in {"1", "true", "yes"}
         for e in employees:
             att = Attendance.query.filter_by(employee_id=e.id, date=today).first()
 
             status = ManagerService._attendance_to_status(att, e.id in leave_ids)
+            regular_hours = float(att.regular_hours or 0) if att else 0.0
+            overtime_hours = float(att.overtime_hours or 0) if att else 0.0
+            worked_hours = float(att.working_hours or 0) if att else 0.0
+            is_abnormal = bool(att and ((att.check_in and not att.check_out) or (att.check_out and att.check_in and att.check_out < att.check_in)))
+            if keyword:
+                haystack = f"{e.id} {e.full_name or ''}".lower()
+                if keyword not in haystack:
+                    continue
+            if department_filter and (not e.department or department_filter not in (e.department.name or "").lower()):
+                continue
+            if status_filter and status != status_filter:
+                continue
+            if abnormal_only and not is_abnormal:
+                continue
+            if overtime_only and overtime_hours <= 0:
+                continue
             data.append(
                 {
                     "employee_id": e.id,
+                    "employee_code": e.id,
                     "name": e.full_name,
+                    "department": e.department.name if e.department else "--",
                     "position": e.position.job_title if e.position else "--",
                     "check_in": att.check_in.strftime("%H:%M") if att and att.check_in else None,
                     "check_out": att.check_out.strftime("%H:%M") if att and att.check_out else None,
+                    "regular_hours": regular_hours,
+                    "worked_hours": worked_hours,
+                    "overtime_hours": overtime_hours,
                     "status": status,
+                    "abnormal": is_abnormal,
+                    "attendance_id": att.id if att else None,
                 }
             )
 
         return data
 
+    @staticmethod
+    def get_department_attendance_summary(manager_id: int, filters: dict | None = None) -> dict:
+        rows = ManagerService.get_department_attendance_rows(manager_id, filters)
+        return {
+            "total_employees": len(rows),
+            "checked_in": len([x for x in rows if x.get("check_in")]),
+            "not_checked_in": len([x for x in rows if not x.get("check_in") and x.get("status") != "LEAVE"]),
+            "on_leave": len([x for x in rows if x.get("status") == "LEAVE"]),
+            "late": len([x for x in rows if x.get("status") == "LATE"]),
+            "overtime": len([x for x in rows if float(x.get("overtime_hours") or 0) > 0]),
+            "abnormal": len([x for x in rows if x.get("abnormal")]),
+        }
+
+    @staticmethod
+    def get_department_attendance_detail(manager_id: int, employee_id: int, filters: dict | None = None) -> dict:
+        subordinates = ManagerService._get_subordinates(manager_id)
+        if employee_id not in [e.id for e in subordinates]:
+            raise ValueError("Không có quyền xem attendance của nhân viên này")
+        now = parse_simulated_time(dict(filters or {}))
+        record = Attendance.query.filter_by(employee_id=employee_id, date=now.date()).first()
+        employee = Employee.query.get(employee_id)
+        leave = LeaveRequest.query.filter(
+            LeaveRequest.employee_id == employee_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.from_date <= now.date(),
+            LeaveRequest.to_date >= now.date(),
+        ).first()
+        history_rows = Attendance.query.filter(
+            Attendance.employee_id == employee_id,
+            Attendance.date <= now.date(),
+        ).order_by(Attendance.date.desc()).limit(5).all()
+        return {
+            "employee_id": employee_id,
+            "employee_name": employee.full_name if employee else "--",
+            "check_in": record.check_in.isoformat() if record and record.check_in else None,
+            "check_out": record.check_out.isoformat() if record and record.check_out else None,
+            "worked_hours": float(record.working_hours or 0) if record else 0,
+            "overtime_hours": float(record.overtime_hours or 0) if record else 0,
+            "leave_record": {
+                "from_date": leave.from_date.isoformat(),
+                "to_date": leave.to_date.isoformat(),
+                "reason": leave.reason or "",
+            } if leave else None,
+            "recent_history": [
+                {
+                    "date": x.date.isoformat(),
+                    "check_in": x.check_in.isoformat() if x.check_in else None,
+                    "check_out": x.check_out.isoformat() if x.check_out else None,
+                    "worked_hours": float(x.working_hours or 0),
+                    "overtime_hours": float(x.overtime_hours or 0),
+                }
+                for x in history_rows
+            ],
+        }
+
+    @staticmethod
+    def review_abnormal_attendance(manager_id: int, attendance_id: int, action: str, note: str | None = None) -> dict:
+        record = Attendance.query.get(attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi attendance")
+        if record.employee_id not in [e.id for e in ManagerService._get_subordinates(manager_id)]:
+            raise ValueError("Không có quyền xử lý attendance này")
+        if action not in {"confirm_valid", "request_hr"}:
+            raise ValueError("Hành động không hợp lệ")
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="MANAGER_ATTENDANCE_ABNORMAL_REVIEW",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=f"Manager action={action}. Note={note or ''}".strip(),
+                performed_by=manager_id,
+            )
+        )
+        if action == "request_hr":
+            hr_users = User.query.join(Role, User.role_id == Role.id).filter(Role.role_name == "hr", User.is_active.is_(True)).all()
+            for hr_user in hr_users:
+                db.session.add(
+                    Notification(
+                        user_id=hr_user.id,
+                        title="Manager yêu cầu HR xử lý bất thường chấm công",
+                        content=f"Attendance #{record.id}: {note or 'Vui lòng kiểm tra bản ghi bất thường.'}",
+                        type="attendance",
+                        link="/hr/attendance",
+                    )
+                )
+        db.session.commit()
+        return {"message": "Đã ghi nhận xử lý bất thường", "attendance_id": record.id, "action": action}
 
     @staticmethod
     def get_leave_requests(manager_id: int, status: str | None = None) -> list[dict]:
@@ -221,8 +338,8 @@ class ManagerService:
 
         if status:
             query = query.filter(LeaveRequest.status == status)
-
-        if not rows: # type: ignore
+        rows = query.order_by(LeaveRequest.created_at.desc()).all()
+        if not rows:
             return []
         return [
             {
@@ -237,7 +354,7 @@ class ManagerService:
                 "created_at": l.created_at.date().isoformat() if l.created_at else None,
                 "days": (l.to_date - l.from_date).days + 1,
             }
-            for l in rows # pyright: ignore[reportUndefinedVariable]
+            for l in rows
         ]
 
     @staticmethod

@@ -1,0 +1,49 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chấm công phòng ban{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/attendance.css') }}">
+{% endblock %}
+{% block content %}
+<h2 class="page-title">🕒 Chấm công phòng ban</h2>
+<div id="attendance-alert" class="alert-box" hidden></div>
+
+<div class="stats" id="summary-cards">
+  <div class="card"><label>Đã vào ca</label><span id="sum_checked_in">0</span></div>
+  <div class="card"><label>Chưa vào ca</label><span id="sum_not_checked_in">0</span></div>
+  <div class="card"><label>Đi muộn</label><span id="sum_late">0</span></div>
+  <div class="card"><label>Nghỉ phép</label><span id="sum_leave">0</span></div>
+  <div class="card"><label>Tăng ca</label><span id="sum_overtime">0</span></div>
+  <div class="card"><label>Bất thường</label><span id="sum_abnormal">0</span></div>
+</div>
+
+<div class="filters">
+  <input id="filterKeyword" placeholder="Tên/Mã nhân viên" />
+  <input id="filterDepartment" placeholder="Phòng ban" />
+  <input id="filterDate" type="date" />
+  <select id="filterStatus">
+    <option value="">Tất cả trạng thái</option>
+    <option value="PRESENT">Đúng giờ</option>
+    <option value="LATE">Đi muộn</option>
+    <option value="ABSENT">Chưa vào ca</option>
+    <option value="LEAVE">Nghỉ phép</option>
+  </select>
+  <label><input id="filterOvertime" type="checkbox"> OT</label>
+  <label><input id="filterAbnormal" type="checkbox"> Bất thường</label>
+  <button id="btnFilter">Lọc</button>
+</div>
+
+<table class="attendance-table">
+  <thead>
+    <tr><th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th><th>Giờ vào</th><th>Giờ ra</th><th>Công chuẩn</th><th>OT</th><th>Trạng thái</th><th>Bất thường</th><th>Hành động</th></tr>
+  </thead>
+  <tbody id="attendance-body"></tbody>
+</table>
+
+<h3 class="page-title">🕘 Yêu cầu tăng ca chờ duyệt</h3>
+<ul id="ot-requests"></ul>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manager/attendance.js') }}"></script>
+{% endblock %}
