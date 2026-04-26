@@ -1,22 +1,22 @@
 // TAB SWITCH
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+const appDialogs = window.appDialogs || {};
 
-    tab.classList.add("active");
-    document.getElementById(tab.dataset.tab).classList.add("active");
+// TAB SWITCH
+document.querySelectorAll('.tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
   });
 });
 
 let selectedFile = null;
 
-const input = document.getElementById("avatarInput");
-const uploadBtn = document.getElementById("uploadAvatarBtn");
-
-// PREVIEW ẢNH
+const input = document.getElementById('avatarInput');
+const uploadBtn = document.getElementById('uploadAvatarBtn');
 if (input) {
-  input.addEventListener("change", (e) => {
+  input.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -25,13 +25,11 @@ if (input) {
     const reader = new FileReader();
 
     reader.onload = function (ev) {
-      let avatar = document.querySelector(".profile-avatar");
-
-      // nếu chưa có img thì tạo
+      let avatar = document.querySelector('.profile-avatar');
       if (!avatar) {
-        const wrapper = document.querySelector(".avatar-wrapper");
-        wrapper.innerHTML = `<img class="profile-avatar">`;
-        avatar = document.querySelector(".profile-avatar");
+        const wrapper = document.querySelector('.avatar-wrapper');
+        wrapper.innerHTML = '<img class="profile-avatar">';
+        avatar = document.querySelector('.profile-avatar');
       }
 
       avatar.src = ev.target.result;
@@ -43,199 +41,150 @@ if (input) {
 
 // UPLOAD ẢNH (QUAN TRỌNG)
 if (uploadBtn) {
-  uploadBtn.addEventListener("click", async () => {
-    if (!selectedFile) {
-      alert("Chưa chọn ảnh");
-      return;
-    }
+  uploadBtn.addEventListener('click', async () => {
+    if (!selectedFile) return appDialogs.error({ title: 'Bạn chưa chọn ảnh' });
+    const confirm = await appDialogs.confirm({ title: 'Xác nhận cập nhật ảnh đại diện?', text: 'Ảnh mới sẽ thay thế ảnh cũ.', confirmText: 'Cập nhật' });
+    if (!confirm.confirmed) return;
 
     const formData = new FormData();
-    formData.append("avatar", selectedFile);
+    formData.append('avatar', selectedFile);
 
     try {
-      uploadBtn.innerText = "Đang upload...";
+      uploadBtn.innerText = 'Đang upload...';
       uploadBtn.disabled = true;
 
-      const res = await fetch("/employee/upload-avatar", {
-        method: "POST",
-        body: formData
-      });
-
-      if (res.ok) {
-        alert("Cập nhật thành công");
-        location.reload();
-      } else {
-        alert("Upload thất bại");
-      }
+      const res = await fetch('/employee/upload-avatar', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Upload thất bại');
+      await appDialogs.success({ title: 'Cập nhật ảnh thành công' });
+      location.reload();
     } catch (err) {
-      alert("Lỗi server");
+      await appDialogs.error({ title: 'Không thể cập nhật ảnh', text: err.message });
     } finally {
-      uploadBtn.innerText = "Cập nhật ảnh";
+      uploadBtn.innerText = 'Cập nhật ảnh';
       uploadBtn.disabled = false;
     }
   });
 }
 
-// TOAST SIMPLE
-function showToast(msg, type="success") {
-  const toast = document.createElement("div");
-  toast.className = "toast " + type;
-  toast.innerText = msg;
 
-  document.body.appendChild(toast);
-
-  setTimeout(() => toast.remove(), 3000);
-}
-// --- XỬ LÝ CHỈNH SỬA VÀ ĐỊA CHỈ ---
 const profileForm = document.getElementById('profileForm');
 const editBtn = document.getElementById('editBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const saveCancelActions = document.getElementById('saveCancelActions');
-const inputs = profileForm.querySelectorAll('input, select');
+const inputs = profileForm ? profileForm.querySelectorAll('input, select') : [];
 
-// Hàm bật/tắt chế độ chỉnh sửa
 function toggleEditMode(isEditing) {
-    inputs.forEach(input => {
-        if (!input.readOnly || input.tagName === 'SELECT' || input.id === 'detailAddress') {
-            if (input.getAttribute('name') !== 'email') { // Không cho sửa email
-                if (input.tagName === 'SELECT') input.disabled = !isEditing;
-                else input.readOnly = !isEditing;
-                input.classList.toggle('readonly-input', !isEditing);
-            }
-        }
-    });
-    editBtn.style.display = isEditing ? 'none' : 'block';
-    saveCancelActions.style.display = isEditing ? 'flex' : 'none';
-}
-
-editBtn.addEventListener('click', () => toggleEditMode(true));
-cancelBtn.addEventListener('click', () => {
-    toggleEditMode(false);
-    location.reload(); // Hoàn tác các thay đổi bằng cách load lại
-});
-
-const host = "https://provinces.open-api.vn/api/";
-const addressData = document.getElementById('addressData');
-
-// Hàm khởi tạo địa chỉ cũ khi load trang
-async function initAddress() {
-    const pCode = addressData.dataset.province;
-    const dCode = addressData.dataset.district;
-    const wCode = addressData.dataset.ward;
-
-    // 1. Load tỉnh
-    const provinces = await fetch(host + "?depth=1").then(res => res.json());
-    renderData(provinces, "province");
-    
-    if (pCode) {
-        document.getElementById('province').value = pCode;
-        // 2. Load huyện
-        const districts = await fetch(host + "p/" + pCode + "?depth=2").then(res => res.json());
-        renderData(districts.districts, "district");
-        
-        if (dCode) {
-            document.getElementById('district').value = dCode;
-            // 3. Load xã
-            const wards = await fetch(host + "d/" + dCode + "?depth=2").then(res => res.json());
-            renderData(wards.wards, "ward");
-            if (wCode) document.getElementById('ward').value = wCode;
-        }
+  inputs.forEach((input) => {
+    if (!input.readOnly || input.tagName === 'SELECT' || input.id === 'detailAddress') {
+      if (input.getAttribute('name') !== 'email') {
+        if (input.tagName === 'SELECT') input.disabled = !isEditing;
+        else input.readOnly = !isEditing;
+        input.classList.toggle('readonly-input', !isEditing);
+      }
     }
+  });
+  if (editBtn) editBtn.style.display = isEditing ? 'none' : 'block';
+  if (saveCancelActions) saveCancelActions.style.display = isEditing ? 'flex' : 'none';
 }
 
-var renderData = (array, selectId) => {
-    let row = '<option value="">Chọn</option>';
-    array.forEach(element => {
-        row += `<option value="${element.code}">${element.name}</option>`;
-    });
-    document.querySelector("#" + selectId).innerHTML = row;
-}
+if (editBtn) editBtn.addEventListener('click', () => toggleEditMode(true));
+if (cancelBtn) cancelBtn.addEventListener('click', () => location.reload());
 
-// Gọi hàm init khi load trang
-initAddress();
-
-// Giữ nguyên các EventListener change của bạn nhưng chỉnh lại tên selectId
-document.querySelector("#province").addEventListener("change", async (e) => {
-    if (!e.target.value) return;
-    const data = await fetch(host + "p/" + e.target.value + "?depth=2").then(res => res.json());
-    renderData(data.districts, "district");
-    document.querySelector("#ward").innerHTML = '<option value="">Chọn</option>';
-});
-
-document.querySelector("#district").addEventListener("change", async (e) => {
-    if (!e.target.value) return;
-    const data = await fetch(host + "d/" + e.target.value + "?depth=2").then(res => res.json());
-    renderData(data.wards, "ward");
-});
-
-profileForm.addEventListener('submit', async (e) => {
-    e.preventDefault(); // Chặn load trang mặc định
-
-// Mở khóa tạm thời để lấy được dữ liệu từ các ô disabled
-    inputs.forEach(i => i.disabled = false); 
-    
-    const formData = new FormData(profileForm);
-    const data = Object.fromEntries(formData.entries());
-
-    // Khóa lại ngay sau khi lấy xong dữ liệu
-    inputs.forEach(i => {
-        if (i.tagName === 'SELECT') i.disabled = true;
-    });
-
-    try {
-        const response = await fetch("/employee/update-profile", { // Thay đổi URL này đúng với route của bạn
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            alert("Cập nhật thông tin thành công!");
-            location.reload(); // Load lại để hiển thị dữ liệu mới từ Database
-        } else {
-            const err = await response.json();
-            alert("Lỗi: " + (err.error || "Không thể lưu"));
-        }
-    } catch (error) {
-        console.error(error);
-        alert("Lỗi kết nối server");
-    }
-});
-
-profileForm.addEventListener('submit', async (e) => {
+if (profileForm) {
+  profileForm.addEventListener('submit', async (e) => {
     const submitter = e.submitter;
-    
-    if (submitter && submitter.value === 'change_password') {
-        return; 
-    }
+    if (submitter && submitter.value === 'change_password') return;
+    e.preventDefault();
 
-    e.preventDefault(); 
+    const confirm = await appDialogs.confirm({ title: 'Xác nhận lưu thay đổi hồ sơ?', confirmText: 'Lưu thay đổi' });
+    if (!confirm.confirmed) return;
 
-    inputs.forEach(i => i.disabled = false); 
-    
-    const formData = new FormData(profileForm);
-    const data = Object.fromEntries(formData.entries());
-
-    inputs.forEach(i => {
-        if (i.tagName === 'SELECT') i.disabled = true;
+    inputs.forEach((i) => (i.disabled = false));
+    const data = Object.fromEntries(new FormData(profileForm).entries());
+    inputs.forEach((i) => {
+      if (i.tagName === 'SELECT') i.disabled = true;
     });
 
-    try {
-        const response = await fetch("/employee/update-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            alert("Cập nhật thông tin thành công!");
-            location.reload(); 
-        } else {
-            const err = await response.json();
-            alert("Lỗi: " + (err.error || "Không thể lưu"));
-        }
-    } catch (error) {
-        console.error(error);
-        alert("Lỗi kết nối server");
+    const response = await fetch('/employee/update-profile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (response.ok) {
+      await appDialogs.success({ title: 'Cập nhật thông tin thành công' });
+      location.reload();
+      return;
     }
+    const err = await response.json().catch(() => ({}));
+    await appDialogs.error({ title: 'Không thể lưu hồ sơ', text: err.error || 'Lỗi hệ thống' });
+  });
+}
+
+const REL_MAP = { con: 'Con', vo_chong: 'Vợ/Chồng', bo: 'Bố', me: 'Mẹ', khac: 'Khác' };
+function dependentRow(item) {
+  return `<tr>
+    <td>${item.full_name}</td><td>${item.dob || '--'}</td><td>${REL_MAP[item.relationship] || item.relationship}</td>
+    <td>${item.tax_code || '--'}</td><td>${item.is_valid ? '✅ Hợp lệ' : '❌ Không hợp lệ'}</td>
+    <td>
+      <button data-action="edit-dependent" data-id="${item.id}">Sửa</button>
+      <button data-action="delete-dependent" data-id="${item.id}">Xóa</button>
+    </td>
+  </tr>`;
+}
+
+async function fetchDependents() {
+  const body = document.getElementById('dependentTableBody');
+  if (!body) return [];
+  const res = await fetch('/employee/profile/dependents');
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Không tải được người phụ thuộc');
+  body.innerHTML = (data.items || []).map(dependentRow).join('') || '<tr><td colspan="6">Chưa có dữ liệu</td></tr>';
+  document.getElementById('dependentCount').textContent = data.number_of_dependents || 0;
+  return data.items || [];
+}
+
+
+async function upsertDependent(id = null) {
+  const { value: formValues } = await Swal.fire({
+    title: id ? 'Cập nhật người phụ thuộc' : 'Thêm người phụ thuộc',
+    html: `<input id="swal-name" class="swal2-input" placeholder="Họ tên">
+      <input id="swal-dob" type="date" class="swal2-input">
+      <select id="swal-rel" class="swal2-select"><option value="con">Con</option><option value="vo_chong">Vợ/Chồng</option><option value="bo">Bố</option><option value="me">Mẹ</option><option value="khac">Khác</option></select>
+      <input id="swal-tax" class="swal2-input" placeholder="Mã số thuế cá nhân">
+      <label style="display:flex;gap:8px;justify-content:center;margin-top:8px"><input id="swal-valid" type="checkbox" checked>Trạng thái hợp lệ</label>`,
+    focusConfirm: false,
+    showCancelButton: true,
+    preConfirm: () => ({
+      full_name: document.getElementById('swal-name').value,
+      dob: document.getElementById('swal-dob').value,
+      relationship: document.getElementById('swal-rel').value,
+      tax_code: document.getElementById('swal-tax').value,
+      is_valid: document.getElementById('swal-valid').checked,
+    }),
+  });
+  if (!formValues) return;
+  const url = id ? `/employee/profile/dependents/${id}` : '/employee/profile/dependents';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formValues) });
+  const data = await res.json();
+  if (!res.ok) return appDialogs.error({ title: 'Lưu thất bại', text: data.error || 'Lỗi hệ thống' });
+  await appDialogs.success({ title: data.message || 'Thành công' });
+  await fetchDependents();
+}
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.action === 'edit-dependent') return upsertDependent(id);
+  if (btn.dataset.action === 'delete-dependent') {
+    const confirm = await appDialogs.confirm({ title: 'Xóa người phụ thuộc?', text: 'Thao tác này không thể hoàn tác.', icon: 'warning', confirmText: 'Xóa' });
+    if (!confirm.confirmed) return;
+    const res = await fetch(`/employee/profile/dependents/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) return appDialogs.error({ title: 'Không thể xóa', text: data.error || '' });
+    await appDialogs.success({ title: data.message || 'Đã xóa' });
+    await fetchDependents();
+  }
 });
+
+document.getElementById('btnAddDependent')?.addEventListener('click', () => upsertDependent(null));
+fetchDependents().catch(() => {});

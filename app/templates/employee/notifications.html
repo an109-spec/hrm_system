@@ -34,9 +34,18 @@
         </div>
         <p>{{ n.content }}</p>
         <small>{{ n.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
-        {% if n.id in complaint_map %}
+        {% set c = complaint_map.get(n.id) if complaint_map else None %}
+        {% if c %}
           <div class="mt-8">
-            <span class="pill pill-warning">⏳ Đang xử lý khiếu nại</span>
+            {% if c.closed %}
+              <span class="pill pill-success">✅ Đã giải quyết</span>
+            {% elif c.status == 'rejected' %}
+              <span class="pill pill-danger">❌ Từ chối</span>
+            {% elif c.has_reply %}
+              <span class="pill pill-primary">💬 Đã phản hồi</span>
+            {% else %}
+              <span class="pill pill-warning">⏳ Đang xử lý</span>
+            {% endif %}
           </div>
         {% endif %}
       </article>
@@ -53,12 +62,14 @@
   <p><strong>LOẠI THÔNG BÁO:</strong> <span id="detailType">-</span></p>
   <p><strong>TIÊU ĐỀ:</strong> <span id="detailTitle">-</span></p>
   <p><strong>THỜI GIAN:</strong> <span id="detailTime">-</span></p>
-  <p><strong>NỘI DUNG:</strong></p>
+  <p><strong>NỘI DUNG ĐẦY ĐỦ:</strong></p>
   <div class="payslip-detail" id="detailContent">-</div>
   <p><strong>TRẠNG THÁI ĐỌC:</strong> <span id="detailRead">-</span></p>
   <div class="mt-8">
     <a id="detailLink" href="#" class="btn btn-primary btn-sm" style="display:none;">Xem chi tiết</a>
+    <button class="btn btn-sm" onclick="downloadDetailPdf()">Lưu PDF</button>
     <button class="btn btn-warning btn-sm" onclick="toggleFeedbackForm()">📩 GỬI PHẢN HỒI / KHIẾU NẠI</button>
+    <button class="btn btn-success btn-sm" id="btnCloseComplaint" style="display:none;" onclick="closeComplaint()">Đóng khiếu nại</button>
     <button class="btn btn-secondary btn-sm" onclick="closeNotificationDetail()">[ &lt;-- Quay lại ] Danh sách thông báo</button>
   </div>
   <form id="feedbackForm" class="emp-form-grid mt-8" style="display:none;" onsubmit="submitFeedback(event)">
@@ -77,7 +88,7 @@
       <textarea name="description" rows="4" placeholder="Nhập nội dung bạn muốn phản hồi tại đây..." required></textarea>
     </label>
     <div class="inline-form">
-      <button type="button" class="btn btn-secondary btn-sm" disabled title="Chưa hỗ trợ tải tệp trong màn này">📎 Chọn ảnh hoặc tài liệu minh chứng</button>
+      <input type="file" name="attachment" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx" />
       <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFeedbackForm()">Hủy bỏ</button>
       <button type="submit" class="btn btn-primary btn-sm">Gửi phản hồi</button>
     </div>
@@ -87,6 +98,7 @@
 
 {% block scripts %}
 <script>
+let activeComplaintId = null;
 async function markRead(id, button){
   button.disabled = true;
   const res = await fetch(`/employee/notifications/${id}/read`, { method: 'POST' });
@@ -103,13 +115,23 @@ function normalizeType(type) {
 
 async function openNotificationDetail(el){
   const id = Number(el.dataset.id);
+  const detail = await fetch(`/employee/notifications/${id}/detail`).then((r)=>r.json());
+  if (detail.error) return Swal.fire({ icon: "error", title: detail.error });
   document.getElementById("notification-detail").style.display = "block";
-  document.getElementById("detailType").textContent = normalizeType(el.dataset.type);
-  document.getElementById("detailTitle").textContent = el.dataset.title;
+  document.getElementById("detailType").textContent = normalizeType(detail.type);
+  document.getElementById("detailTitle").textContent = detail.title;
   document.getElementById("detailTime").textContent = el.dataset.time;
-  document.getElementById("detailContent").textContent = el.dataset.content || "(Không có nội dung)";
-  document.getElementById("detailRead").textContent = el.dataset.isRead === "true" ? "Đã đọc" : "Mới";
+  document.getElementById("detailContent").textContent = detail.content || "(Không có nội dung)";
+  document.getElementById("detailRead").textContent = detail.is_read ? "Đã đọc" : "Mới";
   document.getElementById("feedbackNotificationId").value = String(id);
+  activeComplaintId = null;
+  const complaintMap = {{ complaint_map | tojson }};
+  if (complaintMap[id]) {
+    activeComplaintId = complaintMap[id].id;
+    document.getElementById("btnCloseComplaint").style.display = complaintMap[id].closed ? "none" : "inline-flex";
+  } else {
+    document.getElementById("btnCloseComplaint").style.display = "none";
+  }
 
   const detailLink = document.getElementById("detailLink");
   if(el.dataset.link){
@@ -120,7 +142,6 @@ async function openNotificationDetail(el){
   }
 
   if(el.dataset.isRead !== "true"){
-    await fetch(`/employee/notifications/${id}/read`, { method: "POST" });
     el.dataset.isRead = "true";
     const dot = el.querySelector(".dot-red");
     if(dot) dot.remove();
@@ -151,11 +172,29 @@ async function submitFeedback(event){
   });
   const data = await res.json();
   if(res.ok){
-    alert(data.message || "Yêu cầu của bạn đã được gửi tới phòng nhân sự. Chúng tôi sẽ phản hồi trong vòng 24h.");
+    await Swal.fire({ icon: "success", title: data.message || "Gửi phản hồi thành công" });
     window.location.reload();
     return;
   }
-  alert(data.error || "Không thể gửi phản hồi");
+  await Swal.fire({ icon: "error", title: data.error || "Không thể gửi phản hồi" });
+}
+
+async function closeComplaint(){
+  if(!activeComplaintId) return;
+  const confirm = await Swal.fire({ icon: "question", title: "Đóng khiếu nại?", text: "Sau khi đóng, bạn không thể tiếp tục phản hồi.", showCancelButton: true, confirmButtonText: "Đồng ý đóng" });
+  if(!confirm.isConfirmed) return;
+  const res = await fetch(`/employee/complaints/${activeComplaintId}/close`, { method: "POST" });
+  const data = await res.json();
+  if(res.ok){
+    await Swal.fire({ icon: "success", title: data.message || "Đóng khiếu nại thành công" });
+    window.location.reload();
+    return;
+  }
+  await Swal.fire({ icon: "error", title: data.error || "Không thể đóng khiếu nại" });
+}
+
+function downloadDetailPdf(){
+  window.print();
 }
 </script>
 {% endblock %}

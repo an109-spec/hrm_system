@@ -43,6 +43,14 @@ window.ManagerAPI = {
       body: JSON.stringify({ employee_ids: employeeIds, message })
     }).then(parseJsonResponse),
 
+  overtimeRequests: () => fetch('/manager/overtime').then(parseJsonResponse),
+  reviewOvertime: (id, action, note = '') =>
+    fetch(`/manager/overtime/${id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, note })
+    }).then(parseJsonResponse),
+
   contractsExpiring: () => fetch('/manager/contracts/expiring').then(parseJsonResponse),
 
   renewContract: (payload) =>

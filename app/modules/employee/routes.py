@@ -28,6 +28,7 @@ from app.modules.attendance.overtime_service import OvertimeService
 from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
+from .ess_service import EmployeeESSService
 from . import employee_bp
 VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "01-01": "Tết Dương lịch",
@@ -1095,17 +1096,21 @@ def notifications():
     employee = _current_employee()
     items = EmployeeDashboardService.get_notifications(user.id if user else 0, limit=50)
 
-    complaint_map: set[int] = set()
+    complaint_map: dict[int, dict] = {}
     if employee:
         active_complaints = (
             Complaint.query.filter_by(employee_id=employee.id)
-            .filter(Complaint.status.in_(["pending", "in_progress"]))
+            .filter(Complaint.notification_id.isnot(None))
             .all()
         )
         for complaint in active_complaints:
-            noti_match = re.search(r"\[Notification #(\d+)\]", complaint.title or "")
-            if noti_match:
-                complaint_map.add(int(noti_match.group(1)))
+            if complaint.notification_id:
+                complaint_map[complaint.notification_id] = {
+                    "id": complaint.id,
+                    "status": complaint.status,
+                    "has_reply": bool(complaint.admin_reply),
+                    "closed": bool(complaint.closed_by_employee),
+                }
 
     return render_template(
         "employee/notifications.html",
@@ -1148,32 +1153,100 @@ def send_notification_feedback(noti_id: int):
 
     issue_type = request.form.get("issue_type", "other").strip() or "other"
     detail = request.form.get("description", "").strip()
-    if not detail:
-        return jsonify({"error": "Vui lòng nhập nội dung phản hồi"}), 400
+    try:
+        result = EmployeeESSService.submit_notification_complaint(
+            user=user,
+            employee=employee,
+            noti_id=noti.id,
+            issue_type=issue_type,
+            description=detail,
+            attachment=request.files.get("attachment"),
+        )
+        return jsonify({"success": True, **result})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    complaint_type = noti.type or issue_type
-    complaint = Complaint(
-        employee_id=employee.id,
-        type=complaint_type,
-        title=f"[Notification #{noti.id}] Phản hồi: {noti.title}",
-        description=(
-            f"Notification_ID={noti.id}\n"
-            f"User_ID={user.id}\n"
-            f"Issue_Type={issue_type}\n"
-            f"{detail}"
-        ),
-        status="pending",
-    )
-    db.session.add(complaint)
-    db.session.commit()
+@employee_bp.route("/notifications/<int:noti_id>/detail", methods=["GET"])
+def notification_detail_api(noti_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        return jsonify(EmployeeESSService.notification_detail(user.id, noti_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
 
-    return jsonify(
-        {
-            "success": True,
-            "message": "Yêu cầu của bạn đã được gửi tới phòng nhân sự. Chúng tôi sẽ phản hồi trong vòng 24h.",
-            "complaint_id": complaint.id,
-        }
-    )
+
+@employee_bp.route("/complaints/<int:complaint_id>/close", methods=["POST"])
+def close_complaint_api(complaint_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(EmployeeESSService.close_complaint(session.get("user_id"), complaint_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@employee_bp.route("/profile/dependents", methods=["GET"])
+def employee_dependents_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(EmployeeESSService.list_dependents(session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@employee_bp.route("/profile/dependents", methods=["POST"])
+def employee_create_dependent_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify(EmployeeESSService.create_dependent(session.get("user_id"), payload, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@employee_bp.route("/profile/dependents/<int:dependent_id>", methods=["PUT"])
+def employee_update_dependent_api(dependent_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify(EmployeeESSService.update_dependent(session.get("user_id"), dependent_id, payload, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@employee_bp.route("/profile/dependents/<int:dependent_id>", methods=["DELETE"])
+def employee_delete_dependent_api(dependent_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(EmployeeESSService.delete_dependent(session.get("user_id"), dependent_id, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@employee_bp.route("/attendance/overtime-request", methods=["POST"])
+def submit_overtime_request_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify(EmployeeESSService.submit_overtime(session.get("user_id"), payload, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @employee_bp.route("/search")

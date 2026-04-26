@@ -28,6 +28,7 @@ from app.models.notification import Notification
 from app.models.dependent import Dependent
 from app.models.complaint import Complaint
 from app.models.history import HistoryLog
+from app.models.overtime_request import OvertimeRequest
 # Danh sách Export để dễ dàng quản lý
 __all__ = [
     'db',
@@ -51,5 +52,6 @@ __all__ = [
     'Dependent',
     'SystemSetting',
     'Complaint',
-    'HistoryLog'
+    'HistoryLog',
+    'OvertimeRequest',
 ]

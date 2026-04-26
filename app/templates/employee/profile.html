@@ -45,6 +45,7 @@
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" data-tab="info">Thông tin</button>
+    <button class="tab" data-tab="dependents">Người phụ thuộc</button>
     <button class="tab" data-tab="security">Bảo mật</button>
     <button class="tab" data-tab="complaint">Khiếu nại</button>
   </div>
@@ -94,6 +95,18 @@
     </div>
   </form>
 </div>
+  <div class="tab-pane" id="dependents">
+    <div class="form-actions">
+      <button type="button" class="primary" id="btnAddDependent">+ Thêm người phụ thuộc</button>
+      <span>Tổng hợp lệ: <strong id="dependentCount">0</strong></span>
+    </div>
+    <table class="attendance-table">
+      <thead>
+        <tr><th>Họ tên</th><th>Ngày sinh</th><th>Quan hệ</th><th>MST</th><th>Hợp lệ</th><th>Hành động</th></tr>
+      </thead>
+      <tbody id="dependentTableBody"></tbody>
+    </table>
+  </div>
 
   <div class="tab-pane" id="security">
     <form class="form-grid" method="POST" action="{{ url_for('employee.profile') }}">

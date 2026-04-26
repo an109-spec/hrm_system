@@ -28,6 +28,8 @@ from app.models import (
     Salary,
     User,
     Dependent,
+    OvertimeRequest,
+    Notification,
 )
 from app.modules.hr.dto import (
     AccountStatusDTO,
@@ -1667,26 +1669,27 @@ class HRService:
     @staticmethod
     def overtime_pending_list(month: int | None = None, year: int | None = None) -> list[dict]:
         start, end = HRService._month_window(month, year)
-        records = Attendance.query.join(Employee, Attendance.employee_id == Employee.id).filter(
-            Attendance.date >= start,
-            Attendance.date <= end,
+        records = OvertimeRequest.query.join(Employee, OvertimeRequest.employee_id == Employee.id).filter(
+            OvertimeRequest.overtime_date >= start,
+            OvertimeRequest.overtime_date <= end,
             Employee.is_deleted.is_(False),
-            Attendance.overtime_hours > 0,
-        ).order_by(Attendance.date.desc()).all()
+            OvertimeRequest.is_deleted.is_(False),
+            OvertimeRequest.status.in_(["pending_hr", "approved", "rejected"]),
+        ).order_by(OvertimeRequest.overtime_date.desc()).all()
 
         rows = []
         for record in records:
-            hr_status = "approved" if (record.attendance_type or "") == "overtime" else "pending"
+            hr_status = record.status
             rows.append(
                 {
                     "attendance_id": record.id,
                     "employee_id": record.employee_id,
                     "employee_name": record.employee.full_name if record.employee else "--",
                     "employee_code": f"EMP{record.employee_id:05d}",
-                    "date": record.date.isoformat(),
+                    "date": record.overtime_date.isoformat(),
                     "overtime_hours": float(record.overtime_hours or 0),
-                    "reason": "Tăng ca theo dữ liệu chấm công/máy chấm công",
-                    "manager_approved": True,
+                    "reason": record.reason or "",
+                    "manager_approved": record.status != "pending_manager",
                     "hr_status": hr_status,
                 }
             )
@@ -1694,18 +1697,24 @@ class HRService:
 
     @staticmethod
     def review_overtime(data: OvertimeApprovalDTO, actor_user_id: int | None = None) -> dict:
-        record = Attendance.query.get(data.attendance_id)
+        record = OvertimeRequest.query.get(data.attendance_id)
         if not record:
             raise ValueError("Không tìm thấy dữ liệu tăng ca")
         action = (data.action or "").lower()
         if action not in {"approve", "reject"}:
             raise ValueError("Action không hợp lệ")
+        if record.status != "pending_hr":
+            raise ValueError("Yêu cầu OT chưa được quản lý duyệt hoặc đã xử lý")
 
         if action == "approve":
-            record.attendance_type = "overtime"
+            record.status = "approved"
         else:
-            record.attendance_type = "ot_rejected"
-            record.overtime_hours = Decimal("0.00")
+            record.status = "rejected"
+            record.rejection_reason = data.note or "HR từ chối"
+        hr_employee = Employee.query.filter_by(user_id=actor_user_id, is_deleted=False).first() if actor_user_id else None
+        record.hr_decision_by = hr_employee.id if hr_employee else None
+        record.hr_decision_at = datetime.utcnow()
+        record.hr_note = data.note
 
         db.session.add(
             HistoryLog(
@@ -1719,7 +1728,7 @@ class HRService:
         )
         HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
         db.session.commit()
-        return {"attendance_id": record.id, "action": action, "attendance_type": record.attendance_type}
+        return {"attendance_id": record.id, "action": action, "status": record.status}
 
     @staticmethod
     def detect_abnormal_attendance(month: int | None = None, year: int | None = None) -> list[dict]:
@@ -1760,7 +1769,7 @@ class HRService:
             HistoryLog(
                 employee_id=record.employee_id,
                 action="ABNORMAL_ATTENDANCE_RESOLVE",
-                entity_type="attendance",
+                entity_type="overtime_request",
                 entity_id=record.id,
                 description=(
                     f"Xử lý bất thường: {action}. Trước={before_status}; Sau={after_status}. "
@@ -1769,7 +1778,25 @@ class HRService:
                 performed_by=actor_user_id,
             )
         )
-        HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
+        if action == "approve":
+            attendance = Attendance.query.filter_by(employee_id=record.employee_id, date=record.overtime_date).first()
+            if not attendance:
+                attendance = Attendance(employee_id=record.employee_id, date=record.overtime_date)
+                db.session.add(attendance)
+            attendance.overtime_hours = Decimal(str(record.overtime_hours or 0))
+            attendance.attendance_type = "overtime"
+            HRService._sync_payroll_for_attendance(record.employee_id, record.overtime_date, actor_user_id)
+        employee = Employee.query.get(record.employee_id)
+        if employee and employee.user_id:
+            db.session.add(
+                Notification(
+                    user_id=employee.user_id,
+                    title="Kết quả duyệt tăng ca",
+                    content="Yêu cầu tăng ca của bạn đã được HR duyệt." if action == "approve" else f"Yêu cầu tăng ca bị từ chối: {record.rejection_reason or ''}",
+                    type="overtime",
+                    link="/employee/attendance",
+                )
+            )
         db.session.commit()
         employee = Employee.query.get(record.employee_id)
         return HRService._attendance_row_payload(employee, record.date, record, False)
@@ -1869,7 +1896,7 @@ class HRService:
     def _validate_dependent_payload(data: DependentDTO) -> None:
         if not data.full_name or len(data.full_name.strip()) < 2:
             raise ValueError("Họ tên người phụ thuộc không hợp lệ")
-        if data.relationship not in {"con", "vo_chong", "bo_me"}:
+        if data.relationship not in {"con", "vo_chong", "bo", "me", "khac", "bo_me"}:
             raise ValueError("Quan hệ không hợp lệ")
         if data.tax_code and not re.fullmatch(r"[0-9]{10,13}", data.tax_code):
             raise ValueError("Mã số thuế cá nhân phải có 10-13 chữ số")

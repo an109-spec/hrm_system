@@ -13,10 +13,63 @@ from app.models.leave import LeaveRequest
 from app.models.leave_usage import EmployeeLeaveUsage
 
 from app.models.notification import Notification
+from app.models.history import HistoryLog
+from app.models.overtime_request import OvertimeRequest
 from app.models.salary import Salary
 
 class ManagerService:
+    @staticmethod
+    def get_overtime_requests(manager_id: int) -> list[dict]:
+        sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
+        if not sub_ids:
+            return []
+        rows = OvertimeRequest.query.filter(
+            OvertimeRequest.employee_id.in_(sub_ids),
+            OvertimeRequest.status == "pending_manager",
+            OvertimeRequest.is_deleted.is_(False),
+        ).order_by(OvertimeRequest.created_at.desc()).all()
+        return [
+            {
+                "id": x.id,
+                "employee_id": x.employee_id,
+                "employee_name": x.employee.full_name if x.employee else "--",
+                "overtime_date": x.overtime_date.isoformat(),
+                "overtime_hours": float(x.overtime_hours or 0),
+                "reason": x.reason,
+                "note": x.note,
+                "status": x.status,
+            }
+            for x in rows
+        ]
 
+    @staticmethod
+    def review_overtime(manager_id: int, overtime_id: int, action: str, note: str | None = None):
+        request_ot = OvertimeRequest.query.get(overtime_id)
+        if not request_ot or request_ot.is_deleted:
+            raise ValueError("Không tìm thấy yêu cầu OT")
+        if request_ot.employee_id not in [e.id for e in ManagerService._get_subordinates(manager_id)]:
+            raise ValueError("Không có quyền xử lý yêu cầu OT này")
+        if request_ot.status != "pending_manager":
+            raise ValueError("Yêu cầu OT đã được xử lý")
+        if action not in {"approve", "reject"}:
+            raise ValueError("Hành động không hợp lệ")
+
+        request_ot.manager_decision_by = manager_id
+        request_ot.manager_decision_at = datetime.utcnow()
+        request_ot.manager_note = note
+        if action == "approve":
+            request_ot.status = "pending_hr"
+        else:
+            request_ot.status = "rejected"
+            request_ot.rejection_reason = note or "Manager từ chối"
+
+        employee = Employee.query.get(request_ot.employee_id)
+        if employee and employee.user_id:
+            title = "Yêu cầu tăng ca đã được quản lý duyệt" if action == "approve" else "Yêu cầu tăng ca bị từ chối"
+            db.session.add(Notification(user_id=employee.user_id, title=title, content=note or "", type="overtime", link="/employee/attendance"))
+        db.session.add(HistoryLog(employee_id=request_ot.employee_id, action="MANAGER_OVERTIME_REVIEW", entity_type="overtime_request", entity_id=request_ot.id, description=f"Manager {action} overtime request", performed_by=manager_id))
+        db.session.commit()
+        return request_ot
     @staticmethod
     def _get_subordinates(manager_id: int) -> list[Employee]:
         manager = Employee.query.get(manager_id)

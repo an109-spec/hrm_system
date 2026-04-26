@@ -59,12 +59,20 @@ function getNow() {
   return readSharedSimTime(new Date())
 }
 
-function renderManagerClock() {
-  const el = document.getElementById('manager-clock')
-  if (!el) return
-  const now = getNow()
-  el.textContent = `${now.toLocaleTimeString('vi-VN')} - ${now.toLocaleDateString('vi-VN')}`
+async function loadOvertimeRequests() {
+  const list = document.getElementById('ot-requests')
+  if (!list) return
+  const rows = await ManagerAPI.overtimeRequests()
+  list.innerHTML = rows.map((r) => `<li>
+    <strong>${r.employee_name}</strong> - ${r.overtime_date} (${r.overtime_hours}h)<br>
+    Lý do: ${r.reason || '--'}
+    <div>
+      <button data-ot-action="approve" data-id="${r.id}">Duyệt</button>
+      <button data-ot-action="reject" data-id="${r.id}">Từ chối</button>
+    </div>
+  </li>`).join('') || '<li>Không có yêu cầu OT chờ duyệt.</li>'
 }
+
 
 
 async function loadAttendance() {
@@ -93,7 +101,7 @@ document.querySelectorAll('.filters button').forEach((btn) => {
 document.getElementById('send-reminder').addEventListener('click', async () => {
   const ids = getReminderTargets()
   if (!ids.length) {
-    alert('Không có nhân viên vắng để nhắc nhở.')
+    await Swal.fire({ icon: 'info', title: 'Không có nhân viên vắng để nhắc nhở.' })
     return
   }
 
@@ -101,9 +109,33 @@ document.getElementById('send-reminder').addEventListener('click', async () => {
     ids,
     'Chào bạn, bạn chưa thực hiện chấm công check-in hôm nay. Vui lòng kiểm tra lại thiết bị hoặc báo quản lý nếu có sai sót.'
   )
-  alert('Đã gửi nhắc nhở')
+  await Swal.fire({ icon: 'success', title: 'Đã gửi nhắc nhở' })
 })
 
 loadAttendance()
+loadOvertimeRequests()
 renderManagerClock()
 setInterval(renderManagerClock, 1000)
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-ot-action]')
+  if (!btn) return
+  const action = btn.dataset.otAction
+  const id = btn.dataset.id
+  let note = ''
+  if (action === 'reject') {
+    const result = await Swal.fire({ title: 'Lý do từ chối', input: 'text', showCancelButton: true })
+    if (!result.isConfirmed) return
+    note = result.value || ''
+  } else {
+    const confirm = await Swal.fire({ icon: 'question', title: 'Duyệt yêu cầu OT này?', showCancelButton: true })
+    if (!confirm.isConfirmed) return
+  }
+  try {
+    await ManagerAPI.reviewOvertime(id, action, note)
+    await Swal.fire({ icon: 'success', title: 'Xử lý yêu cầu OT thành công' })
+    await loadOvertimeRequests()
+  } catch (err) {
+    await Swal.fire({ icon: 'error', title: err.message })
+  }
+})

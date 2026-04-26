@@ -350,66 +350,54 @@
     </thead>
 
     <tbody>
-      {% for a in history %}
-      <tr>
-        <!-- DATE -->
-        <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-
-        <!-- CHECK IN -->
-        <td>
-          {{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}
-        </td>
-
-        <!-- CHECK OUT -->
-        <td>
-          {{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}
-        </td>
-
-        <!-- WORK HOURS (FIX CHUẨN SERVICE) -->
-        <td>
-          {{ ((a.regular_hours or 0)|float)|int }} giờ
-        </td>
+      {% if history %}
+        {% for a in history %}
+        <tr>
+          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
+          <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
+          <td>{{ ((a.regular_hours or 0)|float)|int }} giờ</td>
           <td>{{ a.overtime_hours or 0 }} giờ</td>
-        <!-- STATUS (FULL LOGIC HRM) -->
-        <td>
-          {% if not a.check_in %}
-            <span class="status status-danger">❌ Vắng</span>
-
-          {% elif a.check_in and not a.check_out %}
-            <span class="status status-warning">🟡 Đang làm</span>
-
-          {% else %}
-            {% set hour = a.check_in.hour %}
-            {% set minute = a.check_in.minute %}
-
-            {% if hour > 8 or (hour == 8 and minute > 10) %}
-              <span class="status status-late">⏰ Đi muộn</span>
-
-            {% elif a.check_out and a.check_out.hour < 17 %}
-              <span class="status status-early">🏃 Về sớm</span>
+          <td>
+            {% if not a.check_in %}
+              <span class="status status-danger">❌ Vắng</span>
+            {% elif a.check_in and not a.check_out %}
+              <span class="status status-warning">🟡 Đang làm</span>
 
             {% else %}
-              <span class="status status-success">✅ Hoàn thành</span>
+              {% set hour = a.check_in.hour %}
+              {% set minute = a.check_in.minute %}
+              {% if hour > 8 or (hour == 8 and minute > 10) %}
+                <span class="status status-late">⏰ Đi muộn</span>
+              {% elif a.check_out and a.check_out.hour < 17 %}
+                <span class="status status-early">🏃 Về sớm</span>
+              {% else %}
+                <span class="status status-success">✅ Hoàn thành</span>
+              {% endif %}
             {% endif %}
-          {% endif %}
-        </td>
-
-        <!-- ACTION -->
-        <td>
-          <button class="btn btn-sm btn-danger"
-                  onclick="deleteRecord('{{ a.date.isoformat() }}')">
-            Xóa
-          </button>
-        </td>
-      </tr>
-
+          </td>
+          <td>
+            <button class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
+          </td>
+        </tr>
+        {% endfor %}
       {% else %}
-      <tr>
-       <td colspan="7">Chưa có dữ liệu chấm công.</td>
-      </tr>
-      {% endfor %}
+        <tr>
+          <td colspan="7">Chưa có dữ liệu chấm công.</td>
+        </tr>
+      {% endif %}
     </tbody>
   </table>
+</section>
+<section class="emp-card">
+  <h3>Gửi yêu cầu tăng ca</h3>
+  <form id="otRequestForm" class="emp-form-grid">
+    <label>Ngày OT <input type="date" name="overtime_date" required></label>
+    <label>Số giờ OT <input type="number" name="overtime_hours" min="0.5" step="0.5" required></label>
+    <label>Lý do OT <input type="text" name="reason" required></label>
+    <label>Ghi chú <textarea name="note" rows="2"></textarea></label>
+    <button type="submit" class="btn btn-warning">Gửi yêu cầu OT</button>
+  </form>
 </section>
 
 <div class="scanner-modal" id="scannerModal">
@@ -985,7 +973,13 @@ async function closeScannerModal() {
   state.isScannerOpen = false;
 }
 async function deleteRecord(dateIso) {
-  if (!confirm("Xóa bản ghi ngày " + dateIso + "?")) return;
+  const confirmDelete = await Swal.fire({
+    icon: "warning",
+    title: "Xóa bản ghi ngày " + dateIso + "?",
+    showCancelButton: true,
+    confirmButtonText: "Xóa",
+  });
+  if (!confirmDelete.isConfirmed) return;
 
   try {
     const res = await fetch("/employee/attendance/delete", {
@@ -1008,5 +1002,28 @@ async function deleteRecord(dateIso) {
     toast(err.message, "error");
   }
 }
+document.getElementById("otRequestForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.target).entries());
+  const confirmSend = await Swal.fire({
+    icon: "question",
+    title: "Gửi yêu cầu tăng ca?",
+    showCancelButton: true,
+    confirmButtonText: "Gửi",
+  });
+  if (!confirmSend.isConfirmed) return;
+  const res = await fetch("/employee/attendance/overtime-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    await Swal.fire({ icon: "error", title: data.error || "Không thể gửi yêu cầu OT" });
+    return;
+  }
+  await Swal.fire({ icon: "success", title: data.message || "Đã gửi yêu cầu OT" });
+  e.target.reset();
+});
 </script>
 {% endblock %}

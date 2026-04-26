@@ -12,6 +12,6 @@ class Dependent(BaseModel):
     relationship = db.Column(db.String(30), nullable=False)
     tax_code = db.Column(db.String(30), nullable=True)
     is_valid = db.Column(db.Boolean, nullable=False, default=True, server_default="true")
-
+    note = db.Column(db.Text, nullable=True)
     def __repr__(self):
         return f"<Dependent {self.full_name} - Emp:{self.employee_id}>"

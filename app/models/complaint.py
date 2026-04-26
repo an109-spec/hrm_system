@@ -9,7 +9,8 @@ class Complaint(BaseModel):
     __tablename__ = 'complaints'
 
     employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
-
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    notification_id = db.Column(db.Integer, db.ForeignKey('notifications.id'), nullable=True, index=True)
     # Liên kết optional
     salary_id = db.Column(db.Integer, db.ForeignKey('salaries.id'), nullable=True)
     leave_request_id = db.Column(db.Integer, db.ForeignKey('leave_requests.id'), nullable=True)
@@ -36,7 +37,9 @@ class Complaint(BaseModel):
     handled_by = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
 
     resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
-
+    admin_reply = db.Column(db.Text, nullable=True)
+    closed_by_employee = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     # ======================
     # RELATIONSHIPS
     # ======================

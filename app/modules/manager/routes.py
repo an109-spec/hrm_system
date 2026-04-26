@@ -115,6 +115,27 @@ def attendance_month_api():
 
     return jsonify(ManagerService.get_month_attendance_summary(manager.id, month, year))
 
+@manager_bp.route("/overtime", methods=["GET"])
+def overtime_list_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_overtime_requests(manager.id))
+
+
+@manager_bp.route("/overtime/<int:overtime_id>/review", methods=["POST"])
+def overtime_review_api(overtime_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        row = ManagerService.review_overtime(manager.id, overtime_id, data.get("action", ""), data.get("note"))
+        return jsonify({"message": "processed", "id": row.id, "status": row.status})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 
 @manager_bp.route("/leave", methods=["GET"])
 def leave_list_api():
