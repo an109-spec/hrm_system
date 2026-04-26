@@ -110,7 +110,7 @@
                 <a href="{{ url_for('hr.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.payroll_page' }}">
                     <i class="fas fa-money-check-alt"></i> Tính lương
                 </a>
-                <a href="{{ url_for('employee.profile') }}" class="nav-link {{ 'active' if request.endpoint == 'employee.profile' }}">
+                <a href="{{ url_for('hr.profile_page') }}" class="nav-link {{ 'active' if request.endpoint == 'hr.profile_page' }}">
                     <i class="fas fa-user-circle"></i> Hồ sơ cá nhân
                 </a>
             {% else %}

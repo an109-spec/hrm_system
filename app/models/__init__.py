@@ -25,7 +25,7 @@ from app.models.contract import Contract
 from app.models.allowance import EmployeeAllowance
 from app.models.salary import Salary
 from app.models.notification import Notification
-
+from app.models.dependent import Dependent
 from app.models.complaint import Complaint
 from app.models.history import HistoryLog
 # Danh sách Export để dễ dàng quản lý
@@ -48,6 +48,7 @@ __all__ = [
     'EmployeeAllowance',
     'Salary',
     'Notification',
+    'Dependent',
     'SystemSetting',
     'Complaint',
     'HistoryLog'

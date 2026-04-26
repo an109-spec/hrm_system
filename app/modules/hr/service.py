@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import os
+import re
+import uuid
 import calendar
 import csv
 import io
 import json
 from decimal import Decimal
 from sqlalchemy import and_, func, or_
-
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import (
     Attendance,
@@ -23,6 +27,7 @@ from app.models import (
     Role,
     Salary,
     User,
+    Dependent,
 )
 from app.modules.hr.dto import (
     AccountStatusDTO,
@@ -45,6 +50,9 @@ from app.modules.hr.dto import (
     AttendanceFilterDTO,
     OvertimeApprovalDTO,
     AbnormalAttendanceResolveDTO,
+    HRPasswordChangeDTO,
+    HRProfileUpdateDTO,
+    DependentDTO,
 )
 
 
@@ -1834,3 +1842,292 @@ class HRService:
             {"value": "holiday", "label": "Ca ngày lễ"},
         ]
         return meta
+        return meta
+
+    @staticmethod
+    def _ensure_hr_employee(user_id: int | None) -> Employee:
+        if not user_id:
+            raise ValueError("Không xác định được tài khoản HR")
+
+        employee = Employee.query.filter_by(user_id=user_id, is_deleted=False).first()
+        if not employee:
+            raise ValueError("Không tìm thấy hồ sơ nhân sự")
+        return employee
+
+    @staticmethod
+    def _serialize_dependent(dependent: Dependent) -> dict:
+        return {
+            "id": dependent.id,
+            "full_name": dependent.full_name,
+            "dob": dependent.dob.isoformat() if dependent.dob else None,
+            "relationship": dependent.relationship,
+            "tax_code": dependent.tax_code,
+            "is_valid": bool(dependent.is_valid),
+        }
+
+    @staticmethod
+    def _validate_dependent_payload(data: DependentDTO) -> None:
+        if not data.full_name or len(data.full_name.strip()) < 2:
+            raise ValueError("Họ tên người phụ thuộc không hợp lệ")
+        if data.relationship not in {"con", "vo_chong", "bo_me"}:
+            raise ValueError("Quan hệ không hợp lệ")
+        if data.tax_code and not re.fullmatch(r"[0-9]{10,13}", data.tax_code):
+            raise ValueError("Mã số thuế cá nhân phải có 10-13 chữ số")
+
+    @staticmethod
+    def _profile_history(employee_id: int) -> list[dict]:
+        logs = (
+            HistoryLog.query.filter_by(employee_id=employee_id)
+            .order_by(HistoryLog.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        return [
+            {
+                "id": log.id,
+                "action": log.action,
+                "entity_type": log.entity_type,
+                "description": log.description,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
+
+    @staticmethod
+    def get_hr_profile(user_id: int | None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+        user = employee.user
+        contract = HRService._latest_contract(employee.id)
+        payroll = (
+            Salary.query.filter_by(employee_id=employee.id)
+            .order_by(Salary.year.desc(), Salary.month.desc())
+            .first()
+        )
+        dependents = (
+            Dependent.query.filter_by(employee_id=employee.id, is_deleted=False)
+            .order_by(Dependent.created_at.desc())
+            .all()
+        )
+
+        number_of_dependents = sum(1 for item in dependents if item.is_valid)
+
+        return {
+            "header": {
+                "avatar": employee.avatar,
+                "full_name": employee.full_name,
+                "employee_code": f"EMP{employee.id:05d}",
+                "department": employee.department.name if employee.department else "--",
+                "position": employee.position.job_title if employee.position else "--",
+                "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
+                "working_status": employee.working_status,
+            },
+            "personal_info": {
+                "full_name": employee.full_name,
+                "dob": employee.dob.isoformat() if employee.dob else None,
+                "gender": employee.gender,
+                "address": employee.address,
+                "phone": employee.phone,
+                "personal_email": user.email if user else None,
+            },
+            "work_info": {
+                "employee_code": f"EMP{employee.id:05d}",
+                "department": employee.department.name if employee.department else "--",
+                "position": employee.position.job_title if employee.position else "--",
+                "manager": employee.manager.full_name if employee.manager else "--",
+                "employment_type": employee.employment_type,
+                "contract_type": getattr(contract, "contract_type", None) if contract else None,
+                "contract_start_date": contract.start_date.isoformat() if contract and contract.start_date else None,
+                "contract_end_date": contract.end_date.isoformat() if contract and contract.end_date else None,
+                "basic_salary": float(contract.basic_salary) if contract and contract.basic_salary is not None else None,
+                "allowance": float(HRService._sum_allowance(employee.id)),
+                "account_status": "active" if user and user.is_active else "inactive",
+            },
+            "payroll_info": {
+                "month": payroll.month if payroll else None,
+                "year": payroll.year if payroll else None,
+                "net_salary": float(payroll.net_salary) if payroll and payroll.net_salary is not None else None,
+                "status": payroll.status if payroll else None,
+            },
+            "dependents": [HRService._serialize_dependent(item) for item in dependents],
+            "number_of_dependents": number_of_dependents,
+            "history": HRService._profile_history(employee.id),
+        }
+
+    @staticmethod
+    def update_hr_personal_info(user_id: int | None, data: HRProfileUpdateDTO, actor_user_id: int | None = None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+
+        if not data.full_name or len(data.full_name.strip()) < 2:
+            raise ValueError("Họ tên không hợp lệ")
+
+        employee.full_name = data.full_name.strip()
+        employee.phone = (data.phone or "").strip() or None
+        employee.address = (data.address or "").strip() or None
+
+        if data.gender and data.gender not in HRService.VALID_GENDERS:
+            raise ValueError("Giới tính không hợp lệ")
+        if data.gender:
+            employee.gender = data.gender
+
+        if data.dob:
+            employee.dob = HRService._parse_date(data.dob, "Ngày sinh")
+
+        if employee.user and data.personal_email:
+            employee.user.email = data.personal_email.strip()
+
+        db.session.add(
+            HistoryLog(
+                employee_id=employee.id,
+                action="HR_PROFILE_UPDATED",
+                entity_type="employee",
+                entity_id=employee.id,
+                description="HR cập nhật thông tin cá nhân",
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Cập nhật thông tin cá nhân thành công"}
+
+    @staticmethod
+    def change_hr_password(user_id: int | None, data: HRPasswordChangeDTO, actor_user_id: int | None = None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+        user = employee.user
+        if not user:
+            raise ValueError("Không tìm thấy tài khoản người dùng")
+
+        if not check_password_hash(user.password_hash, data.current_password):
+            raise ValueError("Mật khẩu hiện tại không đúng")
+        if len(data.new_password) < 8:
+            raise ValueError("Mật khẩu mới phải có ít nhất 8 ký tự")
+        if data.new_password != data.confirm_password:
+            raise ValueError("Xác nhận mật khẩu không khớp")
+
+        user.password_hash = generate_password_hash(data.new_password)
+        db.session.add(
+            HistoryLog(
+                employee_id=employee.id,
+                action="HR_PASSWORD_CHANGED",
+                entity_type="user",
+                entity_id=user.id,
+                description="HR đổi mật khẩu",
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Đổi mật khẩu thành công"}
+
+    @staticmethod
+    def upload_hr_avatar(user_id: int | None, file, actor_user_id: int | None = None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+
+        if not file:
+            raise ValueError("Không có file avatar")
+
+        filename = secure_filename(file.filename or "")
+        if not filename:
+            raise ValueError("Tên file không hợp lệ")
+
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext not in {"jpg", "jpeg", "png", "webp"}:
+            raise ValueError("Avatar chỉ hỗ trợ JPG, PNG hoặc WEBP")
+
+        upload_folder = os.path.join("app", "static", "uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(upload_folder, unique_name)
+        file.save(filepath)
+
+        employee.avatar = f"/static/uploads/{unique_name}"
+        db.session.add(
+            HistoryLog(
+                employee_id=employee.id,
+                action="HR_AVATAR_UPDATED",
+                entity_type="employee",
+                entity_id=employee.id,
+                description="HR cập nhật ảnh đại diện",
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Cập nhật ảnh đại diện thành công", "avatar": employee.avatar}
+
+    @staticmethod
+    def list_dependents(user_id: int | None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+        rows = (
+            Dependent.query.filter_by(employee_id=employee.id, is_deleted=False)
+            .order_by(Dependent.created_at.desc())
+            .all()
+        )
+        number_of_dependents = sum(1 for item in rows if item.is_valid)
+        return {
+            "items": [HRService._serialize_dependent(item) for item in rows],
+            "number_of_dependents": number_of_dependents,
+        }
+
+    @staticmethod
+    def create_dependent(user_id: int | None, data: DependentDTO, actor_user_id: int | None = None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+        HRService._validate_dependent_payload(data)
+
+        dob = HRService._parse_date(data.dob, "Ngày sinh người phụ thuộc")
+        if not dob or dob > date.today():
+            raise ValueError("Ngày sinh người phụ thuộc không hợp lệ")
+
+        dependent = Dependent(
+            employee_id=employee.id,
+            full_name=data.full_name.strip(),
+            dob=dob,
+            relationship=data.relationship,
+            tax_code=(data.tax_code or "").strip() or None,
+            is_valid=bool(data.is_valid),
+        )
+        db.session.add(dependent)
+        db.session.flush()
+        db.session.add(
+            HistoryLog(
+                employee_id=employee.id,
+                action="HR_DEPENDENT_CREATED",
+                entity_type="dependent",
+                entity_id=dependent.id,
+                description=f"Thêm người phụ thuộc: {dependent.full_name}",
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Thêm người phụ thuộc thành công", "item": HRService._serialize_dependent(dependent)}
+
+    @staticmethod
+    def update_dependent(user_id: int | None, dependent_id: int, data: DependentDTO, actor_user_id: int | None = None) -> dict:
+        employee = HRService._ensure_hr_employee(user_id)
+        dependent = Dependent.query.filter_by(id=dependent_id, employee_id=employee.id, is_deleted=False).first()
+        if not dependent:
+            raise ValueError("Không tìm thấy người phụ thuộc")
+
+        HRService._validate_dependent_payload(data)
+        dependent.full_name = data.full_name.strip()
+        dependent.relationship = data.relationship
+        dependent.tax_code = (data.tax_code or "").strip() or None
+        dependent.is_valid = bool(data.is_valid)
+        dob = HRService._parse_date(data.dob, "Ngày sinh người phụ thuộc")
+        if not dob or dob > date.today():
+            raise ValueError("Ngày sinh người phụ thuộc không hợp lệ")
+        dependent.dob = dob
+
+        db.session.add(
+            HistoryLog(
+                employee_id=employee.id,
+                action="HR_DEPENDENT_UPDATED",
+                entity_type="dependent",
+                entity_id=dependent.id,
+                description=f"Cập nhật người phụ thuộc: {dependent.full_name}",
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Cập nhật người phụ thuộc thành công", "item": HRService._serialize_dependent(dependent)}
+
+    @staticmethod
+    def profile_audit_history(user_id: int | None) -> list[dict]:
+        employee = HRService._ensure_hr_employee(user_id)
+        return HRService._profile_history(employee.id)

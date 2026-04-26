@@ -11,6 +11,9 @@ from .dto import (
     CreateEmployeeDTO,
     EmployeeFilterDTO,
     ExtendContractDTO,
+    HRPasswordChangeDTO,
+    HRProfileUpdateDTO,
+    DependentDTO,
     PayrollAdjustmentDTO,
     PayrollApprovalDTO,
     PayrollCalculationDTO,
@@ -659,5 +662,139 @@ def update_account_status_api(employee_id: int):
     try:
         account = HRService.update_account_status(dto)
         return jsonify({"user_id": account.id, "is_active": account.is_active, "message": "Cập nhật trạng thái tài khoản thành công"})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+@hr_bp.route("/profile", methods=["GET"])
+def profile_page():
+    guard = _guard_hr_access()
+    if guard:
+        return guard
+    return render_template("hr/profile.html", employee=_current_employee())
+
+
+@hr_bp.route("/api/profile", methods=["GET"])
+def profile_detail_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.get_hr_profile(session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/personal-info", methods=["PUT"])
+def profile_update_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = HRProfileUpdateDTO(
+        full_name=payload.get("full_name", ""),
+        dob=payload.get("dob"),
+        gender=payload.get("gender"),
+        phone=payload.get("phone"),
+        personal_email=payload.get("personal_email"),
+        address=payload.get("address"),
+    )
+    try:
+        return jsonify(HRService.update_hr_personal_info(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/change-password", methods=["POST"])
+def profile_change_password_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = HRPasswordChangeDTO(
+        current_password=payload.get("current_password", ""),
+        new_password=payload.get("new_password", ""),
+        confirm_password=payload.get("confirm_password", ""),
+    )
+    try:
+        return jsonify(HRService.change_hr_password(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/avatar", methods=["POST"])
+def profile_avatar_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.upload_hr_avatar(session.get("user_id"), request.files.get("avatar"), actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/dependents", methods=["GET"])
+def profile_dependents_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.list_dependents(session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/dependents", methods=["POST"])
+def profile_create_dependent_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = DependentDTO(
+        full_name=payload.get("full_name", ""),
+        dob=payload.get("dob", ""),
+        relationship=payload.get("relationship", ""),
+        tax_code=payload.get("tax_code"),
+        is_valid=bool(payload.get("is_valid", True)),
+    )
+    try:
+        return jsonify(HRService.create_dependent(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/dependents/<int:dependent_id>", methods=["PUT"])
+def profile_update_dependent_api(dependent_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    dto = DependentDTO(
+        full_name=payload.get("full_name", ""),
+        dob=payload.get("dob", ""),
+        relationship=payload.get("relationship", ""),
+        tax_code=payload.get("tax_code"),
+        is_valid=bool(payload.get("is_valid", True)),
+    )
+    try:
+        return jsonify(HRService.update_dependent(session.get("user_id"), dependent_id, dto, actor_user_id=session.get("user_id")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@hr_bp.route("/api/profile/history", methods=["GET"])
+def profile_history_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+
+    try:
+        return jsonify(HRService.profile_audit_history(session.get("user_id")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

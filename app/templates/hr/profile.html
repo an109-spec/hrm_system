@@ -1,0 +1,79 @@
+{% extends "layouts/base.html" %}
+{% block title %}HR - Hồ sơ cá nhân{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="hr-profile-page" id="hrProfilePage">
+  <section class="profile-header card">
+    <div class="avatar-block">
+      <img id="avatarPreview" src="" alt="Avatar">
+      <input type="file" id="avatarInput" accept="image/*" hidden>
+      <button class="btn secondary" id="btnChangeAvatar">Đổi ảnh đại diện</button>
+    </div>
+    <div class="header-info">
+      <h2 id="headerFullName">--</h2>
+      <div class="chips">
+        <span id="headerCode"></span>
+        <span id="headerDepartment"></span>
+        <span id="headerPosition"></span>
+      </div>
+      <div class="meta">
+        <span>Ngày vào làm: <b id="headerHireDate">--</b></span>
+        <span>Trạng thái: <b id="headerWorkingStatus">--</b></span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn primary" id="btnEditProfile">Cập nhật thông tin</button>
+      <button class="btn" id="btnChangePassword">Đổi mật khẩu</button>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <article class="card">
+      <h3>Thông tin cá nhân chi tiết</h3>
+      <form id="personalInfoForm" class="form-grid">
+        <label>Họ và tên<input name="full_name" required></label>
+        <label>Ngày sinh<input type="date" name="dob"></label>
+        <label>Giới tính
+          <select name="gender">
+            <option value="male">Nam</option><option value="female">Nữ</option><option value="other">Khác</option>
+          </select>
+        </label>
+        <label>Số điện thoại cá nhân<input name="phone"></label>
+        <label>Email cá nhân<input type="email" name="personal_email"></label>
+        <label class="full">Địa chỉ<textarea name="address" rows="2"></textarea></label>
+        <div class="full right"><button class="btn primary" type="submit">Lưu thay đổi</button></div>
+      </form>
+    </article>
+
+    <article class="card">
+      <h3>Thông tin công việc</h3>
+      <div class="readonly-grid" id="workInfo"></div>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h3>Người phụ thuộc</h3>
+      <div>Số người phụ thuộc hợp lệ: <b id="dependentCount">0</b></div>
+      <button class="btn primary" id="btnAddDependent">Thêm người phụ thuộc</button>
+    </div>
+    <table>
+      <thead><tr><th>Họ tên</th><th>Ngày sinh</th><th>Quan hệ</th><th>MST</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody id="dependentTableBody"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Lịch sử cá nhân</h3>
+    <ul id="historyList" class="history-list"></ul>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hr/profile.js') }}"></script>
+{% endblock %}

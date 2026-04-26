@@ -178,3 +178,28 @@ class AbnormalAttendanceResolveDTO:
     check_in: Optional[str] = None
     check_out: Optional[str] = None
     status: Optional[str] = None
+
+@dataclass
+class HRProfileUpdateDTO:
+    full_name: str
+    dob: Optional[str] = None
+    gender: Optional[str] = None
+    phone: Optional[str] = None
+    personal_email: Optional[str] = None
+    address: Optional[str] = None
+
+
+@dataclass
+class HRPasswordChangeDTO:
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
+@dataclass
+class DependentDTO:
+    full_name: str
+    dob: str
+    relationship: str
+    tax_code: Optional[str] = None
+    is_valid: bool = True
