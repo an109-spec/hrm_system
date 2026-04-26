@@ -449,6 +449,7 @@ const attendanceByDate = new Map([
   }],
   {% endfor %}
 ]);
+let isSubmittingAttendance = false;
 
 function readSharedSimTime(fallback) {
   try {
@@ -793,6 +794,8 @@ function startClock() {
 
 /* ===================== API ===================== */
 async function submitAttendanceFromQR(decodedText) {
+  if (isSubmittingAttendance) return;
+  isSubmittingAttendance = true;
   try {
     console.log("TIME SENT:", state.now)
     console.log("FE TIME:", state.now.toString());
@@ -896,9 +899,14 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     });
     persistSharedSimTime(state.now);
     toast(data.message, data.type || "success");
+    const successTitle = data.action === "check_out"
+      ? "Check-out thành công"
+      : data.action === "check_in"
+        ? "Check-in thành công"
+        : "Thông báo chấm công";
     await Swal.fire({
       icon: data.type === "error" ? "error" : "success",
-      title: data.action === "check_out" ? "Check-out thành công" : "Check-in thành công",
+      title: successTitle,
       text: data.message || "Đã cập nhật dữ liệu chấm công",
       timer: 1400,
       showConfirmButton: false,
@@ -912,6 +920,8 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
 
   } catch (err) {
     toast(err.message, "error");
+  } finally {
+    isSubmittingAttendance = false;
   }
 }
 

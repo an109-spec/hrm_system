@@ -1,0 +1,34 @@
+{% extends "layouts/base.html" %}
+{% block title %}Manager - Phiếu lương cá nhân{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager/payroll.css') }}">
+{% endblock %}
+{% block content %}
+<h2>👤 Hồ sơ cá nhân / Phiếu lương cá nhân</h2>
+<section class="summary-grid" style="grid-template-columns:repeat(5,minmax(150px,1fr));">
+  <article class="summary-card"><h4>Tháng lương hiện tại</h4><p id="self-month">--</p></article>
+  <article class="summary-card"><h4>Tổng thực nhận</h4><p id="self-net">0đ</p></article>
+  <article class="summary-card"><h4>Trạng thái payroll</h4><p id="self-status">--</p></article>
+  <article class="summary-card"><h4>Ngày thanh toán</h4><p id="self-payday">--</p></article>
+  <article class="summary-card"><h4>Trạng thái complaint</h4><p id="self-complaint">--</p></article>
+</section>
+
+<div class="filter">
+  <input id="self-year" type="number" min="2020" max="2100" value="{{ current_year }}">
+  <button id="load-self">Tải lịch sử lương</button>
+</div>
+<table>
+  <thead><tr><th>Tháng/Năm</th><th>Lương cơ bản</th><th>Phụ cấp</th><th>OT</th><th>Khấu trừ</th><th>Bảo hiểm</th><th>Thuế</th><th>Thực nhận</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+  <tbody id="self-body"></tbody>
+</table>
+
+<section class="complaint-box">
+  <h3>Người phụ thuộc</h3>
+  <div id="dependent-summary"></div>
+  <button onclick="openDependentForm()">Cập nhật dependent</button>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/api/manager.api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manager/self_payroll.js') }}"></script>
+{% endblock %}

@@ -1,11 +1,15 @@
 :root { --primary:#2C3E50; --success:#2E7D32; --warning:#F9A825; --danger:#C62828; --info:#1565C0; --bg:#FFFFFF; --border:#E0E0E0; }
-.filter { display:flex; gap:8px; margin-bottom:12px; }
-.filter input { border:1px solid var(--border); border-radius:8px; padding:8px; }
+.summary-grid { display:grid; grid-template-columns: repeat(5,minmax(160px,1fr)); gap:12px; margin-bottom:14px; }
+.summary-card { border:1px solid var(--border); border-radius:12px; padding:12px; background:#fff; }
+.summary-card h4 { margin:0 0 8px; font-size:14px; }
+.summary-card p { margin:0; font-size:20px; font-weight:700; }
+.filter { display:grid; grid-template-columns: repeat(4,minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+.filter input,.filter select { border:1px solid var(--border); border-radius:8px; padding:8px; }
 .filter button { background:var(--info); color:#fff; border:none; border-radius:8px; padding:8px 12px; }
-table { width:100%; border-collapse:collapse; background:var(--bg); }
-th,td { border:1px solid var(--border); padding:10px; text-align:center; }
+table { width:100%; border-collapse:collapse; background:var(--bg); font-size:13px; }
+th,td { border:1px solid var(--border); padding:8px; text-align:center; }
 th { background:var(--primary); color:#fff; }
-.status { padding:3px 8px; border-radius:999px; }
-.status.paid { background:#edf7ee; color:var(--success); }
-.status.pending { background:#fff8e1; color:#8a6500; }
+.status { padding:3px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; }
 .state { margin-top:10px; color:var(--danger); }
+.complaint-box { margin-top:18px; }
+.complaint-item { border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px; }

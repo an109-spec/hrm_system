@@ -61,5 +61,40 @@ window.ManagerAPI = {
     }).then(parseJsonResponse),
 
   salary: (month, year) =>
-    fetch(`/manager/salary?month=${month}&year=${year}`).then(parseJsonResponse)
+fetch(`/manager/salary?month=${month}&year=${year}`).then(parseJsonResponse),
+
+  departmentPayroll: (params) =>
+    fetch(`/manager/payroll/department?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  departmentPayrollDetail: (salaryId) =>
+    fetch(`/manager/payroll/department/${salaryId}`).then(parseJsonResponse),
+  confirmDepartmentPayroll: (salaryId, note = '') =>
+    fetch(`/manager/payroll/department/${salaryId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note })
+    }).then(parseJsonResponse),
+  feedbackDepartmentPayroll: (salaryId, payload) =>
+    fetch(`/manager/payroll/department/${salaryId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(parseJsonResponse),
+  payrollComplaints: () => fetch('/manager/payroll/complaints').then(parseJsonResponse),
+  approvePayrollComplaint: (complaintId) =>
+    fetch(`/manager/payroll/complaints/${complaintId}/approve`, { method: 'POST' }).then(parseJsonResponse),
+  rejectPayrollComplaint: (complaintId) =>
+    fetch(`/manager/payroll/complaints/${complaintId}/reject`, { method: 'POST' }).then(parseJsonResponse),
+
+  selfPayrollHistory: (year) => fetch(`/manager/self-payroll/history?year=${year}`).then(parseJsonResponse),
+  selfPayrollDetail: (salaryId) => fetch(`/manager/self-payroll/${salaryId}`).then(parseJsonResponse),
+  selfPayrollPdfUrl: (salaryId) => `/manager/self-payroll/${salaryId}/pdf`,
+  selfPayrollComplaint: (salaryId, formData) =>
+    fetch(`/manager/self-payroll/${salaryId}/complaint`, { method: 'POST', body: formData }).then(parseJsonResponse),
+  selfDependents: () => fetch('/manager/self/dependents').then(parseJsonResponse),
+  createSelfDependent: (payload) =>
+    fetch('/manager/self/dependents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(parseJsonResponse),
+  updateSelfDependent: (id, payload) =>
+    fetch(`/manager/self/dependents/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(parseJsonResponse),
+  deleteSelfDependent: (id) =>
+    fetch(`/manager/self/dependents/${id}`, { method: 'DELETE' }).then(parseJsonResponse)
 }

@@ -1,24 +1,58 @@
 {% extends "layouts/base.html" %}
-{% block title %}Lương{% endblock %}
+{% block title %}Manager - Lương phòng ban{% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/manager/payroll.css') }}">
 {% endblock %}
 
 {% block content %}
-<h2>💰 Lương phòng ban</h2>
+<h2>💰 Lương phòng ban (Department Payroll Review)</h2>
+<section class="summary-grid" id="summary-grid">
+  <article class="summary-card"><h4>Tổng quỹ lương tháng</h4><p id="sum-total">0</p></article>
+  <article class="summary-card"><h4>Đã tính lương</h4><p id="sum-calculated">0</p></article>
+  <article class="summary-card"><h4>Chờ Manager xác nhận</h4><p id="sum-pending">0</p></article>
+  <article class="summary-card"><h4>Số khiếu nại</h4><p id="sum-complaints">0</p></article>
+  <article class="summary-card"><h4>Payroll bất thường</h4><p id="sum-abnormal">0</p></article>
+</section>
 
-<div class="filter">
+<section class="filter">
+  <input id="f-name" placeholder="Tên nhân viên">
+  <input id="f-code" placeholder="Mã NV (EMP0001)">
   <input id="month" placeholder="Tháng" type="number" min="1" max="12">
   <input id="year" placeholder="Năm" type="number" min="2020" max="2100">
-  <button id="salary-view">Xem</button>
-</div>
-
+  <select id="f-status">
+    <option value="">Trạng thái payroll</option>
+    <option value="pending_hr">Chờ HR xử lý</option>
+    <option value="pending_manager">Chờ Manager xác nhận</option>
+    <option value="manager_confirmed">Đã xác nhận</option>
+    <option value="pending_admin">Chờ Admin duyệt</option>
+    <option value="approved">Đã duyệt</option>
+    <option value="paid">Đã chốt</option>
+    <option value="complaint">Khiếu nại</option>
+  </select>
+  <select id="f-employment">
+    <option value="">Loại hợp đồng</option>
+    <option value="probation">Thử việc</option>
+    <option value="permanent">Chính thức</option>
+    <option value="intern">Thực tập</option>
+    <option value="contract">Hợp đồng</option>
+  </select>
+  <input id="f-position" placeholder="Chức danh">
+  <button id="salary-view">Tìm</button>
+</section>
+<div id="salary-state" class="state" hidden></div>
 <table>
-  <thead><tr><th>Tên</th><th>Lương cơ bản</th><th>Phụ cấp</th><th>Thực nhận</th><th>Trạng thái</th></tr></thead>
+  <thead>
+    <tr>
+      <th>Mã NV</th><th>Họ tên</th><th>Phòng ban</th><th>Chức danh</th><th>Lương cơ bản</th><th>Ngày công</th><th>Nghỉ</th><th>OT (giờ)</th><th>Phụ cấp</th><th>Khấu trừ</th><th>Bảo hiểm</th><th>Thuế TNCN</th><th>Thực nhận</th><th>Trạng thái</th><th>Hành động</th>
+    </tr>
+  </thead>
   <tbody id="salary-body"></tbody>
 </table>
-
+<section class="complaint-box">
+  <h3>Khiếu nại payroll trong phòng ban</h3>
+  <div id="complaint-list"></div>
+</section>
 {% endblock %}
 
 {% block scripts %}

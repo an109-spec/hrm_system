@@ -16,8 +16,24 @@ from app.models.notification import Notification
 from app.models.history import HistoryLog
 from app.models.overtime_request import OvertimeRequest
 from app.models.salary import Salary
+from app.models.complaint import Complaint
+from app.models.position import Position
 
 class ManagerService:
+
+    PAYROLL_REVIEWABLE_STATUSES = {"pending_manager", "manager_review"}
+    PAYROLL_STATUS_LABELS = {
+        "pending_hr": "Chờ HR xử lý",
+        "pending_manager": "Chờ Manager xác nhận",
+        "manager_review": "Chờ Manager xác nhận",
+        "manager_confirmed": "Đã xác nhận",
+        "pending_admin": "Chờ Admin duyệt",
+        "approved": "Đã duyệt",
+        "paid": "Đã chốt",
+        "finalized": "Đã chốt",
+        "complaint": "Khiếu nại",
+        "pending": "Chờ HR xử lý",
+    }
     @staticmethod
     def get_overtime_requests(manager_id: int) -> list[dict]:
         sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
@@ -398,6 +414,218 @@ class ManagerService:
             }
             for s in rows
         ]
+
+    @staticmethod
+    def _normalize_payroll_status(status: str | None) -> str:
+        if not status:
+            return "pending_hr"
+        return status.strip().lower()
+
+    @staticmethod
+    def _payroll_status_label(status: str | None) -> str:
+        normalized = ManagerService._normalize_payroll_status(status)
+        return ManagerService.PAYROLL_STATUS_LABELS.get(normalized, status or "Chưa xác định")
+
+    @staticmethod
+    def _tax_and_insurance(salary: Salary) -> tuple[float, float]:
+        basic = float(salary.basic_salary or 0)
+        worked_ratio = 1.0
+        if salary.standard_work_days and float(salary.standard_work_days) > 0:
+            worked_ratio = max(float(salary.total_work_days or 0) / float(salary.standard_work_days), 0)
+        gross = (basic * worked_ratio) + float(salary.total_allowance or 0) + float(salary.bonus or 0)
+        insurance = gross * 0.105
+        taxable = max(gross - insurance - 11_000_000, 0)
+        tax = taxable * 0.05
+        return round(insurance, 2), round(tax, 2)
+
+    @staticmethod
+    def get_department_payroll_review(
+        manager_id: int,
+        month: int,
+        year: int,
+        employee_name: str | None = None,
+        employee_code: str | None = None,
+        status: str | None = None,
+        employment_type: str | None = None,
+        position: str | None = None,
+    ) -> dict:
+        employees = ManagerService._get_subordinates(manager_id)
+        sub_ids = [e.id for e in employees]
+        if not sub_ids:
+            return {"summary": {}, "items": []}
+
+        query = Salary.query.join(Employee, Salary.employee_id == Employee.id).filter(
+            Salary.employee_id.in_(sub_ids),
+            Salary.month == month,
+            Salary.year == year,
+            Salary.is_deleted.is_(False),
+        )
+        if employee_name:
+            query = query.filter(Employee.full_name.ilike(f"%{employee_name.strip()}%"))
+        if employee_code:
+            code = employee_code.strip().upper()
+            query = query.filter(db.cast(Salary.employee_id, db.String).ilike(f"%{code.replace('EMP', '')}%"))
+        if status:
+            query = query.filter(Salary.status == status.strip().lower())
+        if employment_type:
+            query = query.filter(Employee.employment_type == employment_type)
+        if position:
+            query = query.filter(Employee.position.has(Position.job_title.ilike(f"%{position.strip()}%")))
+
+        rows = query.order_by(Employee.full_name.asc()).all()
+        complaint_salary_ids = {
+            c.salary_id
+            for c in Complaint.query.filter(
+                Complaint.salary_id.in_([x.id for x in rows]),
+                Complaint.status.in_(["pending", "in_progress"]),
+                Complaint.is_deleted.is_(False),
+            ).all()
+            if c.salary_id
+        }
+        items: list[dict] = []
+        total_net = 0.0
+        pending_manager_count = 0
+        abnormal_count = 0
+        for salary in rows:
+            insurance, tax = ManagerService._tax_and_insurance(salary)
+            status_code = ManagerService._normalize_payroll_status(salary.status)
+            if status_code in ManagerService.PAYROLL_REVIEWABLE_STATUSES:
+                pending_manager_count += 1
+
+            attendance = Attendance.query.filter_by(
+                employee_id=salary.employee_id,
+                is_deleted=False,
+            ).filter(
+                db.extract("month", Attendance.date) == month,
+                db.extract("year", Attendance.date) == year,
+            ).all()
+            leave_days = LeaveRequest.query.filter(
+                LeaveRequest.employee_id == salary.employee_id,
+                LeaveRequest.status == "approved",
+                db.extract("month", LeaveRequest.from_date) == month,
+                db.extract("year", LeaveRequest.from_date) == year,
+            ).count()
+            overtime_hours = float(sum((a.overtime_hours or 0) for a in attendance))
+            actual_work_days = float(sum((a.working_hours or 0) for a in attendance)) / 8 if attendance else float(salary.total_work_days or 0)
+            abnormal = overtime_hours > 60 or actual_work_days < 10
+            if abnormal:
+                abnormal_count += 1
+
+            net = float(salary.net_salary or 0)
+            total_net += net
+            items.append(
+                {
+                    "salary_id": salary.id,
+                    "employee_id": salary.employee_id,
+                    "employee_code": f"EMP{salary.employee_id:04d}",
+                    "employee_name": salary.employee.full_name if salary.employee else "--",
+                    "department": salary.employee.department.department_name if salary.employee and salary.employee.department else "--",
+                    "position": salary.employee.position.job_title if salary.employee and salary.employee.position else "--",
+                    "basic_salary": float(salary.basic_salary or 0),
+                    "actual_work_days": round(actual_work_days, 2),
+                    "leave_days": leave_days,
+                    "overtime_hours": round(overtime_hours, 2),
+                    "allowance": float(salary.total_allowance or 0),
+                    "deduction": float(salary.penalty or 0),
+                    "insurance": insurance,
+                    "tax": tax,
+                    "net_salary": net,
+                    "status": status_code,
+                    "status_label": ManagerService._payroll_status_label(status_code),
+                    "has_complaint": salary.id in complaint_salary_ids,
+                    "is_abnormal": abnormal,
+                }
+            )
+
+        return {
+            "summary": {
+                "total_payroll_fund": round(total_net, 2),
+                "calculated_employees": len(rows),
+                "pending_confirmation": pending_manager_count,
+                "complaints": len(complaint_salary_ids),
+                "abnormal": abnormal_count,
+                "unfinalized": len([x for x in rows if ManagerService._normalize_payroll_status(x.status) != "paid"]),
+            },
+            "items": items,
+        }
+
+    @staticmethod
+    def get_department_payroll_detail(manager_id: int, salary_id: int) -> dict:
+        sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
+        row = Salary.query.filter_by(id=salary_id, is_deleted=False).first()
+        if not row or row.employee_id not in sub_ids:
+            raise ValueError("Không có quyền truy cập payroll này")
+        insurance, tax = ManagerService._tax_and_insurance(row)
+        return {
+            "salary_id": row.id,
+            "employee_name": row.employee.full_name if row.employee else "--",
+            "basic_salary": float(row.basic_salary or 0),
+            "allowance": float(row.total_allowance or 0),
+            "bonus": float(row.bonus or 0),
+            "overtime": 0,
+            "deduction": float(row.penalty or 0),
+            "insurance": insurance,
+            "tax": tax,
+            "net_salary": float(row.net_salary or 0),
+            "status": ManagerService._normalize_payroll_status(row.status),
+            "status_label": ManagerService._payroll_status_label(row.status),
+        }
+
+    @staticmethod
+    def confirm_department_payroll(manager_id: int, salary_id: int, note: str | None = None) -> dict:
+        sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
+        row = Salary.query.filter_by(id=salary_id, is_deleted=False).first()
+        if not row or row.employee_id not in sub_ids:
+            raise ValueError("Không có quyền xác nhận payroll này")
+        if ManagerService._normalize_payroll_status(row.status) not in ManagerService.PAYROLL_REVIEWABLE_STATUSES:
+            raise ValueError("Payroll không ở trạng thái chờ Manager xác nhận")
+        row.status = "pending_admin"
+        row.note = f"{(row.note or '').strip()}\n[Manager Confirm] {note or 'Đã kiểm tra hợp lệ'}".strip()
+        db.session.add(
+            HistoryLog(
+                employee_id=row.employee_id,
+                action="MANAGER_PAYROLL_CONFIRMED",
+                entity_type="salary",
+                entity_id=row.id,
+                description=f"Manager xác nhận payroll #{row.id}",
+                performed_by=manager_id,
+            )
+        )
+        if row.employee and row.employee.user_id:
+            db.session.add(Notification(user_id=row.employee.user_id, title="Payroll đã được Manager xác nhận", content=f"Payroll tháng {row.month}/{row.year} đang chờ Admin duyệt.", type="salary"))
+        db.session.commit()
+        return {"message": "Đã xác nhận payroll, chuyển trạng thái Chờ Admin duyệt", "status": row.status}
+
+    @staticmethod
+    def send_payroll_feedback(manager_id: int, salary_id: int, issue_type: str, description: str) -> dict:
+        sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]
+        row = Salary.query.filter_by(id=salary_id, is_deleted=False).first()
+        if not row or row.employee_id not in sub_ids:
+            raise ValueError("Không có quyền gửi phản hồi payroll này")
+        complaint = Complaint(
+            employee_id=row.employee_id,
+            handled_by=manager_id,
+            salary_id=row.id,
+            type=issue_type or "salary_data_error",
+            title=f"[Manager Feedback] Payroll {row.month}/{row.year} - {row.employee.full_name if row.employee else row.employee_id}",
+            description=description.strip(),
+            status="in_progress",
+            priority="high",
+        )
+        row.status = "pending_hr"
+        db.session.add(complaint)
+        db.session.add(
+            HistoryLog(
+                employee_id=row.employee_id,
+                action="MANAGER_PAYROLL_FEEDBACK",
+                entity_type="salary",
+                entity_id=row.id,
+                description=f"Manager phản hồi payroll #{row.id}",
+                performed_by=manager_id,
+            )
+        )
+        db.session.commit()
+        return {"message": "Đã gửi phản hồi bất thường về HR", "complaint_id": complaint.id}
 
     @staticmethod
     def get_month_attendance_summary(manager_id: int, month: int, year: int) -> list[dict]:

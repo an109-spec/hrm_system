@@ -30,6 +30,7 @@ HRM_TOTNGHIEP
 │  │  ├─ complaint.py
 │  │  ├─ contract.py
 │  │  ├─ department.py
+│  │  ├─ dependent.py
 │  │  ├─ employee.py
 │  │  ├─ file_upload.py
 │  │  ├─ history.py
@@ -37,6 +38,7 @@ HRM_TOTNGHIEP
 │  │  ├─ leave_usage.py
 │  │  ├─ notification.py
 │  │  ├─ otp.py
+│  │  ├─ overtime_request.py
 │  │  ├─ position.py
 │  │  ├─ role.py
 │  │  ├─ salary.py
@@ -75,6 +77,7 @@ HRM_TOTNGHIEP
 │  │  │  └─ __init__.py
 │  │  ├─ employee
 │  │  │  ├─ dto.py
+│  │  │  ├─ ess_service.py
 │  │  │  ├─ profile_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
@@ -86,6 +89,11 @@ HRM_TOTNGHIEP
 │  │  │  └─ __init__.py
 │  │  ├─ home
 │  │  │  ├─ routes.py
+│  │  │  └─ __init__.py
+│  │  ├─ hr
+│  │  │  ├─ dto.py
+│  │  │  ├─ routes.py
+│  │  │  ├─ service.py
 │  │  │  └─ __init__.py
 │  │  ├─ jobs
 │  │  │  ├─ attendance_job.py
@@ -141,6 +149,12 @@ HRM_TOTNGHIEP
 │  │  │  │  ├─ profile.css
 │  │  │  │  ├─ salary.css
 │  │  │  │  └─ staff_profile.css
+│  │  │  ├─ hr
+│  │  │  │  ├─ attendance.css
+│  │  │  │  ├─ contracts.css
+│  │  │  │  ├─ employees.css
+│  │  │  │  ├─ payroll.css
+│  │  │  │  └─ profile.css
 │  │  │  ├─ manager
 │  │  │  │  ├─ attendance.css
 │  │  │  │  ├─ contract.css
@@ -189,6 +203,12 @@ HRM_TOTNGHIEP
 │  │  │  │  ├─ qr-attendance.shared.js
 │  │  │  │  ├─ salary.js
 │  │  │  │  └─ staff_profile.js
+│  │  │  ├─ hr
+│  │  │  │  ├─ attendance.js
+│  │  │  │  ├─ contracts.js
+│  │  │  │  ├─ employees.js
+│  │  │  │  ├─ payroll.js
+│  │  │  │  └─ profile.js
 │  │  │  ├─ manager
 │  │  │  │  ├─ attendance.js
 │  │  │  │  ├─ contract.js
@@ -210,6 +230,7 @@ HRM_TOTNGHIEP
 │  │  └─ uploads
 │  │     ├─ 3ac0031867ef212e4c2329fe9028fca1.jpg
 │  │     ├─ 7a8211a2161799550aa868aaab6d5c84.jpg
+│  │     ├─ 8108d6c72ad345dbb9fdb11d6c7ac1ef.jpg
 │  │     ├─ bf88d3f5c61052a917a29560582d3b081.jpg
 │  │     └─ leave
 │  │        └─ sick
@@ -243,6 +264,12 @@ HRM_TOTNGHIEP
 │  │  │  └─ staff_profile.html
 │  │  ├─ home
 │  │  │  └─ support.html
+│  │  ├─ hr
+│  │  │  ├─ attendance.html
+│  │  │  ├─ contracts.html
+│  │  │  ├─ employees.html
+│  │  │  ├─ payroll.html
+│  │  │  └─ profile.html
 │  │  ├─ layouts
 │  │  │  ├─ base.html
 │  │  │  ├─ header.html
@@ -268,7 +295,9 @@ HRM_TOTNGHIEP
 │  └─ versions
 │     ├─ 0e8242241019_add_address_fields_to_employee.py
 │     ├─ 4f2b6f9f8a1a_add_overtime_columns_to_attendance.py
-│     └─ 9b2d7f7b4c10_add_leave_extended_fields_and_holidays.py
+│     ├─ 9b2d7f7b4c10_add_leave_extended_fields_and_holidays.py
+│     ├─ c3d9f7a1b2e4_add_attendance_required_flag_to_employee.py
+│     └─ f1a2b3c4d5e6_add_ess_overtime_and_complaint_columns.py
 ├─ README.md
 ├─ requirements.txt
 ├─ run.py

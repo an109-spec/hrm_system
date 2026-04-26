@@ -82,6 +82,9 @@
                 <a href="{{ url_for('manager.payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.payroll_page' }}">
                     <i class="fas fa-money-check-alt"></i> Lương phòng ban
                 </a>
+                <a href="{{ url_for('manager.personal_payroll_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.personal_payroll_page' }}">
+                    <i class="fas fa-receipt"></i> Phiếu lương cá nhân
+                </a>
                 <a href="{{ url_for('manager.contracts_page') }}" class="nav-link {{ 'active' if request.endpoint == 'manager.contracts_page' }}">
                     <i class="fas fa-file-contract"></i> Hợp đồng
                 </a>

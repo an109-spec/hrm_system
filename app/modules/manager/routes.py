@@ -1,11 +1,19 @@
 from __future__ import annotations
-
-from flask import jsonify, render_template, request, session, redirect, url_for
+from flask import Response, jsonify, render_template, request, session, redirect, url_for
+from datetime import date
+import os
+import uuid
+from werkzeug.utils import secure_filename
 from app.models.employee import Employee
+from app.models.salary import Salary
+from app.models.complaint import Complaint
+from app.models.file_upload import FileUpload
+from app.extensions.db import db
 from . import manager_bp
 from .service import ManagerService
 from app.modules.employee.routes import _get_holiday_for_date
 from app.utils.time import parse_simulated_time
+from app.modules.employee.ess_service import EmployeeESSService
 
 def _current_manager() -> Employee | None:
     user_id = session.get("user_id")
@@ -79,6 +87,14 @@ def payroll_page():
 @manager_bp.route("/profile")
 def profile_page():
     return redirect(url_for("employee.profile"))
+
+@manager_bp.route("/profile/payslip")
+def personal_payroll_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    manager = _current_manager()
+    return render_template("manager/self_payroll.html", employee=manager, current_year=date.today().year)
 
 
 @manager_bp.route("/notifications")
@@ -204,3 +220,269 @@ def salary_api():
 
 
     return jsonify(ManagerService.get_department_salary(manager.id, month, year))
+
+@manager_bp.route("/payroll/department", methods=["GET"])
+def department_payroll_review_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    if not month or not year:
+        return jsonify({"error": "month và year là bắt buộc"}), 400
+    payload = ManagerService.get_department_payroll_review(
+        manager.id,
+        month,
+        year,
+        employee_name=request.args.get("employee_name"),
+        employee_code=request.args.get("employee_code"),
+        status=request.args.get("status"),
+        employment_type=request.args.get("employment_type"),
+        position=request.args.get("position"),
+    )
+    return jsonify(payload)
+
+
+@manager_bp.route("/payroll/department/<int:salary_id>", methods=["GET"])
+def department_payroll_detail_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    try:
+        return jsonify(ManagerService.get_department_payroll_detail(manager.id, salary_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/payroll/department/<int:salary_id>/confirm", methods=["POST"])
+def department_payroll_confirm_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(ManagerService.confirm_department_payroll(manager.id, salary_id, data.get("note")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/payroll/department/<int:salary_id>/feedback", methods=["POST"])
+def department_payroll_feedback_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(
+            ManagerService.send_payroll_feedback(
+                manager.id,
+                salary_id,
+                data.get("issue_type", "salary_data_error"),
+                data.get("description", ""),
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/payroll/complaints", methods=["GET"])
+def department_payroll_complaints_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    subordinate_ids = [x.id for x in ManagerService._get_subordinates(manager.id)]
+    rows = Complaint.query.filter(Complaint.employee_id.in_(subordinate_ids), Complaint.salary_id.isnot(None), Complaint.is_deleted.is_(False)).order_by(Complaint.created_at.desc()).all() if subordinate_ids else []
+    data = []
+    for row in rows:
+        files = FileUpload.query.filter_by(complaint_id=row.id, is_deleted=False).all()
+        data.append({
+            "id": row.id,
+            "salary_id": row.salary_id,
+            "employee_name": row.employee.full_name if row.employee else "--",
+            "title": row.title,
+            "description": row.description,
+            "status": row.status,
+            "attachments": [{"name": f.file_name, "url": f.file_url} for f in files],
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        })
+    return jsonify(data)
+
+
+@manager_bp.route("/payroll/complaints/<int:complaint_id>/approve", methods=["POST"])
+def manager_approve_complaint_api(complaint_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    row = Complaint.query.get(complaint_id)
+    if not row:
+        return jsonify({"error": "Không tìm thấy complaint"}), 404
+    row.status = "in_progress"
+    row.handled_by = manager.id
+    db.session.commit()
+    return jsonify({"message": "Đã chuyển complaint sang HR xử lý", "status": row.status})
+
+
+@manager_bp.route("/payroll/complaints/<int:complaint_id>/reject", methods=["POST"])
+def manager_reject_complaint_api(complaint_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    row = Complaint.query.get(complaint_id)
+    if not row:
+        return jsonify({"error": "Không tìm thấy complaint"}), 404
+    row.status = "rejected"
+    row.handled_by = manager.id
+    db.session.commit()
+    return jsonify({"message": "Đã từ chối complaint không hợp lệ", "status": row.status})
+
+
+@manager_bp.route("/self-payroll/history", methods=["GET"])
+def self_payroll_history_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    year = request.args.get("year", date.today().year, type=int)
+    rows = Salary.query.filter_by(employee_id=manager.id, year=year, is_deleted=False).order_by(Salary.month.desc()).all()
+    return jsonify([
+        {
+            "id": r.id,
+            "month": r.month,
+            "year": r.year,
+            "basic_salary": float(r.basic_salary or 0),
+            "allowance": float(r.total_allowance or 0),
+            "overtime": 0,
+            "deduction": float(r.penalty or 0),
+            "insurance": ManagerService._tax_and_insurance(r)[0],
+            "tax": ManagerService._tax_and_insurance(r)[1],
+            "net_salary": float(r.net_salary or 0),
+            "status": r.status,
+            "status_label": ManagerService._payroll_status_label(r.status),
+            "payment_date": r.updated_at.strftime("%d/%m/%Y") if r.updated_at else None,
+        } for r in rows
+    ])
+
+
+@manager_bp.route("/self-payroll/<int:salary_id>", methods=["GET"])
+def self_payroll_detail_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    row = Salary.query.filter_by(id=salary_id, employee_id=manager.id, is_deleted=False).first()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    insurance, tax = ManagerService._tax_and_insurance(row)
+    dependents = EmployeeESSService.list_dependents(session.get("user_id"))
+    return jsonify({
+        "id": row.id,
+        "month": row.month,
+        "year": row.year,
+        "basic_salary": float(row.basic_salary or 0),
+        "lunch_allowance": float(row.total_allowance or 0) * 0.5,
+        "responsibility_allowance": float(row.total_allowance or 0) * 0.5,
+        "bonus": float(row.bonus or 0),
+        "overtime": 0,
+        "deduction": float(row.penalty or 0),
+        "insurance": insurance,
+        "tax": tax,
+        "number_of_dependents": dependents.get("number_of_dependents", 0),
+        "family_deduction": 11_000_000 + (dependents.get("number_of_dependents", 0) * 4_400_000),
+        "net_salary": float(row.net_salary or 0),
+        "status_label": ManagerService._payroll_status_label(row.status),
+    })
+
+
+@manager_bp.route("/self-payroll/<int:salary_id>/pdf", methods=["GET"])
+def self_payroll_pdf_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    row = Salary.query.filter_by(id=salary_id, employee_id=manager.id, is_deleted=False).first()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    content = f"""%PDF-1.1
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 180 >>
+stream
+BT
+/F1 16 Tf
+50 780 Td (PAYSLIP {row.month:02d}/{row.year}) Tj
+0 -30 Td /F1 12 Tf (Employee: {manager.full_name}) Tj
+0 -20 Td (Basic: {float(row.basic_salary or 0):,.0f} VND) Tj
+0 -20 Td (Allowance: {float(row.total_allowance or 0):,.0f} VND) Tj
+0 -20 Td (Net: {float(row.net_salary or 0):,.0f} VND) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000010 00000 n 
+0000000060 00000 n 
+0000000117 00000 n 
+0000000243 00000 n 
+0000000473 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+543
+%%EOF"""
+    return Response(content.encode("latin-1", "ignore"), mimetype="application/pdf", headers={"Content-Disposition": f"attachment; filename=payslip_{row.month}_{row.year}.pdf"})
+
+
+@manager_bp.route("/self-payroll/<int:salary_id>/complaint", methods=["POST"])
+def self_payroll_complaint_api(salary_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    row = Salary.query.filter_by(id=salary_id, employee_id=manager.id, is_deleted=False).first()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    issue_type = request.form.get("issue_type", "other")
+    description = (request.form.get("description") or "").strip()
+    if not description:
+        return jsonify({"error": "Nội dung khiếu nại là bắt buộc"}), 400
+    complaint = Complaint(employee_id=manager.id, salary_id=row.id, type=issue_type, title=f"Khiếu nại phiếu lương #{row.id}", description=description, status="pending")
+    db.session.add(complaint)
+    db.session.flush()
+    attachment = request.files.get("attachment")
+    if attachment and attachment.filename:
+        save_dir = os.path.join("app", "static", "uploads", "complaint")
+        os.makedirs(save_dir, exist_ok=True)
+        filename = secure_filename(attachment.filename)
+        unique_name = f"{uuid.uuid4().hex}_{filename}"
+        attachment.save(os.path.join(save_dir, unique_name))
+        db.session.add(FileUpload(file_name=filename, file_url=f"/static/uploads/complaint/{unique_name}", file_type="attachment", uploaded_by=session.get("user_id"), complaint_id=complaint.id))
+    db.session.commit()
+    return jsonify({"message": "Đã gửi khiếu nại", "complaint_id": complaint.id})
+
+
+@manager_bp.route("/self/dependents", methods=["GET"])
+def manager_dependents_list_api():
+    return jsonify(EmployeeESSService.list_dependents(session.get("user_id")))
+
+
+@manager_bp.route("/self/dependents", methods=["POST"])
+def manager_dependents_create_api():
+    return jsonify(EmployeeESSService.create_dependent(session.get("user_id"), request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
+
+
+@manager_bp.route("/self/dependents/<int:dependent_id>", methods=["PUT"])
+def manager_dependents_update_api(dependent_id: int):
+    return jsonify(EmployeeESSService.update_dependent(session.get("user_id"), dependent_id, request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
+
+
+@manager_bp.route("/self/dependents/<int:dependent_id>", methods=["DELETE"])
+def manager_dependents_delete_api(dependent_id: int):
+    return jsonify(EmployeeESSService.delete_dependent(session.get("user_id"), dependent_id, actor_user_id=session.get("user_id")))

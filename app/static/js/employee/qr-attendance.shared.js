@@ -2,7 +2,7 @@
   function createQRScanner({ modalId, readerId, panelId, onDecoded, onError }) {
     let scanEngine = null;
     let isOpen = false;
-
+    let isProcessingDecode = false;
     async function close() {
       const modal = document.getElementById(modalId);
       if (modal) modal.classList.remove('open');
@@ -15,6 +15,7 @@
         try { await scanEngine.clear(); } catch (_) {}
         scanEngine = null;
       }
+      isProcessingDecode = false;
       isOpen = false;
     }
 
@@ -27,6 +28,7 @@
       else modal.style.display = 'block';
 
       isOpen = true;
+      isProcessingDecode = false;
       scanEngine = new Html5Qrcode(readerId);
 
       try {
@@ -34,7 +36,12 @@
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 220, height: 220 } },
           async (decodedText) => {
+            if (isProcessingDecode) return;
+            isProcessingDecode = true;
             try {
+              if (scanEngine) {
+                try { await scanEngine.stop(); } catch (_) {}
+              }
               if (panelId) {
                 const panel = document.getElementById(panelId);
                 if (panel) panel.classList.add('success-flash');
@@ -43,7 +50,7 @@
             } catch (err) {
               if (onError) onError(err);
             } finally {
-              setTimeout(close, 200);
+              await close();
             }
           }
         );
