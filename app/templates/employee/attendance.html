@@ -242,6 +242,7 @@
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
+  data-worked-hours="{{ (today.working_hours or 0)|float if today else 0 }}"
   data-regular-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
   data-server-now="{{ now.isoformat() }}"
@@ -356,8 +357,8 @@
           <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
           <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-          <td>{{ ((a.regular_hours or 0)|float)|int }} giờ</td>
-          <td>{{ a.overtime_hours or 0 }} giờ</td>
+          <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
+          <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
           <td>
             {% if not a.check_in %}
               <span class="status status-danger">❌ Vắng</span>
@@ -431,6 +432,7 @@ const attendanceByDate = new Map([
     hasCheckout: {{ 'true' if today.check_out else 'false' }},
     checkIn: "{{ today.check_in.isoformat() if today.check_in else '' }}",
     checkOut: "{{ today.check_out.isoformat() if today.check_out else '' }}",
+    workedHours: {{ (today.working_hours or 0)|float }},
     regularHours: {{ (today.regular_hours or 0)|float }},
     overtimeHours: {{ (today.overtime_hours or 0)|float }}
   }],
@@ -441,6 +443,7 @@ const attendanceByDate = new Map([
     hasCheckout: {{ 'true' if a.check_out else 'false' }},
     checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
     checkOut: "{{ a.check_out.isoformat() if a.check_out else '' }}",
+    workedHours: {{ (a.working_hours or 0)|float }},
     regularHours: {{ (a.regular_hours or 0)|float }},
     overtimeHours: {{ (a.overtime_hours or 0)|float }}
   }],
@@ -474,6 +477,7 @@ const state = {
   hasCheckout: root.dataset.hasCheckout === '1',
   checkIn: root.dataset.checkin ? new Date(root.dataset.checkin) : null,
   checkOut: root.dataset.checkout ? new Date(root.dataset.checkout) : null,
+  workedHours: Number(root.dataset.workedHours || 0),
   regularHours: Number(root.dataset.regularHours || 0),
   overtimeHours: Number(root.dataset.overtimeHours || 0),
   scanEngine: null,
@@ -504,6 +508,7 @@ function syncAttendanceStateByDate(force = false) {
     state.hasCheckout = false;
     state.checkIn = null;
     state.checkOut = null;
+    state.workedHours = 0;
     state.regularHours = 0;
     state.overtimeHours = 0;
     return;
@@ -513,6 +518,7 @@ function syncAttendanceStateByDate(force = false) {
   state.hasCheckout = Boolean(record.hasCheckout);
   state.checkIn = record.checkIn ? new Date(record.checkIn) : null;
   state.checkOut = record.checkOut ? new Date(record.checkOut) : null;
+  state.workedHours = Number(record.workedHours || 0);
   state.regularHours = Number(record.regularHours || 0);
   state.overtimeHours = Number(record.overtimeHours || 0);
 }
@@ -720,17 +726,16 @@ function renderState() {
   }
 
   if (state.hasCheckout) {
-    const totalDone = state.regularHours + state.overtimeHours;
+    const totalDone = state.workedHours || (state.regularHours + state.overtimeHours);
+    const totalMinutes = Math.round(totalDone * 60);
+    const hh = Math.floor(totalMinutes / 60);
+    const mm = totalMinutes % 60;
     document.getElementById('workHoursText').textContent =
-      `Công hôm nay: ${totalDone.toFixed(0)} giờ (Công chuẩn: ${state.regularHours.toFixed(0)} giờ, Tăng ca: ${state.overtimeHours.toFixed(0)} giờ)`;
+      `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${state.regularHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ)`;
   } else {
     const worked = calcWorkedDuration(state.now);
-    const regularLive = worked.hours + worked.minutes / 60;
-    const overtimeLive = Math.max(0, regularLive - 8);
-    const regularCapped = Math.min(8, regularLive);
-    const totalLive = regularCapped + overtimeLive;
     document.getElementById('workHoursText').textContent =
-      `Công hôm nay: ${totalLive.toFixed(0)} giờ (Công chuẩn: ${regularCapped.toFixed(0)} giờ, Tăng ca: ${overtimeLive.toFixed(0)} giờ)`;
+      `Công hôm nay: ${worked.hours} giờ ${String(worked.minutes).padStart(2, "0")} phút`;
   }
 }
 
@@ -811,7 +816,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     const data = await res.json();
 
     if (!res.ok) {
-      toast(data.message || "Lỗi", "error");
+      await Swal.fire({ icon: "error", title: "Chấm công thất bại", text: data.message || "Lỗi hệ thống" });
       return;
     }
     if (data.action === "confirm_overtime") {
@@ -839,7 +844,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
 
       const confirmData = await confirmRes.json();
       if (!confirmRes.ok) {
-        toast(confirmData.message || "Lỗi", "error");
+        await Swal.fire({ icon: "error", title: "Xử lý tăng ca thất bại", text: confirmData.message || "Lỗi hệ thống" });
         return;
       }
       Object.assign(data, confirmData);
@@ -851,11 +856,18 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       state.hasCheckout = false;
       state.checkIn = new Date(state.now);
       state.checkOut = null;
+      state.workedHours = 0;
+      state.regularHours = 0;
+      state.overtimeHours = 0;
       break;
 
     case 'check_out':
       state.hasCheckout = true;
-      state.checkOut = new Date(state.now);
+      state.checkOut = data.check_out ? new Date(data.check_out) : new Date(state.now);
+      state.checkIn = data.check_in ? new Date(data.check_in) : state.checkIn;
+      state.workedHours = Number(data.worked_hours || 0);
+      state.regularHours = Number(data.regular_hours || 0);
+      state.overtimeHours = Number(data.overtime_hours || 0);
       break;
 
     case 'done':
@@ -870,11 +882,19 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       hasCheckout: state.hasCheckout,
       checkIn: state.checkIn ? state.checkIn.toISOString() : '',
       checkOut: state.checkOut ? state.checkOut.toISOString() : '',
+      workedHours: state.workedHours,
       regularHours: state.regularHours,
       overtimeHours: state.overtimeHours
     });
     persistSharedSimTime(state.now);
     toast(data.message, data.type || "success");
+    await Swal.fire({
+      icon: data.type === "error" ? "error" : "success",
+      title: data.action === "check_out" ? "Check-out thành công" : "Check-in thành công",
+      text: data.message || "Đã cập nhật dữ liệu chấm công",
+      timer: 1400,
+      showConfirmButton: false,
+    });
 
     setTimeout(() => {
       window.location.href =

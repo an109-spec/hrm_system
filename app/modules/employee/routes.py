@@ -217,6 +217,34 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     return max(total_hours, Decimal("0"))
 
     return current_time
+def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, Decimal]:
+    if not record:
+        return Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
+
+    regular_hours = Decimal(str(record.regular_hours or 0))
+    overtime_hours = Decimal(str(record.overtime_hours or 0))
+    worked_hours = Decimal(str(record.working_hours or 0))
+
+    if record.check_in and record.check_out and regular_hours <= 0:
+        today = record.date
+        policy_start = (
+            datetime.combine(today, time(9, 0))
+            if record.check_in.time() > AttendanceService.LATE_THRESHOLD
+            else datetime.combine(today, time(8, 0))
+        )
+        effective_start = max(record.check_in.replace(tzinfo=None), policy_start)
+        regular_hours = _compute_working_hours(
+            effective_start,
+            min(
+                record.check_out.replace(tzinfo=None),
+                datetime.combine(today, AttendanceService.REGULAR_END),
+            ),
+        )
+
+    if worked_hours <= 0:
+        worked_hours = regular_hours + overtime_hours
+
+    return worked_hours, regular_hours, overtime_hours
 
 def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
     hours, minutes = divmod(total_minutes, 60)
@@ -581,6 +609,10 @@ def attendance():
         if employee
         else []
     )
+    if today:
+        _, today.regular_hours, today.overtime_hours = _attendance_metrics(today)
+    for record in history:
+        _, record.regular_hours, record.overtime_hours = _attendance_metrics(record)
     today_holiday = _get_holiday_for_date(now.date())
     holiday_lookup = _get_holiday_lookup()
     return render_template(
@@ -786,6 +818,14 @@ def check_in_out():
 
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
+            worked_hours, regular_hours, overtime_hours = _attendance_metrics(attendance)
+            status_key = "checked_out"
+            if overtime_hours > 0:
+                status_key = "overtime"
+            elif check_in_time > late_threshold:
+                status_key = "late"
+            elif early_minutes > 0:
+                status_key = "early_leave"
 
             return jsonify({
                 "toast": True,
@@ -793,8 +833,12 @@ def check_in_out():
                 "action": "check_out",
                 "message": msg,
                 "attendance_state": attendance.attendance_type,
+                "worked_hours": str(worked_hours),
                 "regular_hours": str(regular_hours),
                 "overtime_hours": str(overtime_hours),
+                "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
+                "check_out": attendance.check_out.isoformat() if attendance.check_out else None,
+                "status_key": status_key,
             })
 
         # =========================
