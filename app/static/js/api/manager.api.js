@@ -31,8 +31,12 @@ window.ManagerAPI = {
   attendanceMonth: (month, year) =>
     fetch(`/manager/attendance/month?month=${month}&year=${year}`).then(parseJsonResponse),
 
-  leaves: (status = 'pending') =>
-    fetch(`/manager/leave?status=${encodeURIComponent(status)}`).then(parseJsonResponse),
+  leaves: (params = {}) =>
+    fetch(`/manager/leave?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  leaveSummary: (params = {}) =>
+    fetch(`/manager/leave/summary?${new URLSearchParams(params).toString()}`).then(parseJsonResponse),
+  leaveDetail: (leaveId) =>
+    fetch(`/manager/leave/${leaveId}/detail`).then(parseJsonResponse),
 
   approveLeave: (id, note) =>
     fetch(`/manager/leave/${id}/approve`, {
@@ -43,6 +47,12 @@ window.ManagerAPI = {
 
   rejectLeave: (id, note) =>
     fetch(`/manager/leave/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: note || '' })
+    }).then(parseJsonResponse),
+  supplementLeave: (id, note) =>
+    fetch(`/manager/leave/${id}/supplement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ note: note || '' })

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
 from sqlalchemy import or_
 from app.extensions.db import db
 from app.models.attendance import Attendance
@@ -45,6 +44,16 @@ class ManagerService:
         "pending_probation_conversion": "Chờ chuyển chính thức",
         "proposed_termination": "Đề xuất chấm dứt",
         "ended": "Đã kết thúc",
+    }
+    LEAVE_STATUS_LABELS = {
+        "pending": "Chờ Manager duyệt",
+        "pending_hr": "Chờ HR duyệt",
+        "pending_admin": "Chờ Admin duyệt",
+        "approved": "Đã duyệt",
+        "rejected": "Từ chối",
+        "supplement_requested": "Yêu cầu bổ sung",
+        "cancelled": "Hủy đơn",
+        "complaint": "Khiếu nại",
     }
     @staticmethod
     def get_overtime_requests(manager_id: int) -> list[dict]:
@@ -322,9 +331,10 @@ class ManagerService:
         return {"message": "Đã ghi nhận xử lý bất thường", "attendance_id": record.id, "action": action}
 
     @staticmethod
-    def get_leave_requests(manager_id: int, status: str | None = None) -> list[dict]:
+    def get_leave_requests(manager_id: int, filters: dict | None = None) -> list[dict]:
         employees = ManagerService._get_subordinates(manager_id)
         sub_ids = [e.id for e in employees]
+        filters = filters or {}
         if not sub_ids:
             # Fallback theo người duyệt được chỉ định trên đơn
             query = LeaveRequest.query.filter(LeaveRequest.approved_by == manager_id)
@@ -335,27 +345,89 @@ class ManagerService:
                     LeaveRequest.approved_by == manager_id,
                 )
             )
-
+        employee_name = (filters.get("employee_name") or "").strip().lower()
+        employee_code = (filters.get("employee_code") or "").strip()
+        department = (filters.get("department") or "").strip().lower()
+        leave_type = (filters.get("leave_type") or "").strip().lower()
+        status = (filters.get("status") or "").strip()
+        from_date = filters.get("from_date")
+        to_date = filters.get("to_date")
+        is_paid = filters.get("is_paid")
+        emergency_only = str(filters.get("emergency_only", "")).lower() in {"1", "true", "yes"}
+        has_attachment = str(filters.get("has_attachment", "")).lower() in {"1", "true", "yes"}
         if status:
             query = query.filter(LeaveRequest.status == status)
+        if from_date:
+            try:
+                query = query.filter(LeaveRequest.from_date >= datetime.fromisoformat(from_date).date())
+            except ValueError:
+                pass
+        if to_date:
+            try:
+                query = query.filter(LeaveRequest.to_date <= datetime.fromisoformat(to_date).date())
+            except ValueError:
+                pass
+        if is_paid in {"true", "false"}:
+            query = query.join(LeaveRequest.leave_type).filter(LeaveRequest.leave_type.has(is_paid=(is_paid == "true")))
         rows = query.order_by(LeaveRequest.created_at.desc()).all()
         if not rows:
             return []
-        return [
-            {
+        data = []
+        for l in rows:
+            employee = l.employee
+            if employee_name and employee_name not in (employee.full_name or "").lower():
+                continue
+            if employee_code and employee_code not in str(employee.id):
+                continue
+            if department and department not in ((employee.department.name if employee and employee.department else "").lower()):
+                continue
+            leave_type_name = l.leave_type.name if l.leave_type else "--"
+            if leave_type and leave_type not in leave_type_name.lower():
+                continue
+            if emergency_only and not ManagerService._is_emergency_leave(l):
+                continue
+            if has_attachment and not l.document_url:
+                continue
+            data.append(
+                {
                 "id": l.id,
                 "employee_id": l.employee_id,
-                "name": l.employee.full_name if l.employee else "--",
-                "type": l.leave_type.name if l.leave_type else "--",
+                "name": employee.full_name if employee else "--",
+                "employee_code": employee.id if employee else "--",
+                "department": employee.department.name if employee and employee.department else "--",
+                "position": employee.position.job_title if employee and employee.position else "--",
+                "type": leave_type_name,
                 "from": l.from_date.isoformat(),
                 "to": l.to_date.isoformat(),
                 "status": l.status,
+                "status_label": ManagerService.LEAVE_STATUS_LABELS.get(l.status, l.status),
                 "reason": l.reason or "",
+                "is_paid": bool(l.leave_type.is_paid) if l.leave_type else True,
+                "is_emergency": ManagerService._is_emergency_leave(l),
+                "attachment": l.document_url,
                 "created_at": l.created_at.date().isoformat() if l.created_at else None,
                 "days": (l.to_date - l.from_date).days + 1,
             }
-            for l in rows
-        ]
+            )
+        return data
+
+    @staticmethod
+    def _is_emergency_leave(leave: LeaveRequest) -> bool:
+        source = f"{leave.reason or ''} {leave.subtype or ''}".lower()
+        return any(keyword in source for keyword in ["khẩn", "emergency", "ốm", "tai nạn", "đột xuất"])
+
+    @staticmethod
+    def get_leave_summary(manager_id: int, filters: dict | None = None) -> dict:
+        rows = ManagerService.get_leave_requests(manager_id, filters)
+        today_iso = parse_simulated_time(filters or {}).date().isoformat()
+        return {
+            "pending": len([x for x in rows if x["status"] == "pending"]),
+            "today": len([x for x in rows if x["from"] <= today_iso <= x["to"]]),
+            "emergency": len([x for x in rows if x["is_emergency"]]),
+            "approved": len([x for x in rows if x["status"] == "approved"]),
+            "rejected": len([x for x in rows if x["status"] == "rejected"]),
+            "supplement_requested": len([x for x in rows if x["status"] == "supplement_requested"]),
+        }
 
     @staticmethod
     def _ensure_leave_in_scope(manager_id: int, leave_id: int) -> LeaveRequest:
@@ -371,38 +443,52 @@ class ManagerService:
     @staticmethod
     def approve_leave(manager_id: int, leave_id: int, note: str | None = None) -> LeaveRequest:
         leave = ManagerService._ensure_leave_in_scope(manager_id, leave_id)
-        leave.status = "approved"
+        if leave.status != "pending":
+            raise ValueError("Chỉ xử lý đơn đang chờ Manager duyệt")
+        leave.status = "pending_hr"
         leave.approved_by = manager_id
-
-        usage = EmployeeLeaveUsage.query.filter_by(
-            employee_id=leave.employee_id,
-            year=leave.from_date.year,
-        ).first()
-
-        is_annual_leave = bool(leave.leave_type and leave.leave_type.name == "Nghỉ phép năm")
-        if usage and is_annual_leave:
-            days = (leave.to_date - leave.from_date).days + 1
-            usage.used_days = Decimal(usage.used_days or 0) + Decimal(days)
-            usage.update_balance()
 
         emp = Employee.query.get(leave.employee_id)
         if emp and emp.user_id:
             db.session.add(
                 Notification(
                     user_id=emp.user_id,
-                    title="Đơn nghỉ phép đã được duyệt",
-                    content=note or "Đơn nghỉ của bạn đã được quản lý duyệt.",
+                    title="Manager đã duyệt bước 1 đơn nghỉ phép",
+                    content=note or "Đơn nghỉ của bạn đã được chuyển sang HR để duyệt tiếp.",
                     type="leave",
                 )
             )
-
+        hr_users = User.query.join(Role, User.role_id == Role.id).filter(Role.role_name == "hr", User.is_active.is_(True)).all()
+        for hr_user in hr_users:
+            db.session.add(
+                Notification(
+                    user_id=hr_user.id,
+                    title="Có đơn nghỉ phép chờ HR duyệt",
+                    content=f"Đơn #{leave.id} đã được Manager duyệt bước 1.",
+                    type="leave",
+                    link="/hr/attendance",
+                )
+            )
+        db.session.add(
+            HistoryLog(
+                employee_id=leave.employee_id,
+                action="MANAGER_LEAVE_APPROVE_LAYER_1",
+                entity_type="leave_request",
+                entity_id=leave.id,
+                description=note or "Manager approved and forwarded to HR",
+                performed_by=manager_id,
+            )
+        )
         db.session.commit()
         return leave
 
     @staticmethod
     def reject_leave(manager_id: int, leave_id: int, note: str | None = None) -> LeaveRequest:
         leave = ManagerService._ensure_leave_in_scope(manager_id, leave_id)
-
+        if leave.status != "pending":
+            raise ValueError("Chỉ xử lý đơn đang chờ Manager duyệt")
+        if not (note or "").strip():
+            raise ValueError("Bắt buộc nhập lý do từ chối")
         leave.status = "rejected"
         leave.approved_by = manager_id
 
@@ -416,9 +502,121 @@ class ManagerService:
                     type="leave",
                 )
             )
-
+        db.session.add(
+            HistoryLog(
+                employee_id=leave.employee_id,
+                action="MANAGER_LEAVE_REJECT",
+                entity_type="leave_request",
+                entity_id=leave.id,
+                description=note,
+                performed_by=manager_id,
+            )
+        )
         db.session.commit()
         return leave
+    @staticmethod
+    def request_leave_supplement(manager_id: int, leave_id: int, note: str) -> LeaveRequest:
+        leave = ManagerService._ensure_leave_in_scope(manager_id, leave_id)
+        if leave.status != "pending":
+            raise ValueError("Chỉ xử lý đơn đang chờ Manager duyệt")
+        if not (note or "").strip():
+            raise ValueError("Bắt buộc nhập nội dung cần bổ sung")
+        leave.status = "supplement_requested"
+        leave.approved_by = manager_id
+        emp = Employee.query.get(leave.employee_id)
+        if emp and emp.user_id:
+            db.session.add(Notification(user_id=emp.user_id, title="Đơn nghỉ cần bổ sung hồ sơ", content=note, type="leave"))
+        db.session.add(
+            HistoryLog(
+                employee_id=leave.employee_id,
+                action="MANAGER_LEAVE_SUPPLEMENT_REQUEST",
+                entity_type="leave_request",
+                entity_id=leave.id,
+                description=note,
+                performed_by=manager_id,
+            )
+        )
+        db.session.commit()
+        return leave
+
+    @staticmethod
+    def get_leave_detail(manager_id: int, leave_id: int) -> dict:
+        leave = ManagerService._ensure_leave_in_scope(manager_id, leave_id)
+        employee = leave.employee
+        quota = EmployeeLeaveUsage.query.filter_by(employee_id=leave.employee_id, year=leave.from_date.year).first()
+        recent_leaves = LeaveRequest.query.filter(
+            LeaveRequest.employee_id == leave.employee_id,
+            LeaveRequest.id != leave.id,
+        ).order_by(LeaveRequest.created_at.desc()).limit(5).all()
+        overlapping = []
+        if employee and employee.department_id:
+            overlap_rows = LeaveRequest.query.join(Employee, Employee.id == LeaveRequest.employee_id).filter(
+                Employee.department_id == employee.department_id,
+                LeaveRequest.id != leave.id,
+                LeaveRequest.status.in_(["pending", "pending_hr", "approved"]),
+                LeaveRequest.from_date <= leave.to_date,
+                LeaveRequest.to_date >= leave.from_date,
+            ).all()
+            overlapping = [
+                {
+                    "id": row.id,
+                    "employee_name": row.employee.full_name if row.employee else "--",
+                    "employee_code": row.employee_id,
+                    "from": row.from_date.isoformat(),
+                    "to": row.to_date.isoformat(),
+                    "status": ManagerService.LEAVE_STATUS_LABELS.get(row.status, row.status),
+                }
+                for row in overlap_rows
+            ]
+        complaints = Complaint.query.filter_by(leave_request_id=leave.id).order_by(Complaint.created_at.desc()).all()
+        return {
+            "id": leave.id,
+            "employee": {
+                "name": employee.full_name if employee else "--",
+                "employee_code": employee.id if employee else "--",
+                "department": employee.department.name if employee and employee.department else "--",
+                "position": employee.position.job_title if employee and employee.position else "--",
+                "manager": employee.manager.full_name if employee and employee.manager else "--",
+            },
+            "leave": {
+                "type": leave.leave_type.name if leave.leave_type else "--",
+                "from": leave.from_date.isoformat(),
+                "to": leave.to_date.isoformat(),
+                "days": (leave.to_date - leave.from_date).days + 1,
+                "reason": leave.reason or "",
+                "document_url": leave.document_url,
+                "status": leave.status,
+                "status_label": ManagerService.LEAVE_STATUS_LABELS.get(leave.status, leave.status),
+                "is_emergency": ManagerService._is_emergency_leave(leave),
+                "is_paid": bool(leave.leave_type.is_paid) if leave.leave_type else True,
+            },
+            "quota": {
+                "total_days": float(quota.total_days or 0) if quota else 0,
+                "used_days": float(quota.used_days or 0) if quota else 0,
+                "remaining_days": float(quota.remaining_days or 0) if quota else 0,
+            },
+            "recent_leaves": [
+                {
+                    "id": item.id,
+                    "from": item.from_date.isoformat(),
+                    "to": item.to_date.isoformat(),
+                    "status": ManagerService.LEAVE_STATUS_LABELS.get(item.status, item.status),
+                }
+                for item in recent_leaves
+            ],
+            "overlapping": overlapping,
+            "replacement_employee": employee.manager.full_name if employee and employee.manager else "Chưa chỉ định",
+            "complaints": [
+                {
+                    "id": c.id,
+                    "title": c.title,
+                    "description": c.description,
+                    "status": c.status,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                }
+                for c in complaints
+            ],
+        }
 
     @staticmethod
     def send_reminder(employee_ids: list[int], message: str | None = None) -> bool:

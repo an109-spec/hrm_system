@@ -256,9 +256,14 @@ def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
 
 def _status_badge(status: str) -> tuple[str, str]:
     mapping = {
-        "pending": ("⏳", "Chờ duyệt"),
+        "pending": ("⏳", "Chờ Manager duyệt"),
+        "pending_hr": ("🧾", "Chờ HR duyệt"),
+        "pending_admin": ("🛡️", "Chờ Admin duyệt"),
         "approved": ("✅", "Đã duyệt"),
         "rejected": ("❌", "Từ chối"),
+        "supplement_requested": ("📎", "Yêu cầu bổ sung"),
+        "cancelled": ("🚫", "Hủy đơn"),
+        "complaint": ("📣", "Khiếu nại"),
     }
     return mapping.get(status, ("ℹ️", status))
 

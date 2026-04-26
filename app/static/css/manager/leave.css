@@ -1,15 +1,21 @@
-:root { --primary:#2C3E50; --success:#2E7D32; --warning:#F9A825; --danger:#C62828; --info:#1565C0; --bg:#FFFFFF; --border:#E0E0E0; }
-.leave-toolbar { margin-bottom: 12px; }
-select { padding:8px; border:1px solid var(--border); border-radius:8px; }
-table { width:100%; border-collapse:collapse; background:var(--bg); }
-th,td { border:1px solid var(--border); padding:10px; text-align:center; }
-th { background:var(--primary); color:#fff; }
-button { border:1px solid var(--border); background:#fff; padding:6px 10px; border-radius:6px; cursor:pointer; }
+:root { --primary:#2C3E50; --success:#2E7D32; --warning:#F9A825; --danger:#C62828; --bg:#FFFFFF; --border:#E0E0E0; }
+.summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-bottom:14px; }
+.summary-card { border:1px solid var(--border); border-radius:10px; padding:10px; background:#fff; }
+.summary-card h4 { margin:0; font-size:14px; }
+.summary-card p { font-size:24px; margin:8px 0 0; font-weight:700; }
+.summary-card.emergency { border-color:#ef4444; background:#fff5f5; }
+.filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin-bottom:12px; align-items:center; }
+input, select, button { padding:8px; border:1px solid var(--border); border-radius:8px; }
+button { cursor:pointer; }
+table { width:100%; border-collapse:collapse; background:var(--bg); font-size:13px; }
+th,td { border:1px solid var(--border); padding:8px; text-align:left; vertical-align:top; }
+th { background:var(--primary); color:#fff; position:sticky; top:0; }
+.badge.emergency { color:#b91c1c; font-weight:700; }
 .modal { position:fixed; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; }
 .modal[hidden] { display:none !important; }
-.modal-content { width:min(700px,95vw); background:#fff; border-radius:10px; padding:16px; position:relative; }
+.modal-content { width:min(860px,96vw); background:#fff; border-radius:10px; padding:16px; position:relative; max-height:90vh; overflow:auto; }
 .close { position:absolute; right:10px; top:10px; border:none; font-size:20px; background:transparent; }
-textarea { width:100%; min-height:80px; margin-top:10px; border:1px solid var(--border); border-radius:6px; padding:8px; }
 .modal-actions { margin-top:10px; display:flex; gap:8px; }
 .modal-actions button:first-child { background:var(--success); color:#fff; border:none; }
+.modal-actions .warn { background:var(--warning); color:#111; border:none; }
 .modal-actions .danger { background:var(--danger); color:#fff; border:none; }

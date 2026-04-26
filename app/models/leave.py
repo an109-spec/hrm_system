@@ -39,7 +39,17 @@ class LeaveRequest(BaseModel):
     
     # Trạng thái đơn: Pending (Chờ), Approved (Duyệt), Rejected (Từ chối)
     status = db.Column(
-        db.Enum('pending', 'approved', 'rejected', name='leave_status_enum'), 
+        db.Enum(
+            'pending',
+            'pending_hr',
+            'pending_admin',
+            'approved',
+            'rejected',
+            'supplement_requested',
+            'cancelled',
+            'complaint',
+            name='leave_status_enum'
+        ),
         default='pending',
         server_default='pending'
     )

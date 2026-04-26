@@ -5,12 +5,33 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/manager/leave.css') }}">
 {% endblock %}
 {% block content %}
-<h2>📂 Quản lý đơn nghỉ phép</h2>
-<div class="leave-toolbar">
-  <select id="statusFilter"><option value="pending">🟡 Chờ duyệt</option><option value="approved">🟢 Đã duyệt</option><option value="rejected">❌ Từ chối</option><option value="">Tất cả</option></select>
-</div>
+<h2>📂 Duyệt nghỉ phép (First Approval Layer)</h2>
+
+<section class="summary-grid" id="summaryCards">
+  <article class="summary-card"><h4>Đơn chờ duyệt</h4><p id="sum-pending">0</p></article>
+  <article class="summary-card"><h4>Nghỉ hôm nay</h4><p id="sum-today">0</p></article>
+  <article class="summary-card emergency"><h4>Nghỉ khẩn cấp</h4><p id="sum-emergency">0</p></article>
+  <article class="summary-card"><h4>Đã duyệt</h4><p id="sum-approved">0</p></article>
+  <article class="summary-card"><h4>Từ chối</h4><p id="sum-rejected">0</p></article>
+  <article class="summary-card"><h4>Bổ sung hồ sơ</h4><p id="sum-supplement">0</p></article>
+</section>
+
+<section class="filters">
+  <input id="employee_name" placeholder="Tên nhân viên">
+  <input id="employee_code" placeholder="Mã nhân viên">
+  <input id="department" placeholder="Phòng ban">
+  <input id="leave_type" placeholder="Loại nghỉ phép">
+  <select id="status"><option value="">Tất cả trạng thái</option><option value="pending">Chờ Manager duyệt</option><option value="pending_hr">Chờ HR duyệt</option><option value="pending_admin">Chờ Admin duyệt</option><option value="approved">Đã duyệt</option><option value="rejected">Từ chối</option><option value="supplement_requested">Yêu cầu bổ sung</option><option value="cancelled">Hủy đơn</option><option value="complaint">Khiếu nại</option></select>
+  <input id="from_date" type="date">
+  <input id="to_date" type="date">
+  <select id="is_paid"><option value="">Có/không lương</option><option value="true">Có lương</option><option value="false">Không lương</option></select>
+  <label><input id="emergency_only" type="checkbox"> Khẩn cấp</label>
+  <label><input id="has_attachment" type="checkbox"> Có file đính kèm</label>
+  <button id="search-btn">Tìm kiếm</button>
+</section>
+
 <table>
-  <thead><tr><th>STT</th><th>Nhân viên</th><th>Loại nghỉ</th><th>Thời gian</th><th>Ngày gửi</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+  <thead><tr><th>Mã đơn</th><th>Nhân viên</th><th>Mã NV</th><th>Phòng ban</th><th>Chức danh</th><th>Loại nghỉ</th><th>Từ ngày</th><th>Đến ngày</th><th>Số ngày</th><th>Lý do</th><th>File</th><th>Trạng thái</th><th>Tạo lúc</th><th>Hành động</th></tr></thead>
   <tbody id="leave-body"></tbody>
 </table>
 <div id="leave-modal" class="modal" hidden>
@@ -18,10 +39,10 @@
     <button class="close" id="close-modal">×</button>
     <h3>📄 Chi tiết đơn xin nghỉ</h3>
     <div id="leave-detail"></div>
-    <textarea id="leave-note" placeholder="Nhập ghi chú phản hồi..."></textarea>
     <div class="modal-actions">
-      <button id="approve-btn">✔️ Duyệt ngay</button>
-      <button id="reject-btn" class="danger">❌ Từ chối</button>
+      <button id="approve-btn">Duyệt</button>
+      <button id="supplement-btn" class="warn">Yêu cầu bổ sung</button>
+      <button id="reject-btn" class="danger">Từ chối</button>
     </div>
   </div>
 </div>

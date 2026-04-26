@@ -204,8 +204,26 @@ def leave_list_api():
     if not manager:
         return jsonify({"error": "Manager not found"}), 404
 
-    status = request.args.get("status") or None
-    return jsonify(ManagerService.get_leave_requests(manager.id, status))
+    return jsonify(ManagerService.get_leave_requests(manager.id, request.args))
+
+
+@manager_bp.route("/leave/summary", methods=["GET"])
+def leave_summary_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    return jsonify(ManagerService.get_leave_summary(manager.id, request.args))
+
+
+@manager_bp.route("/leave/<int:leave_id>/detail", methods=["GET"])
+def leave_detail_api(leave_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    try:
+        return jsonify(ManagerService.get_leave_detail(manager.id, leave_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 @manager_bp.route("/leave/<int:leave_id>/approve", methods=["POST"])
 def approve_leave_api(leave_id: int):
@@ -214,8 +232,11 @@ def approve_leave_api(leave_id: int):
         return jsonify({"error": "Manager not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    leave = ManagerService.approve_leave(manager.id, leave_id, data.get("note"))
-    return jsonify({"message": "Approved", "id": leave.id})
+    try:
+        leave = ManagerService.approve_leave(manager.id, leave_id, data.get("note"))
+        return jsonify({"message": "Đã chuyển đơn sang HR duyệt", "id": leave.id, "status": leave.status})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @manager_bp.route("/leave/<int:leave_id>/reject", methods=["POST"])
@@ -225,8 +246,24 @@ def reject_leave_api(leave_id: int):
         return jsonify({"error": "Manager not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    leave = ManagerService.reject_leave(manager.id, leave_id, data.get("note"))
-    return jsonify({"message": "Rejected", "id": leave.id})
+    try:
+        leave = ManagerService.reject_leave(manager.id, leave_id, data.get("note"))
+        return jsonify({"message": "Đã từ chối đơn nghỉ phép", "id": leave.id, "status": leave.status})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@manager_bp.route("/leave/<int:leave_id>/supplement", methods=["POST"])
+def supplement_leave_api(leave_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        leave = ManagerService.request_leave_supplement(manager.id, leave_id, data.get("note", ""))
+        return jsonify({"message": "Đã yêu cầu nhân viên bổ sung hồ sơ", "id": leave.id, "status": leave.status})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 @manager_bp.route("/reminder", methods=["POST"])
 def reminder_api():
