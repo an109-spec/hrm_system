@@ -1,100 +1,48 @@
 {% extends "layouts/base.html" %}
-{% block title %}Bảng lương của tôi{% endblock %}
+{% block title %}Employee - Lương{% endblock %}
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/salary.css') }}">
 {% endblock %}
 {% block content %}
-<section class="emp-card">
-  <div class="row-between">
-    <h3>💰 Bảng lương của tôi</h3>
-    <form method="get" class="inline-form">
-      <label>Năm:
-        <input type="number" name="year" value="{{ year }}" min="2020" max="2100">
-      </label>
-      <button class="btn btn-secondary" type="submit">Lọc</button>
-    </form>
-  </div>
+<section class="salary-summary-grid">
+  <article class="salary-summary-card"><h4 id="summary-title">Lương tháng --/----</h4><p id="summary-net">Thực nhận: 0đ</p></article>
+  <article class="salary-summary-card"><h4>Trạng thái payroll</h4><p id="summary-status">--</p></article>
+  <article class="salary-summary-card"><h4>Ngày thanh toán</h4><p id="summary-payment">--</p></article>
+  <article class="salary-summary-card"><h4>Trạng thái complaint</h4><p id="summary-complaint">Không có</p></article>
+  <article class="salary-summary-card"><h4>Người phụ thuộc hợp lệ</h4><p id="summary-dependents">0</p></article>
+</section>
 
+<section class="salary-toolbar">
+  <select id="filter-year"><option value="{{ current_year }}">{{ current_year }}</option><option value="{{ current_year - 1 }}">{{ current_year - 1 }}</option></select>
+  <select id="filter-status"><option value="">Tất cả trạng thái</option><option value="pending">Chờ xử lý</option><option value="approved">Đã duyệt</option><option value="paid">Đã chuyển khoản</option><option value="finalized">Đã chốt</option></select>
+  <select id="filter-complaint"><option value="">Có/không complaint</option><option value="true">Có complaint</option><option value="false">Không complaint</option></select>
+  <select id="filter-paid"><option value="">Đã thanh toán/chưa</option><option value="paid">Đã thanh toán</option><option value="unpaid">Chưa thanh toán</option></select>
+  <button class="btn btn-primary" id="btn-filter">Lọc dữ liệu</button>
+</section>
+
+<section class="salary-panel">
   <table class="emp-table">
-    <thead>
-      <tr>
-        <th>Tháng/Năm</th>
-        <th>Công chuẩn</th>
-        <th>Công thực tế</th>
-        <th>Phụ cấp/Thưởng</th>
-        <th>Thực nhận</th>
-        <th>Trạng thái</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for s in salary_records %}
-      <tr>
-        <td>{{ '%02d/%d'|format(s.month, s.year) }}</td>
-        <td>{{ s.standard_work_days }}</td>
-        <td>{{ s.total_work_days }}</td>
-        <td>{{ '{:,.0f}'.format((s.total_allowance or 0) + (s.bonus or 0)) }} VND</td>
-        <td><strong>{{ '{:,.0f}'.format(s.net_salary) }} VND</strong></td>
-        <td>
-          <span class="pill {{ 'pill-warning' if s.status == 'pending' else ('pill-success' if s.status == 'paid' else 'pill-muted') }}">
-            {{ s.status|upper }}
-          </span>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="6">
-          <details>
-            <summary>🧾 Xem chi tiết phiếu lương tháng {{ '%02d/%d'|format(s.month, s.year) }}</summary>
-            <div class="payslip-detail">
-              <p>- Nhân viên: {{ employee.full_name }}</p>
-              <p>- Lương cơ bản: {{ '{:,.0f}'.format(s.basic_salary) }} VND</p>
-              <p>- Công chuẩn: {{ s.standard_work_days }} ngày</p>
-              <p>- Công thực tế: {{ s.total_work_days }} ngày</p>
-              <p>- Phụ cấp: +{{ '{:,.0f}'.format(s.total_allowance or 0) }} VND</p>
-              <p>- Thưởng: +{{ '{:,.0f}'.format(s.bonus or 0) }} VND</p>
-              <p>- Khấu trừ: -{{ '{:,.0f}'.format(s.penalty or 0) }} VND</p>
-              <p><strong>💰 Tổng thực nhận: {{ '{:,.0f}'.format(s.net_salary) }} VND</strong></p>
-
-              <form method="post" class="emp-form-grid dispute-form">
-                <input type="hidden" name="salary_id" value="{{ s.id }}">
-                <label>⚠️ Báo cáo sai sót
-                  <select name="issue_type" required>
-                    <option value="attendance_issue">Sai số ngày công / Chấm công</option>
-                    <option value="allowance_issue">Thiếu/Sai phụ cấp, thưởng</option>
-                    <option value="salary_issue">Sai mức lương cơ bản</option>
-                    <option value="other">Khác</option>
-                  </select>
-                </label>
-                <label>Mô tả chi tiết
-                  <textarea name="description" rows="3" required placeholder="Mô tả vấn đề bạn gặp phải..."></textarea>
-                </label>
-                <button class="btn btn-danger" type="submit">📤 Gửi báo cáo</button>
-              </form>
-            </div>
-          </details>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6">Chưa có dữ liệu lương năm {{ year }}.</td></tr>
-      {% endfor %}
-    </tbody>
+    <thead><tr><th>Tháng/Năm</th><th>Lương cơ bản</th><th>Phụ cấp</th><th>Overtime</th><th>Khấu trừ</th><th>Bảo hiểm</th><th>Thuế TNCN</th><th>Tổng thực nhận</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+    <tbody id="salary-body"></tbody>
   </table>
 </section>
 
-<section class="emp-card">
-  <h3>📌 Khiếu nại lương gần đây</h3>
-  {% for d in disputes %}
-  <article class="row-between complaint-item">
-    <div>
-      <p><strong>{{ d.title }}</strong></p>
-      <small>{{ d.created_at.strftime('%H:%M - %d/%m/%Y') }}</small>
-    </div>
-        <span class="pill {{ 'pill-warning' if d.status in ['pending', 'in_progress'] else 'pill-success' }}">
-      {{ '⏳ Đang xử lý' if d.status in ['pending', 'in_progress'] else '✅ Đã giải quyết' }}
-    </span>
-  </article>
-  {% else %}
-  <p>Chưa có khiếu nại lương.</p>
-  {% endfor %}
+<section class="salary-tabs">
+  <button class="tab-btn active" data-tab="complaints">Complaint Center</button>
+  <button class="tab-btn" data-tab="dependents">Người phụ thuộc</button>
+</section>
+
+<section class="tab-content" id="tab-complaints">
+  <div id="complaint-list"></div>
+</section>
+
+<section class="tab-content hidden" id="tab-dependents">
+  <div class="row-between"><h3>Người phụ thuộc</h3><button id="add-dependent" class="btn btn-primary">Thêm dependent</button></div>
+  <div id="dependent-list"></div>
 
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/employee/payslip.js') }}"></script>
 {% endblock %}

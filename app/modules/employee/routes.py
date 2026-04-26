@@ -6,7 +6,7 @@ import os
 import re
 import uuid
 from lunardate import LunarDate
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from app.extensions.db import db
@@ -29,6 +29,7 @@ from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
 from .ess_service import EmployeeESSService
+from .payroll_service import EmployeePayrollService
 from . import employee_bp
 VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "01-01": "Tết Dương lịch",
@@ -1083,7 +1084,7 @@ def leave_request():
     )
 
 
-@employee_bp.route("/payslip", methods=["GET", "POST"])
+@employee_bp.route("/payslip", methods=["GET"])
 def payslip():
     guard = _ensure_login()
     if guard:
@@ -1093,46 +1094,85 @@ def payslip():
     if not employee:
         return redirect(url_for("employee.dashboard"))
 
-    if request.method == "POST":
-        salary_id = request.form.get("salary_id", type=int)
-        issue_type = request.form.get("issue_type", "other")
-        description = request.form.get("description", "").strip()
+    return render_template("employee/payslip.html", current_year=date.today().year)
 
-        if not salary_id or not description:
-            flash("❌ Vui lòng điền đầy đủ thông tin khiếu nại.", "danger")
-            return redirect(url_for("employee.payslip"))
+@employee_bp.route("/payslip/api/history", methods=["GET"])
+def employee_payroll_history_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
+    filters = {
+        "year": request.args.get("year", type=int),
+        "status": request.args.get("status", type=str),
+        "has_complaint": request.args.get("has_complaint", type=str),
+        "paid_state": request.args.get("paid_state", type=str),
+    }
+    try:
+        return jsonify(EmployeePayrollService.payroll_history(session.get("user_id"), filters))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-        complaint = Complaint(
-            employee_id=employee.id,
-            salary_id=salary_id,
-            type=issue_type,
-            title=f"Khiếu nại phiếu lương #{salary_id}",
-            description=description,
-            status="pending",
+
+@employee_bp.route("/payslip/api/<int:salary_id>", methods=["GET"])
+def employee_payroll_detail_api(salary_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(EmployeePayrollService.payroll_detail(session.get("user_id"), salary_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@employee_bp.route("/payslip/api/<int:salary_id>/pdf", methods=["GET"])
+def employee_payroll_pdf_api(salary_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        filename, content = EmployeePayrollService.payslip_pdf(session.get("user_id"), salary_id)
+        return Response(content, mimetype="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+
+@employee_bp.route("/payslip/api/<int:salary_id>/complaint", methods=["POST"])
+def employee_payroll_complaint_api(salary_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(
+            EmployeePayrollService.submit_complaint(
+                session.get("user_id"),
+                salary_id,
+                request.form.get("issue_type", "other"),
+                request.form.get("description", ""),
+                request.files.get("attachment"),
+            )
         )
-        db.session.add(complaint)
-        db.session.commit()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-        flash("✅ Đã gửi báo cáo sai sót phiếu lương.", "success")
-        return redirect(url_for("employee.payslip"))
+@employee_bp.route("/payslip/api/complaints", methods=["GET"])
+def employee_payroll_complaints_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify({"items": EmployeePayrollService.salary_complaints(session.get("user_id"))})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    year = request.args.get("year", date.today().year, type=int)
-    salary_records = Salary.query.filter_by(employee_id=employee.id, year=year).order_by(Salary.month.desc()).all()
-    disputes = (
-        Complaint.query.filter_by(employee_id=employee.id)
-        .filter(Complaint.salary_id.isnot(None))
-        .order_by(Complaint.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    return render_template(
-        "employee/payslip.html",
-        employee=employee,
-        salary_records=salary_records,
-        year=year,
-        disputes=disputes,
-    )
+@employee_bp.route("/payslip/api/complaints/<int:complaint_id>/close", methods=["POST"])
+def employee_payroll_close_complaint_api(complaint_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    try:
+        return jsonify(EmployeePayrollService.close_salary_complaint(session.get("user_id"), complaint_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @employee_bp.route("/notifications")
