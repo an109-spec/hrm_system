@@ -61,11 +61,14 @@ async function loadEmployeeMeta() {
 function employeeFiltersAsQuery() {
   const get = (id) => document.getElementById(id)?.value?.trim() || '';
   const params = new URLSearchParams();
+  const keyword = get('filterName');
   const mapping = {
+    keyword,
     name: get('filterName'), employee_code: get('filterCode'), email: get('filterEmail'),
     department_id: get('filterDepartment'), position_id: get('filterPosition'), role_id: get('filterRole'),
     working_status: get('filterWorkingStatus'), employment_type: get('filterEmploymentType'), probation: get('filterProbation'),
-    hire_date_from: get('filterHireFrom'), hire_date_to: get('filterHireTo')
+    hire_date_from: get('filterHireFrom'), hire_date_to: get('filterHireTo'),
+    month: get('month'), year: get('year'), top_department_id: get('department')
   };
   Object.entries(mapping).forEach(([k, v]) => { if (v) params.set(k, v); });
   return params.toString();
@@ -121,12 +124,20 @@ function renderEmployeeRows(rows) {
       <td>${rowActions(e)}</td>
     </tr>`).join('') : '<tr><td colspan="13">Không có dữ liệu nhân viên</td></tr>';
 }
-
-async function loadEmployees() {
-  await Promise.all([loadEmployeeMeta(), loadEmployeeSummary(), loadEmployeeAlerts()]);
-  const q = employeeFiltersAsQuery();
-  const rows = await api(`/api/admin/employees${q ? `?${q}` : ''}`);
-  renderEmployeeRows(rows);
+async function loadEmployees({ notify = false, isReset = false } = {}) {
+  try {
+    await Promise.allSettled([loadEmployeeMeta(), loadEmployeeSummary(), loadEmployeeAlerts()]);
+    const q = employeeFiltersAsQuery();
+    const rows = await api(`/api/admin/employees${q ? `?${q}` : ''}`);
+    renderEmployeeRows(rows);
+    if (rows.length === 0) {
+      await Swal.fire({ icon: 'info', title: 'Không tìm thấy dữ liệu phù hợp' });
+    } else if (notify) {
+      await Swal.fire({ icon: 'success', title: isReset ? 'Đã xóa lọc và tải lại danh sách đầy đủ' : 'Lọc dữ liệu thành công' });
+    }
+  } catch (error) {
+    await Swal.fire({ icon: 'error', title: 'Lỗi tải danh sách nhân viên', text: error.message || 'Query thất bại' });
+  }
 }
 
 async function loadEmployeeSummary() { renderSummaryCards(await api('/api/admin/employees/summary')); }
@@ -294,11 +305,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   setDefaults();
   await loadDepartmentsSelect();
   document.getElementById('btnAddEmployee')?.addEventListener('click', addEmployee);
-  document.getElementById('btnFilterEmployees')?.addEventListener('click', loadEmployees);
+  document.getElementById('btnFilterEmployees')?.addEventListener('click', () => loadEmployees({ notify: true }));
   document.getElementById('btnResetFilters')?.addEventListener('click', () => {
     ['filterName', 'filterCode', 'filterEmail', 'filterDepartment', 'filterPosition', 'filterRole', 'filterWorkingStatus', 'filterEmploymentType', 'filterProbation', 'filterHireFrom', 'filterHireTo']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    loadEmployees();
+    const monthEl = document.getElementById('month');
+    const yearEl = document.getElementById('year');
+    const departmentEl = document.getElementById('department');
+    if (monthEl) monthEl.value = now.getMonth() + 1;
+    if (yearEl) yearEl.value = now.getFullYear();
+    if (departmentEl) departmentEl.value = '';
+    loadEmployees({ notify: true, isReset: true });
+  });
+  document.getElementById('btnTopFilter')?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    if (window.ADMIN_PAGE === 'employees') {
+      await loadEmployees({ notify: true });
+      return;
+    }
+    await loadDashboard();
   });
   if (window.ADMIN_PAGE === 'dashboard') await loadDashboard();
   if (window.ADMIN_PAGE === 'employees') await loadEmployees();

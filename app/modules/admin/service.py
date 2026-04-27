@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import or_, func
+from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash
 
 from app.extensions.db import db
@@ -191,27 +192,52 @@ def employee_notifications(today: date | None = None) -> list[dict[str, Any]]:
 
 def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     q = Employee.query.join(User, Employee.user_id == User.id, isouter=True).filter(Employee.is_deleted.is_(False))
-
+    q = (
+        Employee.query
+        .join(User, Employee.user_id == User.id, isouter=True)
+        .options(
+            selectinload(Employee.user).selectinload(User.role),
+            selectinload(Employee.department),
+            selectinload(Employee.position),
+        )
+        .filter(Employee.is_deleted.is_(False))
+    )
     name = (filters.get("name") or "").strip()
+    keyword = (filters.get("keyword") or "").strip()
     employee_code = (filters.get("employee_code") or "").strip().upper()
     email = (filters.get("email") or "").strip()
     department_id = filters.get("department_id", type=int) if hasattr(filters, "get") else filters.get("department_id")
+    top_department_id = filters.get("top_department_id", type=int) if hasattr(filters, "get") else filters.get("top_department_id")
     position_id = filters.get("position_id", type=int) if hasattr(filters, "get") else filters.get("position_id")
     role_id = filters.get("role_id", type=int) if hasattr(filters, "get") else filters.get("role_id")
     working_status = (filters.get("working_status") or "").strip()
     employment_type = (filters.get("employment_type") or "").strip()
     probation = (filters.get("probation") or "").strip()
+    month = filters.get("month", type=int) if hasattr(filters, "get") else filters.get("month")
+    year = filters.get("year", type=int) if hasattr(filters, "get") else filters.get("year")
     hire_date_from = _as_date(filters.get("hire_date_from"), "hire_date_from")
     hire_date_to = _as_date(filters.get("hire_date_to"), "hire_date_to")
 
     if name:
         q = q.filter(Employee.full_name.ilike(f"%{name}%"))
+    if keyword:
+        q = q.filter(
+            or_(
+                Employee.full_name.ilike(f"%{keyword}%"),
+                func.cast(Employee.id, db.String).ilike(f"%{keyword}%"),
+                User.email.ilike(f"%{keyword}%"),
+            )
+        )
     if employee_code.startswith("EMP-") and employee_code[4:].isdigit():
         q = q.filter(Employee.id == int(employee_code[4:]))
+    elif employee_code:
+        q = q.filter(func.cast(Employee.id, db.String).ilike(f"%{employee_code.replace('EMP-', '')}%"))
     if email:
         q = q.filter(User.email.ilike(f"%{email}%"))
     if department_id:
         q = q.filter(Employee.department_id == int(department_id))
+    if top_department_id:
+        q = q.filter(Employee.department_id == int(top_department_id))
     if position_id:
         q = q.filter(Employee.position_id == int(position_id))
     if role_id:
@@ -224,6 +250,10 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
         q = q.filter(Employee.employment_type == "probation")
     elif probation == "false":
         q = q.filter(Employee.employment_type != "probation")
+    if month:
+        q = q.filter(func.extract("month", Employee.hire_date) == int(month))
+    if year:
+        q = q.filter(func.extract("year", Employee.hire_date) == int(year))
     if hire_date_from:
         q = q.filter(Employee.hire_date >= hire_date_from)
     if hire_date_to:
