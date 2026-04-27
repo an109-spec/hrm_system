@@ -54,8 +54,12 @@ async function loadEmployeeMeta() {
   ];
   map.forEach(([id, rows]) => {
     const el = document.getElementById(id); if (!el) return;
+    const previousValue = el.value;
     const first = el.options[0]?.outerHTML || '<option value="">--</option>';
     el.innerHTML = first + rows.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+    if (previousValue && Array.from(el.options).some((opt) => opt.value === previousValue)) {
+      el.value = previousValue;
+    }
   });
 }
 
