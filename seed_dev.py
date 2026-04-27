@@ -86,7 +86,7 @@ with app.app_context():
                 dob=date(2000, 1, 1), 
                 gender="male",              
                 hire_date=date(2024, 1, 1), 
-                working_status="working"
+                working_status="action"
             )
 
             db.session.add(employee)
@@ -105,7 +105,7 @@ with app.app_context():
                     dob=date(2000, 1, 1),
                     gender="male",
                     hire_date=date(2024, 1, 1),
-                    working_status="working"
+                    working_status="action"
                 )
                 db.session.add(employee)
                 db.session.flush()
