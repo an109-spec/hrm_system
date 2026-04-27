@@ -10,7 +10,7 @@ async function api(url, options = {}) {
 const now = new Date();
 const LABELS = {
   employment: { probation: 'Thử việc', permanent: 'Chính thức', intern: 'Thực tập', contract: 'Hợp đồng' },
-  working: { working: 'Đang làm việc', on_leave: 'Tạm nghỉ', resigned: 'Đã nghỉ việc' },
+  working: { active: 'Đang làm việc', probation: 'Thử việc', on_leave: 'Tạm nghỉ', pending_resignation: 'Chờ nghỉ việc', resigned: 'Đã nghỉ việc', inactive: 'Inactive', terminated: 'Chấm dứt', retired: 'Nghỉ hưu' },
   account: { active: 'Active', locked: 'Locked', inactive: 'Inactive', pending: 'Pending' }
 };
 
@@ -98,6 +98,7 @@ function rowActions(employee) {
       <button onclick="resetPassword(${employee.user_id})">Reset mật khẩu</button>
       <button onclick="transferEmployee(${employee.id})">Chuyển phòng ban</button>
       <button class="btn-danger" onclick="inactiveEmployee(${employee.id})">Set Inactive</button>
+      <button onclick="reviewResignationAdmin(${employee.id})">Duyệt nghỉ việc</button>
     </div>`;
 }
 
@@ -115,7 +116,7 @@ function renderEmployeeRows(rows) {
       <td>${esc(e.role || '--')}</td>
       <td>${fmtDate(e.hire_date)}</td>
       <td><span class="badge b-info">${esc(LABELS.employment[e.employment_type] || e.employment_type || '--')}</span></td>
-      <td><span class="badge ${e.working_status === 'working' ? 'b-success' : e.working_status === 'on_leave' ? 'b-warning' : 'b-danger'}">${esc(LABELS.working[e.working_status] || e.working_status || '--')}</span></td>
+      <td><span class="badge ${e.working_status === 'active' ? 'b-success' : e.working_status === 'on_leave' ? 'b-warning' : 'b-danger'}">${esc(LABELS.working[e.working_status] || e.working_status || '--')}</span></td>
       <td><span class="badge ${e.account_status === 'active' ? 'b-success' : e.account_status === 'locked' ? 'b-danger' : 'b-warning'}">${esc(LABELS.account[e.account_status] || e.account_status)}</span></td>
       <td>${rowActions(e)}</td>
     </tr>`).join('') : '<tr><td colspan="13">Không có dữ liệu nhân viên</td></tr>';
@@ -204,12 +205,12 @@ async function editEmployee(id) {
   const d = await api(`/api/admin/employees/${id}`);
   const { isConfirmed, value } = await Swal.fire({
     title: `Chỉnh sửa ${esc(d.full_name)}`,
-    html: `<input id="edName" class="swal2-input" value="${esc(d.full_name)}"><input id="edEmail" class="swal2-input" value="${esc(d.email || '')}"><input id="edPhone" class="swal2-input" value="${esc(d.phone || '')}"><select id="edDepartment" class="swal2-input">${document.getElementById('filterDepartment').innerHTML}</select><select id="edPosition" class="swal2-input">${document.getElementById('filterPosition').innerHTML}</select><select id="edRole" class="swal2-input">${document.getElementById('filterRole').innerHTML}</select><select id="edWorking" class="swal2-input"><option value="working">Đang làm việc</option><option value="on_leave">Tạm nghỉ</option><option value="resigned">Đã nghỉ việc</option></select><select id="edAccount" class="swal2-input"><option value="active">Active</option><option value="locked">Locked</option><option value="inactive">Inactive</option><option value="pending">Pending</option></select>`,
+    html: `<input id="edName" class="swal2-input" value="${esc(d.full_name)}"><input id="edEmail" class="swal2-input" value="${esc(d.email || '')}"><input id="edPhone" class="swal2-input" value="${esc(d.phone || '')}"><select id="edDepartment" class="swal2-input">${document.getElementById('filterDepartment').innerHTML}</select><select id="edPosition" class="swal2-input">${document.getElementById('filterPosition').innerHTML}</select><select id="edRole" class="swal2-input">${document.getElementById('filterRole').innerHTML}</select><select id="edWorking" class="swal2-input"><option value="active">Đang làm việc</option><option value="probation">Thử việc</option><option value="on_leave">Tạm nghỉ</option><option value="pending_resignation">Chờ nghỉ việc</option><option value="resigned">Đã nghỉ việc</option><option value="inactive">Inactive</option><option value="terminated">Chấm dứt</option><option value="retired">Nghỉ hưu</option></select><select id="edAccount" class="swal2-input"><option value="active">Active</option><option value="locked">Locked</option><option value="inactive">Inactive</option><option value="pending">Pending</option></select>`,
     didOpen: () => {
       document.getElementById('edDepartment').value = d.department_id || '';
       document.getElementById('edPosition').value = d.position_id || '';
       document.getElementById('edRole').value = d.role_id || '';
-      document.getElementById('edWorking').value = d.working_status || 'working';
+      document.getElementById('edWorking').value = d.working_status || 'active';
       document.getElementById('edAccount').value = d.account_status || 'active';
     },
     showCancelButton: true,
@@ -306,3 +307,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.ADMIN_PAGE === 'attendance') await loadAttendanceSummary();
   if (window.ADMIN_PAGE === 'salary') await loadSalaryAggregate();
 });
+
+
+async function reviewResignationAdmin(employeeId) {
+  const rows = await api(`/api/admin/resignations?status=pending_admin`)
+  const matches = rows.filter((r) => Number(r.employee_id) === Number(employeeId))
+  if (!matches.length) {
+    await Swal.fire({ icon: 'info', title: 'Nhân viên chưa có resignation chờ duyệt cuối' })
+    return
+  }
+  const current = matches[0]
+  const { value, isConfirmed } = await Swal.fire({
+    title: `Duyệt nghỉ việc: ${esc(current.employee_name || '')}`,
+    html: `<p>Ngày dự kiến nghỉ: ${esc(current.expected_last_day || '--')}</p><p>Lý do: ${esc(current.reason_text || current.reason_category || '--')}</p><select id="ad-action" class="swal2-input"><option value="approve">Duyệt cuối + khóa tài khoản</option><option value="reject">Từ chối</option></select><textarea id="ad-note" class="swal2-textarea" placeholder="Ghi chú admin"></textarea>`,
+    showCancelButton: true,
+    preConfirm: () => ({
+      action: document.getElementById('ad-action').value,
+      note: document.getElementById('ad-note').value
+    })
+  })
+  if (!isConfirmed) return
+  const result = await api(`/api/admin/resignations/${current.id}/finalize`, { method: 'POST', body: JSON.stringify(value) })
+  await Swal.fire({ icon: 'success', title: result.message || 'Đã cập nhật resignation' })
+  loadEmployees()
+}

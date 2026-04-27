@@ -62,7 +62,7 @@ class ManagerService:
         "contract": "Hợp đồng",
     }
     WORKING_STATUS_LABELS = {
-        "working": "Đang làm việc",
+        "active": "Đang làm việc",
         "on_leave": "Nghỉ phép",
         "resigned": "Nghỉ việc",
     }
@@ -1251,7 +1251,7 @@ class ManagerService:
         probation_count = 0
         active_count = 0
         for emp in employees:
-            if emp.working_status == "working":
+            if emp.working_status == "active":
                 active_count += 1
             if emp.employment_type == "probation":
                 probation_count += 1

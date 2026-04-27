@@ -30,9 +30,14 @@
         <label for="statusFilter">Trạng thái làm việc</label>
         <select id="statusFilter">
           <option value="">Tất cả</option>
-          <option value="working">Đang làm</option>
+          <option value="active">Đang làm</option>
+          <option value="probation">Thử việc</option>
           <option value="on_leave">Nghỉ phép</option>
+          <option value="pending_resignation">Chờ nghỉ việc</option>
           <option value="resigned">Đã nghỉ việc</option>
+          <option value="inactive">Inactive</option>
+          <option value="terminated">Chấm dứt</option>
+          <option value="retired">Nghỉ hưu</option>
         </select>
       </div>
       <button id="btnCreateEmployee" class="btn btn-primary">+ Tạo nhân viên</button>
@@ -77,13 +82,19 @@
         <label>Chức danh<select id="quickPosition"></select></label>
         <label>Quản lý<select id="quickManager"></select></label>
         <label>Trạng thái<select id="quickStatus">
-          <option value="working">Đang làm việc</option>
+          <option value="active">Đang làm việc</option>
+          <option value="probation">Thử việc</option>
           <option value="on_leave">Nghỉ phép</option>
+          <option value="pending_resignation">Chờ nghỉ việc</option>
           <option value="resigned">Đã nghỉ việc</option>
+          <option value="inactive">Inactive</option>
+          <option value="terminated">Chấm dứt</option>
+          <option value="retired">Nghỉ hưu</option>
         </select></label>
         <div class="actions full">
           <button type="submit" class="btn btn-primary">Lưu</button>
           <button type="button" id="btnDeactivate" class="btn btn-ghost">Khoá / Mở tài khoản</button>
+          <button type="button" id="btnLoadResignationQueue" class="btn">Danh sách offboarding</button>
         </div>
       </form>
     </article>

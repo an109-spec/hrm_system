@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 # Định nghĩa các ENUM Type để SQLAlchemy tự động tạo Type trong Postgres
 gender_enum = ENUM('male', 'female', 'other', name='gender_type', create_type=True)
 employment_enum = ENUM('probation', 'permanent', 'intern', 'contract', name='employment_type', create_type=True)
-working_status_enum = ENUM('working', 'on_leave', 'resigned', name='working_status', create_type=True)
+working_status_enum = ENUM('active', 'probation', 'on_leave', 'pending_resignation', 'resigned', 'inactive', 'terminated', 'retired', name='working_status', create_type=True)
 
 class Employee(BaseModel):
     """
@@ -44,7 +44,7 @@ class Employee(BaseModel):
     # Trạng thái công việc
     hire_date = db.Column(db.Date, nullable=True)
     employment_type = db.Column(employment_enum, default='probation', server_default='probation')
-    working_status = db.Column(working_status_enum, default='working', server_default='working')
+    working_status = db.Column(working_status_enum, default='active', server_default='active')
     is_attendance_required = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
     # Relationships
     # Mối quan hệ với người quản lý và nhân viên cấp dưới

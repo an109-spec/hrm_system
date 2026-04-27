@@ -30,6 +30,7 @@ from app.models.dependent import Dependent
 from app.models.complaint import Complaint
 from app.models.history import HistoryLog
 from app.models.overtime_request import OvertimeRequest
+from app.models.resignation import ResignationRequest
 # Danh sách Export để dễ dàng quản lý
 __all__ = [
     'db',
@@ -56,4 +57,5 @@ __all__ = [
     'Complaint',
     'HistoryLog',
     'OvertimeRequest',
+    'ResignationRequest',
 ]

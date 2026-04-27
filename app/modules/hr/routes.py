@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask import jsonify, redirect, render_template, request, send_file, session, url_for
 
-from app.models import Employee, User
+from app.models import Employee, ResignationRequest, User
 from . import hr_bp
 from .dto import (
     AccountStatusDTO,
@@ -30,7 +30,7 @@ from .dto import (
     UpdateEmployeeDTO,
 )
 from .service import HRService
-
+from app.modules.resignation_service import ResignationService
 
 def _current_user() -> User | None:
     user_id = session.get("user_id")
@@ -84,7 +84,33 @@ def attendance_page():
         return guard
     return render_template("hr/attendance.html", employee=_current_employee())
 
+@hr_bp.route("/api/resignations", methods=["GET"])
+def list_resignations_api():
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    status = (request.args.get("status") or "").strip().lower()
+    q = ResignationRequest.query.order_by(ResignationRequest.created_at.desc())
+    if status:
+        q = q.filter(ResignationRequest.status == status)
+    rows = q.limit(100).all()
+    return jsonify([row.to_dict() for row in rows])
 
+
+@hr_bp.route("/api/resignations/<int:request_id>/process", methods=["POST"])
+def process_resignation_api(request_id: int):
+    guard = _guard_hr_access()
+    if guard:
+        return jsonify({"error": "forbidden"}), 403
+    current_user = _current_user()
+    request_item = ResignationRequest.query.get_or_404(request_id)
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get("action") or "").strip().lower()
+    try:
+        ResignationService.hr_process(request_item, current_user.id if current_user else 0, action, payload)
+        return jsonify({"message": "HR đã xử lý resignation", "request": request_item.to_dict()})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 @hr_bp.route("/api/meta", methods=["GET"])
 def meta_api():
     guard = _guard_hr_access()
@@ -495,7 +521,7 @@ def create_employee_api():
         manager_id=payload.get("manager_id"),
         hire_date=payload.get("hire_date"),
         employment_type=payload.get("employment_type", "probation"),
-        working_status=payload.get("working_status", "working"),
+        working_status=payload.get("working_status", "active"),
         create_account=bool(payload.get("create_account")),
         username=payload.get("username"),
         email=payload.get("email"),

@@ -24,7 +24,7 @@ from app.models import (
 )
 
 EMPLOYMENT_TYPES = {"probation", "permanent", "intern", "contract"}
-WORKING_STATUSES = {"working", "on_leave", "resigned"}
+WORKING_STATUSES = {"active", "probation", "on_leave", "pending_resignation", "resigned", "inactive", "terminated", "retired"}
 ACCOUNT_STATUSES = {"active", "locked", "inactive", "pending"}
 
 
@@ -100,7 +100,7 @@ def employee_summary_cards(today: date | None = None) -> dict[str, int]:
     contract_cutoff = today + timedelta(days=30)
 
     total = Employee.query.filter_by(is_deleted=False).count()
-    working = Employee.query.filter_by(is_deleted=False, working_status="working").count()
+    working = Employee.query.filter_by(is_deleted=False, working_status="active").count()
     probation = Employee.query.filter_by(is_deleted=False, employment_type="probation").count()
     inactive = Employee.query.filter(
         Employee.is_deleted.is_(False),
@@ -279,7 +279,7 @@ def create_employee(payload: dict[str, Any], actor_id: int) -> dict[str, Any]:
     if employment_type not in EMPLOYMENT_TYPES:
         raise ServiceValidationError("Loại hợp đồng không hợp lệ")
 
-    working_status = (payload.get("working_status") or "working").strip()
+    working_status = (payload.get("working_status") or "active").strip()
     if working_status not in WORKING_STATUSES:
         raise ServiceValidationError("Trạng thái làm việc không hợp lệ")
 

@@ -4,7 +4,6 @@
   <div class="employee-head">
     <div>
       <h2>Quản lý nhân viên toàn hệ thống</h2>
-      <p>Full Employee Management Center cho Admin: hồ sơ, tài khoản, quyền hạn, hợp đồng và điều chuyển.</p>
     </div>
     <button class="btn-primary" id="btnAddEmployee">+ Thêm nhân viên</button>
   </div>
@@ -24,8 +23,14 @@
       <select id="filterWorkingStatus">
         <option value="">Trạng thái làm việc</option>
         <option value="working">Đang làm việc</option>
+        <option value="active">Đang làm việc</option>
+        <option value="probation">Thử việc</option>
         <option value="on_leave">Tạm nghỉ</option>
+        <option value="pending_resignation">Chờ nghỉ việc</option>
         <option value="resigned">Đã nghỉ việc</option>
+        <option value="inactive">Inactive</option>
+        <option value="terminated">Chấm dứt</option>
+        <option value="retired">Nghỉ hưu</option>
       </select>
       <select id="filterEmploymentType">
         <option value="">Loại hợp đồng</option>

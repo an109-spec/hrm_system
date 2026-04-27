@@ -59,7 +59,7 @@ from app.modules.hr.dto import (
 
 
 class HRService:
-    VALID_WORKING_STATUSES = {"working", "on_leave", "resigned"}
+    VALID_WORKING_STATUSES = {"active", "probation", "on_leave", "pending_resignation", "resigned", "inactive", "terminated", "retired"}
     VALID_EMPLOYMENT_TYPES = {"probation", "permanent", "intern", "contract"}
     VALID_GENDERS = {"male", "female", "other"}
     VALID_CONTRACT_TYPES = {"trial", "official", "internship", "seasonal"}
@@ -399,7 +399,7 @@ class HRService:
             manager_id=data.manager_id,
             hire_date=hire_date,
             employment_type=data.employment_type,
-            working_status=data.working_status or "working",
+            working_status=data.working_status or "active",
         )
 
         db.session.add(employee)

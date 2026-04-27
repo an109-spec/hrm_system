@@ -8,13 +8,14 @@ from app.models.employee import Employee
 from app.models.salary import Salary
 from app.models.complaint import Complaint
 from app.models.file_upload import FileUpload
+from app.models.resignation import ResignationRequest
 from app.extensions.db import db
 from . import manager_bp
 from .service import ManagerService
 from app.modules.employee.routes import _get_holiday_for_date
 from app.utils.time import parse_simulated_time
 from app.modules.employee.ess_service import EmployeeESSService
-
+from app.modules.resignation_service import ResignationService
 def _current_manager() -> Employee | None:
     user_id = session.get("user_id")
     if not user_id:
@@ -136,7 +137,35 @@ def department_employee_proposal_api(employee_id: int):
         )
     db.session.commit()
     return jsonify({"message": "Đã gửi đề xuất tới HR/Admin"})
+@manager_bp.route("/resignations/pending", methods=["GET"])
+def manager_pending_resignations_api():
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    rows = (
+        ResignationRequest.query.filter_by(manager_id=manager.id, status="pending_manager")
+        .order_by(ResignationRequest.created_at.desc())
+        .all()
+    )
+    return jsonify([row.to_dict() for row in rows])
 
+
+@manager_bp.route("/resignations/<int:request_id>/review", methods=["POST"])
+def manager_review_resignation_api(request_id: int):
+    manager = _current_manager()
+    if not manager:
+        return jsonify({"error": "Manager not found"}), 404
+    request_item = ResignationRequest.query.get_or_404(request_id)
+    if request_item.manager_id != manager.id:
+        return jsonify({"error": "Bạn không có quyền duyệt đơn này"}), 403
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "").strip().lower()
+    note = (data.get("note") or "").strip() or None
+    try:
+        ResignationService.manager_review(request_item, manager.user_id or manager.id, action, note)
+        return jsonify({"message": "Đã xử lý đơn nghỉ việc", "request": request_item.to_dict()})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 @manager_bp.route("/leave-management")
 def leave_page():
     guard = _guard_login()

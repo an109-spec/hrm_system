@@ -35,7 +35,7 @@ class DashboardService:
     def get_overview():
         total_emp = db.session.query(func.count(Employee.id)).scalar()
 
-        working = db.session.query(func.count(Employee.id)).filter_by(working_status='working').scalar()
+        working = db.session.query(func.count(Employee.id)).filter_by(working_status='active').scalar()
         on_leave = db.session.query(func.count(Employee.id)).filter_by(working_status='on_leave').scalar()
         resigned = db.session.query(func.count(Employee.id)).filter_by(working_status='resigned').scalar()
 

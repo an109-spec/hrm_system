@@ -7,7 +7,7 @@ class RoleName:
     EMPLOYEE = "Employee"
 
 class WorkingStatus:
-    WORKING = "working"
+    WORKING = "active"
     ON_LEAVE = "on_leave"
     RESIGNED = "resigned"
 

@@ -27,7 +27,7 @@ function rowActions(employeeId) {
     <button class="btn-action btn-light" data-action="promotion" data-id="${employeeId}">Đề xuất thăng chức</button>
     <button class="btn-action btn-light" data-action="transfer" data-id="${employeeId}">Đề xuất điều chuyển</button>
     <button class="btn-action btn-light" data-action="official" data-id="${employeeId}">Đề xuất chuyển chính thức</button>
-    <button class="btn-action btn-danger" data-action="termination" data-id="${employeeId}">Đề xuất chấm dứt</button>
+    <button class="btn-action btn-danger" data-action="termination" data-id="${employeeId}">Đề xuất chấm dứt hợp đồng</button>
   `
 }
 
@@ -131,7 +131,7 @@ document.addEventListener('click', async (e) => {
     if (action === 'promotion') return doProposal(employeeId, 'promotion', 'Đề xuất thăng chức')
     if (action === 'transfer') return doProposal(employeeId, 'transfer', 'Đề xuất điều chuyển')
     if (action === 'official') return doProposal(employeeId, 'probation_conversion', 'Đề xuất chuyển chính thức')
-    if (action === 'termination') return doProposal(employeeId, 'termination', 'Đề xuất chấm dứt')
+    if (action === 'termination') return doProposal(employeeId, 'termination', 'Đề xuất chấm dứt hợp đồng')
   } catch (err) {
     await Swal.fire({ icon: 'error', title: err.message || 'Không thể xử lý yêu cầu' })
   }
@@ -141,4 +141,33 @@ loadData().catch(async (err) => {
   document.getElementById('dept-emp-error').hidden = false
   document.getElementById('dept-emp-error').textContent = err.message || 'Lỗi tải dữ liệu'
   await Swal.fire({ icon: 'error', title: err.message || 'Lỗi tải dữ liệu' })
+})
+document.getElementById('btnReviewResignations')?.addEventListener('click', async () => {
+  try {
+    const rows = await fetch('/manager/resignations/pending').then((r) => r.json())
+    if (!rows.length) {
+      await Swal.fire({ icon: 'info', title: 'Không có đơn nghỉ việc chờ duyệt' })
+      return
+    }
+    const html = rows.map((row) => `<div style="text-align:left;margin-bottom:10px;padding:10px;border:1px solid #ddd"><b>${row.employee_name}</b><br>Ngày dự kiến nghỉ: ${row.expected_last_day}<br>Lý do: ${row.reason_text || row.reason_category}<br><button class="btn-action" data-resign-act="approve" data-id="${row.id}">Duyệt</button> <button class="btn-action btn-danger" data-resign-act="reject" data-id="${row.id}">Từ chối</button></div>`).join('')
+    await Swal.fire({ title: 'Đơn nghỉ việc chờ manager duyệt', html, width: 800, showConfirmButton: false })
+  } catch (e) {
+    await Swal.fire({ icon: 'error', title: e.message || 'Không tải được danh sách resignation' })
+  }
+})
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-resign-act]')
+  if (!btn) return
+  const requestId = Number(btn.dataset.id)
+  const action = btn.dataset.resignAct
+  const { value: note, isConfirmed } = await Swal.fire({ title: action === 'approve' ? 'Duyệt đơn nghỉ việc?' : 'Từ chối đơn nghỉ việc', input: 'text', inputLabel: 'Ghi chú', showCancelButton: true })
+  if (!isConfirmed) return
+  const res = await fetch(`/manager/resignations/${requestId}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, note: note || '' }) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    await Swal.fire({ icon: 'error', title: data.error || 'Không thể xử lý đơn' })
+    return
+  }
+  await Swal.fire({ icon: 'success', title: data.message || 'Đã xử lý đơn nghỉ việc' })
 })

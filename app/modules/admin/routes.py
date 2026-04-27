@@ -19,6 +19,7 @@ from app.models import (
     LeaveRequest,
     Position,
     Role,
+    ResignationRequest,
     Salary,
     SystemSetting,
     User,
@@ -125,7 +126,7 @@ def _labelize_enum(value: str | None) -> str:
         "permanent": "Chính thức",
         "intern": "Thực tập",
         "contract": "Hợp đồng",
-        "working": "Đang làm việc",
+        "active": "Đang làm việc",
         "on_leave": "Tạm nghỉ",
         "resigned": "Đã nghỉ việc",
         "male": "Nam",
@@ -516,6 +517,31 @@ def admin_reset_password(user_id: int):
         return jsonify({"error": str(exc)}), 400
     return jsonify({"success": True})
 
+@admin_bp.get("/api/admin/resignations")
+def list_resignations_admin_api():
+    if _guard_admin_access():
+        return jsonify({"error": "forbidden"}), 403
+    status = (request.args.get("status") or "").strip().lower()
+    query = ResignationRequest.query.order_by(ResignationRequest.created_at.desc())
+    if status:
+        query = query.filter(ResignationRequest.status == status)
+    rows = query.limit(100).all()
+    return jsonify([row.to_dict() for row in rows])
+
+
+@admin_bp.post("/api/admin/resignations/<int:request_id>/finalize")
+def finalize_resignation_admin_api(request_id: int):
+    if _guard_admin_access():
+        return jsonify({"error": "forbidden"}), 403
+    request_item = ResignationRequest.query.get_or_404(request_id)
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "").strip().lower()
+    note = (data.get("note") or "").strip() or None
+    try:
+        ResignationService.admin_finalize(request_item, session.get("user_id") or 0, action, note)
+        return jsonify({"message": "Admin đã duyệt resignation", "request": request_item.to_dict()})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 @admin_bp.patch("/api/admin/employees/<int:employee_id>/inactive")
 def admin_soft_delete_employee(employee_id: int):

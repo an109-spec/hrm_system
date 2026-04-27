@@ -31,7 +31,14 @@ const HRApi = {
   },
   updateAccountStatus(employeeId, isActive) {
     return this.request(`/hr/api/accounts/${employeeId}/status`, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) })
-  }
+  },
+  listResignations(status = '') {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    return this.request(`/hr/api/resignations${query}`)
+  },
+  processResignation(requestId, payload) {
+    return this.request(`/hr/api/resignations/${requestId}/process`, { method: 'POST', body: JSON.stringify(payload) })
+  },
 }
 
 const state = {
@@ -41,9 +48,14 @@ const state = {
 }
 
 const STATUS_LABELS = {
-  working: 'Đang làm',
+  active: 'Đang làm',
+  probation: 'Thử việc',
   on_leave: 'Nghỉ phép',
-  resigned: 'Đã nghỉ việc'
+  pending_resignation: 'Chờ nghỉ việc',
+  resigned: 'Đã nghỉ việc',
+  inactive: 'Inactive',
+  terminated: 'Chấm dứt',
+  retired: 'Nghỉ hưu'
 }
 
 function showToast(message) {
@@ -114,7 +126,7 @@ function renderDetail(detail) {
   document.getElementById('quickDepartment').value = detail.department_id || ''
   document.getElementById('quickPosition').value = detail.position_id || ''
   document.getElementById('quickManager').value = detail.manager_id || ''
-  document.getElementById('quickStatus').value = detail.working_status || 'working'
+  document.getElementById('quickStatus').value = detail.working_status || 'active'
 
   document.getElementById('contractCode').value = detail.contract?.contract_code || 'Tự động khi lưu'
   document.getElementById('contractHint').textContent = `Đang tạo hợp đồng cho: ${detail.full_name}`
@@ -278,3 +290,50 @@ async function bootstrap() {
 }
 
 bootstrap()
+async function openResignationQueue() {
+  const rows = await HRApi.listResignations('pending_hr')
+  if (!rows.length) {
+    await Swal.fire({ icon: 'info', title: 'Không có hồ sơ offboarding chờ HR xử lý' })
+    return
+  }
+  const html = rows.map((row) => `<div style="text-align:left;padding:10px;border:1px solid #ddd;margin-bottom:10px"><b>${row.employee_name}</b><br>Ngày nghỉ dự kiến: ${row.expected_last_day}<br>Lý do: ${row.reason_text || row.reason_category}<br><button class="btn btn-primary" data-hr-resignation="forward_admin" data-id="${row.id}">Xử lý xong & chuyển Admin</button> <button class="btn btn-ghost" data-hr-resignation="reject" data-id="${row.id}">Từ chối</button></div>`).join('')
+  await Swal.fire({ title: 'HR Offboarding Queue', html, width: 900, showConfirmButton: false })
+}
+
+document.addEventListener('click', async (event) => {
+  const btn = event.target.closest('button[data-hr-resignation]')
+  if (!btn) return
+  const action = btn.dataset.hrResignation
+  const requestId = Number(btn.dataset.id)
+  const { value, isConfirmed } = await Swal.fire({
+    title: action === 'forward_admin' ? 'Chốt offboarding và chuyển Admin?' : 'Từ chối resignation?',
+    html: action === 'forward_admin' ? `
+      <textarea id="hr-note" class="swal2-textarea" placeholder="Ghi chú HR"></textarea>
+      <textarea id="hr-payroll" class="swal2-textarea" placeholder="Final payroll"></textarea>
+      <textarea id="hr-attendance" class="swal2-textarea" placeholder="Final attendance"></textarea>
+      <textarea id="hr-leave" class="swal2-textarea" placeholder="Leave balance"></textarea>
+      <textarea id="hr-insurance" class="swal2-textarea" placeholder="Insurance"></textarea>
+      <textarea id="hr-asset" class="swal2-textarea" placeholder="Asset handover"></textarea>` : '<textarea id="hr-note" class="swal2-textarea" placeholder="Lý do từ chối"></textarea>',
+    showCancelButton: true,
+    preConfirm: () => ({
+      hr_note: document.getElementById('hr-note')?.value || '',
+      final_payroll_note: document.getElementById('hr-payroll')?.value || '',
+      final_attendance_note: document.getElementById('hr-attendance')?.value || '',
+      leave_balance_note: document.getElementById('hr-leave')?.value || '',
+      insurance_note: document.getElementById('hr-insurance')?.value || '',
+      asset_handover_note: document.getElementById('hr-asset')?.value || ''
+    })
+  })
+  if (!isConfirmed) return
+  const payload = { action, ...(value || {}) }
+  try {
+    const result = await HRApi.processResignation(requestId, payload)
+    await Swal.fire({ icon: 'success', title: result.message || 'Đã xử lý offboarding' })
+  } catch (err) {
+    await Swal.fire({ icon: 'error', title: err.message || 'Không thể xử lý offboarding' })
+  }
+})
+
+document.getElementById('btnLoadResignationQueue')?.addEventListener('click', () => {
+  openResignationQueue().catch((e) => Swal.fire({ icon: 'error', title: e.message }))
+})

@@ -91,7 +91,7 @@ class AuthService:
                 user_id=user.id,
                 full_name=dto.full_name.strip(),
                 phone=phone,
-                working_status='working',
+                working_status='active',
                 hire_date=datetime.now(timezone.utc).date()
             )
             

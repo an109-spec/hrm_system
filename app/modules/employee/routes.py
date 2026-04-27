@@ -23,6 +23,7 @@ from app.models import (
     Salary,
     User,
     Holiday,
+    ResignationRequest,
 )
 from app.modules.attendance.overtime_service import OvertimeService
 from app.common.exceptions import ValidationError
@@ -31,6 +32,7 @@ from app.utils.time import parse_simulated_time
 from .ess_service import EmployeeESSService
 from .payroll_service import EmployeePayrollService
 from . import employee_bp
+from app.modules.resignation_service import ResignationService
 VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "01-01": "Tết Dương lịch",
     "04-30": "Ngày Giải phóng miền Nam",
@@ -81,7 +83,7 @@ def _current_employee() -> Employee | None:
             dob=date(2000, 1, 1),
             gender="other",
             hire_date=date.today(),
-            working_status="working",
+            working_status="active",
         )
         db.session.add(employee)
         db.session.commit()
@@ -276,7 +278,7 @@ def _labelize_enum(value: str | None) -> str:
         "permanent": "Chính thức",
         "intern": "Thực tập",
         "contract": "Hợp đồng",
-        "working": "Đang làm việc",
+        "active": "Đang làm việc",
         "on_leave": "Tạm nghỉ",
         "resigned": "Đã nghỉ việc",
         "male": "Nam",
@@ -1279,7 +1281,71 @@ def close_complaint_api(complaint_id: int):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+@employee_bp.route("/resignation/my", methods=["GET"])
+def my_resignation_requests():
+    employee = _current_employee()
+    if not employee:
+        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên"}), 404
+    rows = (
+        ResignationRequest.query.filter_by(employee_id=employee.id)
+        .order_by(ResignationRequest.created_at.desc())
+        .all()
+    )
+    return jsonify([row.to_dict() for row in rows])
 
+
+@employee_bp.route("/resignation", methods=["POST"])
+def submit_resignation_request():
+    employee = _current_employee()
+    if not employee:
+        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên"}), 404
+
+    expected_last_day = request.form.get("expected_last_day")
+    reason_category = (request.form.get("reason_category") or "").strip().lower()
+    reason_text = (request.form.get("reason_text") or "").strip() or None
+    extra_note = (request.form.get("extra_note") or "").strip() or None
+    handover_employee_id = request.form.get("handover_employee_id", type=int)
+
+    if not expected_last_day:
+        return jsonify({"error": "Ngày dự kiến nghỉ là bắt buộc"}), 400
+    try:
+        expected_last_day_date = date.fromisoformat(expected_last_day)
+    except ValueError:
+        return jsonify({"error": "Định dạng ngày không hợp lệ"}), 400
+
+    allowed_reasons = {"transfer", "personal", "health", "study", "other"}
+    if reason_category not in allowed_reasons:
+        return jsonify({"error": "Lý do nghỉ việc không hợp lệ"}), 400
+
+    attachment_url = None
+    file = request.files.get("attachment")
+    if file and file.filename:
+        filename = secure_filename(file.filename)
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext not in {"pdf", "jpg", "jpeg", "png", "doc", "docx"}:
+            return jsonify({"error": "File đính kèm không hợp lệ"}), 400
+        folder = os.path.join("app", "static", "uploads", "resignation")
+        os.makedirs(folder, exist_ok=True)
+        unique_name = f"{uuid.uuid4().hex}_{filename}"
+        absolute_path = os.path.join(folder, unique_name)
+        file.save(absolute_path)
+        attachment_url = f"/static/uploads/resignation/{unique_name}"
+
+    try:
+        request_item = ResignationService.create_request(
+            employee=employee,
+            expected_last_day=expected_last_day_date,
+            reason_category=reason_category,
+            reason_text=reason_text,
+            extra_note=extra_note,
+            handover_employee_id=handover_employee_id,
+            attachment_url=attachment_url,
+            request_type="employee",
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"message": "Đã gửi đơn nghỉ việc, chờ Manager duyệt", "request": request_item.to_dict()})
 @employee_bp.route("/profile/dependents", methods=["GET"])
 def employee_dependents_api():
     guard = _ensure_login()

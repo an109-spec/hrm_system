@@ -29,7 +29,7 @@ class CreateEmployeeDTO:
     manager_id: Optional[int] = None
     hire_date: Optional[str] = None
     employment_type: str = "probation"
-    working_status: str = "working"
+    working_status: str = "active"
     create_account: bool = False
     username: Optional[str] = None
     email: Optional[str] = None

@@ -188,3 +188,80 @@ document.addEventListener('click', async (e) => {
 
 document.getElementById('btnAddDependent')?.addEventListener('click', () => upsertDependent(null));
 fetchDependents().catch(() => {});
+const RESIGN_REASON_LABELS = {
+  transfer: 'Chuyển công tác',
+  personal: 'Lý do cá nhân',
+  health: 'Sức khỏe',
+  study: 'Học tập',
+  other: 'Khác'
+}
+
+async function loadMyResignationRequests() {
+  const wrap = document.getElementById('resignationHistory')
+  if (!wrap) return
+  const res = await fetch('/employee/resignation/my')
+  const rows = await res.json()
+  if (!res.ok) return
+  if (!rows.length) {
+    wrap.innerHTML = '<p><strong>Resignation:</strong> chưa có đơn nghỉ việc.</p>'
+    return
+  }
+  wrap.innerHTML = `<p><strong>Lịch sử nghỉ việc:</strong></p><ul>${rows.slice(0, 5).map((row) => `<li>#${row.id} - ${row.status} - Dự kiến nghỉ: ${row.expected_last_day || '--'} - ${RESIGN_REASON_LABELS[row.reason_category] || row.reason_category}</li>`).join('')}</ul>`
+}
+
+async function openResignationForm() {
+  const { value: formValues } = await Swal.fire({
+    title: 'Gửi đơn nghỉ việc',
+    html: `
+      <input id="resign-date" type="date" class="swal2-input">
+      <select id="resign-reason" class="swal2-input">
+        <option value="transfer">Chuyển công tác</option>
+        <option value="personal">Lý do cá nhân</option>
+        <option value="health">Sức khỏe</option>
+        <option value="study">Học tập</option>
+        <option value="other">Khác</option>
+      </select>
+      <input id="resign-handover" type="number" class="swal2-input" placeholder="ID người nhận bàn giao (nếu có)">
+      <textarea id="resign-note" class="swal2-textarea" placeholder="Ghi chú thêm"></textarea>
+      <textarea id="resign-detail" class="swal2-textarea" placeholder="Mô tả lý do chi tiết"></textarea>
+      <input id="resign-attachment" type="file" class="swal2-file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg">
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: 'Gửi đơn',
+    preConfirm: () => ({
+      expected_last_day: document.getElementById('resign-date').value,
+      reason_category: document.getElementById('resign-reason').value,
+      handover_employee_id: document.getElementById('resign-handover').value,
+      extra_note: document.getElementById('resign-note').value,
+      reason_text: document.getElementById('resign-detail').value,
+      attachment: document.getElementById('resign-attachment').files[0] || null
+    })
+  })
+
+  if (!formValues) return
+  if (!formValues.expected_last_day) {
+    await Swal.fire({ icon: 'warning', title: 'Vui lòng chọn ngày dự kiến nghỉ' })
+    return
+  }
+
+  const payload = new FormData()
+  payload.append('expected_last_day', formValues.expected_last_day)
+  payload.append('reason_category', formValues.reason_category)
+  payload.append('handover_employee_id', formValues.handover_employee_id || '')
+  payload.append('extra_note', formValues.extra_note || '')
+  payload.append('reason_text', formValues.reason_text || '')
+  if (formValues.attachment) payload.append('attachment', formValues.attachment)
+
+  const submitResult = await fetch('/employee/resignation', { method: 'POST', body: payload })
+  const submitData = await submitResult.json().catch(() => ({}))
+  if (!submitResult.ok) {
+    await Swal.fire({ icon: 'error', title: submitData.error || 'Không thể gửi đơn nghỉ việc' })
+    return
+  }
+  await Swal.fire({ icon: 'success', title: submitData.message || 'Đã gửi đơn nghỉ việc' })
+  await loadMyResignationRequests()
+}
+
+document.getElementById('btnSubmitResignation')?.addEventListener('click', openResignationForm)
+loadMyResignationRequests().catch(() => {})

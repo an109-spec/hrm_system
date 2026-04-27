@@ -7,6 +7,7 @@
 {% block content %}
 <h2 class="page-title">👥 Nhân viên phòng ban</h2>
 <p class="page-subtitle"></p>
+<button id="btnReviewResignations" class="btn-action">Review đơn nghỉ việc</button>
 <div id="dept-emp-error" class="alert-box" hidden></div>
 
 <section class="cards-grid" id="summary-cards"></section>
@@ -19,9 +20,14 @@
     <input name="position" placeholder="Chức danh">
     <select name="working_status">
       <option value="">Trạng thái làm việc</option>
-      <option value="working">Đang làm việc</option>
+      <option value="active">Đang làm việc</option>
+      <option value="probation">Thử việc</option>
       <option value="on_leave">Nghỉ phép</option>
+      <option value="pending_resignation">Chờ nghỉ việc</option>
       <option value="resigned">Nghỉ việc</option>
+      <option value="inactive">Inactive</option>
+      <option value="terminated">Chấm dứt</option>
+      <option value="retired">Nghỉ hưu</option>
     </select>
     <select name="contract_type">
       <option value="">Loại hợp đồng</option>
