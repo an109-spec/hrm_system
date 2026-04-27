@@ -2,13 +2,26 @@
   const tabs = document.querySelectorAll('.tab');
   const panes = document.querySelectorAll('.tab-pane');
   const switchTab = (tabId) => {
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tabId));
+    tabs.forEach((t) => {
+      const isActive = t.dataset.tab === tabId;
+      t.classList.toggle('active', isActive);
+      t.setAttribute('aria-selected', String(isActive));
+    });
     panes.forEach((p) => p.classList.toggle('active', p.id === tabId));
   };
-  tabs.forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
+  tabs.forEach((tab) => {
+    tab.setAttribute('aria-selected', String(tab.classList.contains('active')));
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
 
   document.querySelectorAll('[data-quick-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.quickTab));
+    btn.addEventListener('click', () => {
+      switchTab(btn.dataset.quickTab);
+      if (btn.dataset.focus === 'password') {
+        const firstPassword = document.querySelector('#passwordForm input[name="current_password"]');
+        firstPassword?.focus();
+      }
+    });
   });
 
   const personalForm = document.getElementById('personalForm');

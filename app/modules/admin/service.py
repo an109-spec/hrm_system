@@ -180,7 +180,7 @@ def employee_notifications(today: date | None = None) -> list[dict[str, Any]]:
 
     leave_escalation = LeaveRequest.query.filter(
         LeaveRequest.is_deleted.is_(False),
-        LeaveRequest.status.in_(["pending_admin", "supplement_requested"]),
+        db.cast(LeaveRequest.status, db.String).in_(["pending_admin", "supplement_requested"]),
     ).count()
     notices.append({"code": "leave", "title": "Leave escalation", "count": leave_escalation})
 

@@ -13,7 +13,7 @@
       <h2>{{ employee.full_name }}</h2>
       <p>Lần đăng nhập gần nhất: {{ (user.updated_at or user.created_at).strftime('%d/%m/%Y %H:%M') if (user.updated_at or user.created_at) else 'N/A' }}</p>
     </div>
-
+    <div class="overview-meta"></div>
       <span class="chip">Trạng thái tài khoản: {{ 'Đang hoạt động' if user.is_active else 'Đã khóa' }}</span>
       <span class="chip">Role: {{ user.role.name if user.role else 'ADMIN' }}</span>
       <span class="chip">Mã nhân viên: {{ employee_code }}</span>
@@ -27,17 +27,17 @@
     <button type="button" id="btnQuickLogoutAll" class="danger">Đăng xuất mọi thiết bị</button>
   </section>
 
-  <div class="tabs">
-    <button class="tab active" data-tab="personal">1. Thông tin cá nhân</button>
-    <button class="tab" data-tab="work">2. Thông tin công việc</button>
-    <button class="tab" data-tab="security">3. Bảo mật tài khoản</button>
-    <button class="tab" data-tab="audit">4. Nhật ký hoạt động hệ thống</button>
+  <div class="tabs" role="tablist" aria-label="Admin profile tabs">
+    <button type="button" class="tab active" data-tab="personal">1. Thông tin cá nhân</button>
+    <button type="button" class="tab" data-tab="work">2. Thông tin công việc</button>
+    <button type="button" class="tab" data-tab="security">3. Bảo mật tài khoản</button>
+    <button type="button" class="tab" data-tab="audit">4. Nhật ký hoạt động hệ thống</button>
   </div>
 
   <div class="tab-content">
     <section id="personal" class="tab-pane active">
-      <div class="profile-header-row">
-        <div class="avatar-block">
+      <div class="profile-body-grid">
+        <aside class="avatar-block">
           <div class="avatar-wrapper" id="avatarPreviewTrigger">
             {% if employee.avatar %}
               <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar" alt="avatar">
@@ -47,22 +47,22 @@
           </div>
           <input type="file" id="avatarInput" hidden accept="image/*">
           <button type="button" id="btnUploadAvatar">Upload Avatar</button>
-        </div>
+        </aside>
 
         <form id="personalForm" class="grid-form">
-          <div><label>Mã nhân viên</label><input value="{{ employee_code }}" readonly></div>
-          <div><label>Họ tên</label><input value="{{ employee.full_name }}" readonly></div>
-          <div><label>Ngày sinh</label><input value="{{ employee.dob.strftime('%d/%m/%Y') if employee.dob else 'N/A' }}" readonly></div>
-          <div><label>Giới tính</label><input value="{{ enum_labelize(employee.gender) }}" readonly></div>
+          <div class="field"><label for="employeeCode">Mã nhân viên</label><input id="employeeCode" value="{{ employee_code }}" readonly></div>
+          <div class="field"><label for="fullName">Họ tên</label><input id="fullName" value="{{ employee.full_name }}" readonly></div>
+          <div class="field"><label for="dob">Ngày sinh</label><input id="dob" value="{{ employee.dob.strftime('%d/%m/%Y') if employee.dob else 'N/A' }}" readonly></div>
+          <div class="field"><label for="gender">Giới tính</label><input id="gender" value="{{ enum_labelize(employee.gender) }}" readonly></div>
 
-          <div><label>Số điện thoại</label><input name="phone" value="{{ employee.phone or '' }}" readonly></div>
-          <div><label>Email cá nhân</label><input name="personal_email" value="{{ extras.personal_email or '' }}" readonly></div>
-          <div><label>Địa chỉ</label><input name="address_detail" value="{{ employee.address_detail or '' }}" readonly></div>
-          <div><label>Tình trạng hôn nhân</label><input name="marital_status" value="{{ extras.marital_status or '' }}" readonly></div>
-          <div><label>Liên hệ khẩn cấp (Tên)</label><input name="emergency_contact_name" value="{{ extras.emergency_contact_name or '' }}" readonly></div>
-          <div><label>Liên hệ khẩn cấp (SĐT)</label><input name="emergency_contact_phone" value="{{ extras.emergency_contact_phone or '' }}" readonly></div>
-          <div><label>Email đăng nhập hệ thống</label><input value="{{ user.email }}" readonly></div>
-          <div><label>Quyền admin</label><input value="Không thể chỉnh sửa tại trang này" readonly></div>
+          <div class="field"><label for="phone">Số điện thoại</label><input id="phone" name="phone" value="{{ employee.phone or '' }}" readonly></div>
+          <div class="field"><label for="personalEmail">Email cá nhân</label><input id="personalEmail" name="personal_email" value="{{ extras.personal_email or '' }}" readonly></div>
+          <div class="field"><label for="addressDetail">Địa chỉ</label><input id="addressDetail" name="address_detail" value="{{ employee.address_detail or '' }}" readonly></div>
+          <div class="field"><label for="maritalStatus">Tình trạng hôn nhân</label><input id="maritalStatus" name="marital_status" value="{{ extras.marital_status or '' }}" readonly></div>
+          <div class="field"><label for="emergencyContactName">Liên hệ khẩn cấp (Tên)</label><input id="emergencyContactName" name="emergency_contact_name" value="{{ extras.emergency_contact_name or '' }}" readonly></div>
+          <div class="field"><label for="emergencyContactPhone">Liên hệ khẩn cấp (SĐT)</label><input id="emergencyContactPhone" name="emergency_contact_phone" value="{{ extras.emergency_contact_phone or '' }}" readonly></div>
+          <div class="field"><label for="systemEmail">Email đăng nhập hệ thống</label><input id="systemEmail" value="{{ user.email }}" readonly></div>
+          <div class="field"><label for="adminRole">Quyền admin</label><input id="adminRole" value="Không thể chỉnh sửa tại trang này" readonly></div>
 
           <div class="form-actions full">
             <button type="button" id="btnEditPersonal">Chỉnh sửa thông tin</button>
@@ -101,50 +101,54 @@
 
       <div class="security-card">
         <h3>Quản lý phiên đăng nhập</h3>
-        <table>
-          <thead>
-            <tr><th>Thiết bị</th><th>Thời gian đăng nhập</th><th>IP gần nhất</th></tr>
-          </thead>
-          <tbody>
-            {% for item in session_devices %}
-            <tr>
-              <td>{{ item.device }}</td>
-              <td>{{ item.logged_in_at.strftime('%d/%m/%Y %H:%M') if item.logged_in_at else 'N/A' }}</td>
-              <td>{{ item.ip }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Thiết bị</th><th>Thời gian đăng nhập</th><th>IP gần nhất</th></tr>
+            </thead>
+            <tbody>
+            {% for row in audit_logs %}
+            {% set raw_ip = (row.description.split('ip=')[-1] if row.description and 'ip=' in row.description else 'N/A') %}
+              <tr>
+                <td>{{ item.device }}</td>
+                <td>{{ item.logged_in_at.strftime('%d/%m/%Y %H:%M') if item.logged_in_at else 'N/A' }}</td>
+                <td>{{ item.ip }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         <button type="button" class="danger" id="btnLogoutAllSessions">Đăng xuất tất cả phiên</button>
       </div>
     </section>
 
     <section id="audit" class="tab-pane">
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Thời gian</th>
-            <th>Hành động</th>
-            <th>Đối tượng tác động</th>
-            <th>IP</th>
-            <th>Ghi chú</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in audit_logs %}
-          {% set raw_ip = (row.description.split('ip=')[-1] if row.description and 'ip=' in row.description else 'N/A') %}
-          <tr>
-            <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M') if row.created_at else 'N/A' }}</td>
-            <td>{{ row.action }}</td>
-            <td>{{ (row.entity_type or '-') ~ (('#' ~ row.entity_id|string) if row.entity_id else '') }}</td>
-            <td>{{ raw_ip }}</td>
-            <td>{{ row.description.split('| ip=')[0] if row.description else '' }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="5">Chưa có nhật ký hoạt động.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Hành động</th>
+              <th>Đối tượng tác động</th>
+              <th>IP</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in session_devices %}
+            <tr>
+              <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M') if row.created_at else 'N/A' }}</td>
+              <td>{{ row.action }}</td>
+              <td>{{ (row.entity_type or '-') ~ (('#' ~ row.entity_id|string) if row.entity_id else '') }}</td>
+              <td>{{ raw_ip }}</td>
+              <td>{{ row.description.split('| ip=')[0] if row.description else '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">Chưa có nhật ký hoạt động.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </section>
   </div>
 </div>
