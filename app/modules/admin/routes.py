@@ -6,7 +6,7 @@ import csv
 import os
 
 from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
-from sqlalchemy import func
+from sqlalchemy import cast, func, or_, String
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from app.extensions.db import db
@@ -981,18 +981,89 @@ def disable_department(dept_id: int):
 # -------------------------
 @admin_bp.get("/api/positions")
 def list_positions():
-    positions = Position.query.filter_by(is_deleted=False).all()
+    keyword = (request.args.get("q") or "").strip().lower()
+    min_salary = request.args.get("min_salary", type=float)
+    max_salary = request.args.get("max_salary", type=float)
+    status = (request.args.get("status") or "").strip().lower()
+
+    query = Position.query.filter_by(is_deleted=False)
+    if keyword:
+        query = query.filter(
+            or_(
+                func.lower(Position.job_title).like(f"%{keyword}%"),
+                cast(Position.id, String).like(f"%{keyword}%"),
+            )
+        )
+    if min_salary is not None:
+        query = query.filter(func.coalesce(Position.max_salary, 0) >= min_salary)
+    if max_salary is not None:
+        query = query.filter(func.coalesce(Position.min_salary, 0) <= max_salary)
+    if status in {"active", "hiring", "inactive"}:
+        query = query.filter(Position.status == status)
+
+    positions = query.order_by(Position.job_title.asc()).all()
     rows = []
     for p in positions:
+        employee_count = Employee.query.filter_by(position_id=p.id, is_deleted=False).count()
         rows.append({
             "id": int(p.id),
+            "position_code": f"POS{int(p.id):03d}",
             "job_title": p.job_title,
             "salary_range": f"{_to_float(p.min_salary):,.0f} - {_to_float(p.max_salary):,.0f}",
-            "employee_count": p.employees.count(),
+            "employee_count": employee_count,
+            "min_salary": _to_float(p.min_salary),
+            "max_salary": _to_float(p.max_salary),
             "status": p.status,
             "requirements": p.requirements,
         })
     return jsonify(rows)
+@admin_bp.get("/api/positions/stats")
+def positions_stats():
+    positions = Position.query.filter_by(is_deleted=False).all()
+    total_positions = len(positions)
+    total_holding = Employee.query.filter(Employee.position_id.isnot(None), Employee.is_deleted.is_(False)).count()
+    avg_salary = db.session.query(func.avg((func.coalesce(Position.min_salary, 0) + func.coalesce(Position.max_salary, 0)) / 2)).filter(
+        Position.is_deleted.is_(False)
+    ).scalar() or 0
+    return jsonify({
+        "total_positions": total_positions,
+        "holding_employees": int(total_holding or 0),
+        "average_salary": float(avg_salary or 0),
+    })
+
+
+def _position_impact_payload(position: Position) -> dict:
+    employee_count = Employee.query.filter(
+        Employee.position_id == position.id,
+        Employee.is_deleted.is_(False),
+    ).count()
+    active_contract_count = Contract.query.join(Employee, Employee.id == Contract.employee_id).filter(
+        Employee.position_id == position.id,
+        Employee.is_deleted.is_(False),
+        Contract.is_deleted.is_(False),
+        Contract.status == "active",
+    ).count()
+    pending_payroll_count = Salary.query.join(Employee, Employee.id == Salary.employee_id).filter(
+        Employee.position_id == position.id,
+        Employee.is_deleted.is_(False),
+        Salary.is_deleted.is_(False),
+        Salary.status.in_(["pending", "submitted"]),
+    ).count()
+    safe_to_inactive = employee_count == 0 and active_contract_count == 0 and pending_payroll_count == 0
+    return {
+        "position_id": int(position.id),
+        "employee_count": int(employee_count or 0),
+        "active_contract_count": int(active_contract_count or 0),
+        "pending_payroll_count": int(pending_payroll_count or 0),
+        "safe_to_inactive": safe_to_inactive,
+    }
+
+
+@admin_bp.get("/api/positions/<int:pid>/impact")
+def position_impact(pid: int):
+    p = Position.query.get_or_404(pid)
+    return jsonify(_position_impact_payload(p))
+
 
 
 @admin_bp.post("/api/positions")
@@ -1007,8 +1078,19 @@ def create_position():
     max_salary = float(data.get("max_salary") or 0)
     if min_salary > max_salary:
         return jsonify({"error": "min_salary must <= max_salary"}), 400
-    p = Position(job_title=title, min_salary=min_salary, max_salary=max_salary, status=data.get("status") or "active", requirements=data.get("requirements"))
+    status = (data.get("status") or "active").strip().lower()
+    if status not in {"active", "hiring", "inactive"}:
+        return jsonify({"error": "status invalid"}), 400
+    p = Position(job_title=title, min_salary=min_salary, max_salary=max_salary, status=status, requirements=data.get("requirements"))
     db.session.add(p)
+    db.session.flush()
+    db.session.add(HistoryLog(
+        action="CREATE_POSITION",
+        entity_type="position",
+        entity_id=p.id,
+        description=f"Tạo chức danh {p.job_title}",
+        performed_by=session.get("user_id"),
+    ))
     db.session.commit()
     return jsonify({"id": int(p.id)}), 201
 
@@ -1017,13 +1099,24 @@ def create_position():
 def get_position(pid: int):
     p = Position.query.get_or_404(pid)
     employees = Employee.query.filter_by(position_id=p.id, is_deleted=False).all()
+    creator = db.session.query(User.full_name).join(
+        HistoryLog, HistoryLog.performed_by == User.id
+    ).filter(
+        HistoryLog.entity_type == "position",
+        HistoryLog.entity_id == p.id,
+        HistoryLog.action == "CREATE_POSITION",
+    ).order_by(HistoryLog.created_at.asc()).first()
     return jsonify({
         "id": int(p.id),
+        "position_code": f"POS{int(p.id):03d}",
         "job_title": p.job_title,
         "min_salary": _to_float(p.min_salary),
         "max_salary": _to_float(p.max_salary),
         "status": p.status,
         "requirements": p.requirements,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "created_by": creator[0] if creator else "--",
+        "notes": "Mức lương này dùng để làm cơ sở gợi ý khi tạo Hợp đồng lao động (Contract) cho nhân viên. Không phải là mức lương cố định cuối cùng.",
         "employees": [{"id": int(e.id), "name": e.full_name} for e in employees],
     })
 
@@ -1049,7 +1142,21 @@ def update_position(pid: int):
     if "requirements" in data:
         p.requirements = data.get("requirements")
     if "status" in data:
-        p.status = data.get("status")
+        status = (data.get("status") or "").strip().lower()
+        if status not in {"active", "hiring", "inactive"}:
+            return jsonify({"error": "status invalid"}), 400
+        if status == "inactive":
+            impact = _position_impact_payload(p)
+            if not impact.get("safe_to_inactive"):
+                return jsonify({"error": "Position has unresolved dependencies", "impact": impact}), 409
+        p.status = status
+    db.session.add(HistoryLog(
+        action="UPDATE_POSITION",
+        entity_type="position",
+        entity_id=p.id,
+        description=f"Cập nhật chức danh {p.job_title}",
+        performed_by=session.get("user_id"),
+    ))
     db.session.commit()
     return jsonify({"success": True})
 
@@ -1061,7 +1168,37 @@ def update_position_status(pid: int):
     status = data.get("status")
     if status not in {"active", "hiring", "inactive"}:
         return jsonify({"error": "status invalid"}), 400
+    if status == "inactive":
+    
+        impact = _position_impact_payload(p)
+        if not impact.get("safe_to_inactive"):
+            return jsonify({"error": "Position has unresolved dependencies", "impact": impact}), 409
     p.status = status
+    db.session.add(HistoryLog(
+        action="UPDATE_POSITION_STATUS",
+        entity_type="position",
+        entity_id=p.id,
+        description=f"Đổi trạng thái chức danh {p.job_title} -> {status}",
+        performed_by=session.get("user_id"),
+    ))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.delete("/api/positions/<int:pid>")
+def disable_position(pid: int):
+    p = Position.query.get_or_404(pid)
+    impact = _position_impact_payload(p)
+    if not impact.get("safe_to_inactive"):
+        return jsonify({"error": "Position has unresolved dependencies", "impact": impact}), 409
+    p.status = "inactive"
+    db.session.add(HistoryLog(
+        action="INACTIVE_POSITION",
+        entity_type="position",
+        entity_id=p.id,
+        description=f"Ngừng sử dụng chức danh {p.job_title}",
+        performed_by=session.get("user_id"),
+    ))
     db.session.commit()
     return jsonify({"success": True})
 

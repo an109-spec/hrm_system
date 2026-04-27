@@ -1,5 +1,50 @@
 {% extends "admin/base_admin.html" %}
 {% block admin_content %}
-<div class="card"><h3>Chức danh</h3><button onclick="createPositionPrompt()">+ Thêm chức danh</button><table><thead><tr><th>ID</th><th>Tên chức danh</th><th>Dải lương</th><th>Số NV</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="positionRows"></tbody></table></div>
+<section class="position-admin-page">
+  <header class="position-toolbar card">
+    <input id="search-job-title" type="text" placeholder="Tìm chức danh...">
+    <input id="positionSalaryFrom" type="number" placeholder="Lương từ">
+    <input id="positionSalaryTo" type="number" placeholder="Lương đến">
+    <select id="positionStatusFilter">
+      <option value="">Tất cả trạng thái</option>
+      <option value="active">🟢 Active</option>
+      <option value="hiring">🟡 Hiring</option>
+      <option value="inactive">🔴 Inactive</option>
+    </select>
+    <button id="add-job-title-btn" class="btn-primary">+ Thêm chức danh mới</button>
+  </header>
+
+  <section id="job-title-stats" class="position-stats-grid">
+    <article class="summary-card"><h4>🎖️ Tổng vị trí</h4><p id="positionTotal">0</p></article>
+    <article class="summary-card"><h4>👥 Đang giữ</h4><p id="positionHolding">0 nhân sự</p></article>
+    <article class="summary-card"><h4>💰 Lương trung bình</h4><p id="positionAvgSalary">0 VNĐ</p></article>
+  </section>
+
+  <article class="card table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mã chức danh</th>
+          <th>Tên chức danh</th>
+          <th>Dải lương (Min - Max)</th>
+          <th>Số lượng nhân viên đang giữ</th>
+          <th>Trạng thái</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="positionRows"></tbody>
+    </table>
+  </article>
+
+  <article id="job-title-detail-card" class="card" style="display:none;">
+    <h3>🏢 CHI TIẾT CHỨC DANH</h3>
+    <div id="jobTitleDetailBody" class="position-detail-grid"></div>
+    <div class="employee-filter-actions">
+      <button id="closeJobTitleDetailBtn" class="btn-ghost">🔙 Quay lại</button>
+      <button id="editJobTitleFromDetailBtn" class="btn-primary">📝 Chỉnh sửa</button>
+      <button id="disableJobTitleFromDetailBtn" class="btn-danger">🚫 Ngừng sử dụng</button>
+    </div>
+  </article>
+</section>
 {% endblock %}
 {% block admin_scripts %}<script>window.ADMIN_PAGE='positions';</script>{% endblock %}

@@ -557,9 +557,244 @@ async function handleDepartmentAction(id, action) {
 window.handleDepartmentAction = handleDepartmentAction;
 window.createDepartmentPrompt = () => openDepartmentForm('create');
 
-async function loadPositions() { const rows = await api('/api/positions'); positionRows.innerHTML = rows.map(r => `<tr><td>${r.id}</td><td>${r.job_title}</td><td>${r.salary_range}</td><td>${r.employee_count}</td><td>${r.status}</td><td><button onclick="togglePosition(${r.id},'${r.status}')">${r.status === 'inactive' ? 'Enable' : 'Disable'}</button></td></tr>`).join(''); }
-async function togglePosition(id, status) { await api(`/api/positions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: status === 'inactive' ? 'active' : 'inactive' }) }); loadPositions(); }
-async function createPositionPrompt() { const { value: job_title } = await Swal.fire({ title: 'Tên chức danh', input: 'text', showCancelButton: true }); if (!job_title) return; await api('/api/positions', { method: 'POST', body: JSON.stringify({ job_title, min_salary: 0, max_salary: 0, status: 'active' }) }); await Swal.fire({ icon: 'success', title: 'Đã tạo chức danh' }); loadPositions(); }
+let currentPositionDetailId = null;
+
+function formatCurrency(value) {
+  return `${Number(value || 0).toLocaleString('vi-VN')} VNĐ`;
+}
+
+function positionStatusBadge(status) {
+  if (status === 'active') return '<span class="position-status active">🟢 Active</span>';
+  if (status === 'hiring') return '<span class="position-status hiring">🟡 Hiring</span>';
+  return '<span class="position-status inactive">🔴 Inactive</span>';
+}
+
+function positionActionCell(row) {
+  const statusAction = row.status === 'inactive'
+    ? '<option value="active">Kích hoạt lại</option>'
+    : '<option value="inactive">Ngừng sử dụng</option>';
+  return `
+    <select class="position-action-select" onchange="handlePositionAction(${row.id}, this.value); this.value='';">
+      <option value="">Chọn thao tác</option>
+      <option value="detail">Xem chi tiết</option>
+      <option value="edit">Chỉnh sửa</option>
+      ${statusAction}
+      <option value="employees">Xem nhân sự đang giữ</option>
+    </select>`;
+}
+
+function renderPositionRows(rows) {
+  const body = document.getElementById('positionRows');
+  if (!body) return;
+  body.innerHTML = rows.length ? rows.map((r) => `
+    <tr>
+      <td>${esc(r.position_code || `POS${r.id}`)}</td>
+      <td>${esc(r.job_title)}</td>
+      <td>${formatCurrency(r.min_salary)} - ${formatCurrency(r.max_salary)}</td>
+      <td>${r.employee_count || 0}</td>
+      <td>${positionStatusBadge(r.status)}</td>
+      <td>${positionActionCell(r)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6">Không có chức danh phù hợp điều kiện tìm kiếm.</td></tr>';
+}
+
+async function loadPositionStats() {
+  const stats = await api('/api/positions/stats');
+  document.getElementById('positionTotal').textContent = stats.total_positions || 0;
+  document.getElementById('positionHolding').textContent = `${stats.holding_employees || 0} nhân sự`;
+  document.getElementById('positionAvgSalary').textContent = formatCurrency(stats.average_salary || 0);
+}
+
+function positionFiltersAsQuery() {
+  const keyword = document.getElementById('search-job-title')?.value?.trim() || '';
+  const status = document.getElementById('positionStatusFilter')?.value?.trim() || '';
+  const salaryFrom = document.getElementById('positionSalaryFrom')?.value?.trim() || '';
+  const salaryTo = document.getElementById('positionSalaryTo')?.value?.trim() || '';
+  const params = new URLSearchParams();
+  if (keyword) params.set('q', keyword);
+  if (status) params.set('status', status);
+  if (salaryFrom) params.set('min_salary', salaryFrom);
+  if (salaryTo) params.set('max_salary', salaryTo);
+  return params.toString();
+}
+
+async function loadPositions() {
+  const q = positionFiltersAsQuery();
+  const rows = await api(`/api/positions${q ? `?${q}` : ''}`);
+  renderPositionRows(rows);
+  await loadPositionStats();
+}
+
+async function loadPositionDetail(id) {
+  const detail = await api(`/api/positions/${id}`);
+  currentPositionDetailId = id;
+  const body = document.getElementById('jobTitleDetailBody');
+  const card = document.getElementById('job-title-detail-card');
+  if (!body || !card) return;
+  body.innerHTML = `
+    <div>
+      <h4>Thông tin chức danh</h4>
+      <p><strong>Tên chức danh:</strong> ${esc(detail.job_title)}</p>
+      <p><strong>Mã chức danh:</strong> ${esc(detail.position_code || `POS${detail.id}`)}</p>
+      <p><strong>Trạng thái:</strong> ${positionStatusBadge(detail.status)}</p>
+      <p><strong>Số nhân sự đang giữ:</strong> ${detail.employees?.length || 0}</p>
+      <p><strong>Lương cơ bản đề xuất:</strong> ${formatCurrency(detail.min_salary)} - ${formatCurrency(detail.max_salary)}</p>
+    </div>
+    <div>
+      <h4>Audit & nghiệp vụ</h4>
+      <p><strong>Ngày tạo:</strong> ${fmtDate(detail.created_at)}</p>
+      <p><strong>Người tạo:</strong> ${esc(detail.created_by || '--')}</p>
+      <p><strong>Ghi chú nghiệp vụ:</strong> ${esc(detail.notes || '--')}</p>
+      <p><strong>Yêu cầu công việc (Requirements):</strong> ${esc(detail.requirements || '--')}</p>
+    </div>`;
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function positionStatusRadio(name, current = 'active') {
+  return `
+    <div style="text-align:left;padding:6px 10px;">
+      <div style="margin-bottom:4px;">Trạng thái hoạt động</div>
+      <label><input type="radio" name="${name}" value="active" ${current === 'active' ? 'checked' : ''}> Active</label>
+      <label style="margin-left:14px;"><input type="radio" name="${name}" value="hiring" ${current === 'hiring' ? 'checked' : ''}> Hiring</label>
+      <label style="margin-left:14px;"><input type="radio" name="${name}" value="inactive" ${current === 'inactive' ? 'checked' : ''}> Inactive</label>
+    </div>`;
+}
+
+async function openPositionForm(mode, positionId = null) {
+  const isEdit = mode === 'edit';
+  const detail = isEdit ? await api(`/api/positions/${positionId}`) : null;
+  const title = isEdit ? '📝 CẬP NHẬT CHỨC DANH' : '➕ THÊM CHỨC DANH MỚI';
+  const { isConfirmed, dismiss, value } = await Swal.fire({
+    title,
+    width: 760,
+    showCancelButton: true,
+    showDenyButton: !isEdit,
+    denyButtonText: '📑 Tạo và tiếp tục thêm',
+    confirmButtonText: isEdit ? '💾 Lưu chức danh' : '💾 Lưu',
+    cancelButtonText: isEdit ? '❌ Hủy và quay lại' : '❌ Hủy',
+    html: `
+      <input id="jtName" class="swal2-input" placeholder="Tên chức danh" value="${esc(detail?.job_title || '')}">
+      <div class="swal-form-grid">
+        <input id="jtMinSalary" class="swal2-input" type="number" placeholder="Min Salary" value="${detail?.min_salary ?? 0}">
+        <input id="jtMaxSalary" class="swal2-input" type="number" placeholder="Max Salary" value="${detail?.max_salary ?? 0}">
+      </div>
+      ${positionStatusRadio('jtStatus', detail?.status || 'active')}
+      <textarea id="jtRequirements" class="swal2-textarea" placeholder="Yêu cầu công việc (Requirements)">${esc(detail?.requirements || '')}</textarea>
+      <div class="impact-warning">
+        Mức lương này dùng để làm cơ sở gợi ý khi tạo Hợp đồng lao động (Contract) cho nhân viên.
+        Không phải là mức lương cố định cuối cùng.
+      </div>
+    `,
+    preConfirm: () => ({
+      job_title: document.getElementById('jtName').value.trim(),
+      min_salary: Number(document.getElementById('jtMinSalary').value || 0),
+      max_salary: Number(document.getElementById('jtMaxSalary').value || 0),
+      status: document.querySelector('input[name="jtStatus"]:checked')?.value || 'active',
+      requirements: document.getElementById('jtRequirements').value.trim()
+    })
+  });
+  if (!isConfirmed && dismiss !== Swal.DismissReason.deny) return;
+  if (!value?.job_title) {
+    await Swal.fire({ icon: 'error', title: 'Tên chức danh là bắt buộc' });
+    return;
+  }
+  if ((value.min_salary || 0) > (value.max_salary || 0)) {
+    await Swal.fire({ icon: 'error', title: 'Mức lương tối thiểu không được lớn hơn mức lương tối đa' });
+    return;
+  }
+  try {
+    if (isEdit) {
+      await api(`/api/positions/${positionId}`, { method: 'PATCH', body: JSON.stringify(value) });
+      await Swal.fire({ icon: 'success', title: 'Đã cập nhật chức danh' });
+      if (currentPositionDetailId === positionId) await loadPositionDetail(positionId);
+    } else {
+      await api('/api/positions', { method: 'POST', body: JSON.stringify(value) });
+      await Swal.fire({ icon: 'success', title: 'Đã thêm chức danh mới' });
+    }
+    await loadPositions();
+    if (dismiss === Swal.DismissReason.deny) await openPositionForm('create');
+  } catch (error) {
+    await Swal.fire({ icon: 'error', title: 'Không thể lưu chức danh', text: error.message || 'Vui lòng kiểm tra lại dữ liệu' });
+  }
+}
+
+async function showPositionEmployees(id) {
+  const detail = await api(`/api/positions/${id}`);
+  await Swal.fire({
+    icon: 'info',
+    title: 'Nhân sự đang giữ chức danh',
+    html: detail.employees?.length
+      ? `<ul style="text-align:left">${detail.employees.map((e) => `<li>${esc(e.name)}</li>`).join('')}</ul>`
+      : 'Hiện chưa có nhân sự nào đang giữ chức danh này.',
+    confirmButtonText: 'Đã hiểu'
+  });
+}
+
+async function deactivatePositionWithChecks(id) {
+  const impact = await api(`/api/positions/${id}/impact`);
+  if ((impact.employee_count || 0) > 0) {
+    const ask = await Swal.fire({
+      icon: 'warning',
+      title: 'Chức danh này vẫn đang được sử dụng bởi nhân viên.',
+      text: 'Vui lòng điều chuyển hoặc cập nhật chức danh khác trước khi ngừng sử dụng.',
+      showCancelButton: true,
+      confirmButtonText: 'Cập nhật chức danh ngay'
+    });
+    if (ask.isConfirmed) {
+      await Swal.fire({ icon: 'info', title: 'Đi tới Admin → Quản lý nhân viên để cập nhật chức danh hàng loạt.' });
+    }
+    return;
+  }
+  if ((impact.active_contract_count || 0) > 0) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Không thể ngừng sử dụng chức danh',
+      html: `Đang có hợp đồng active sử dụng chức danh này: <b>${impact.active_contract_count || 0}</b><br>Ảnh hưởng: Contract + Payroll + Salary Calculation`
+    });
+    return;
+  }
+  if ((impact.pending_payroll_count || 0) > 0) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Không thể ngừng sử dụng chức danh',
+      html: `Đang có payroll chưa chốt theo chức danh này: <b>${impact.pending_payroll_count || 0}</b>`
+    });
+    return;
+  }
+  const confirm = await Swal.fire({
+    title: 'Xác nhận ngừng sử dụng chức danh?',
+    text: 'Chức danh này sẽ không thể gán cho nhân sự mới',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Xác nhận'
+  });
+  if (!confirm.isConfirmed) return;
+  await api(`/api/positions/${id}`, { method: 'DELETE' });
+  await Swal.fire({ icon: 'success', title: 'Đã ngừng sử dụng chức danh' });
+  await loadPositions();
+  if (currentPositionDetailId === id) await loadPositionDetail(id);
+}
+
+async function activatePosition(id) {
+  const confirm = await Swal.fire({ title: 'Kích hoạt lại chức danh?', icon: 'question', showCancelButton: true, confirmButtonText: 'Kích hoạt' });
+  if (!confirm.isConfirmed) return;
+  await api(`/api/positions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
+  await Swal.fire({ icon: 'success', title: 'Đã kích hoạt lại chức danh' });
+  await loadPositions();
+  if (currentPositionDetailId === id) await loadPositionDetail(id);
+}
+
+async function handlePositionAction(id, action) {
+  if (!action) return;
+  if (action === 'detail') return loadPositionDetail(id);
+  if (action === 'edit') return openPositionForm('edit', id);
+  if (action === 'inactive') return deactivatePositionWithChecks(id);
+  if (action === 'active') return activatePosition(id);
+  if (action === 'employees') return showPositionEmployees(id);
+}
+window.handlePositionAction = handlePositionAction;
+window.createPositionPrompt = () => openPositionForm('create');
 
 async function loadAttendanceSummary() { setDefaults(); const m = month.value, y = year.value; const rows = await api(`/api/admin/attendance/summary?month=${m}&year=${y}`); attendanceRows.innerHTML = rows.map(r => `<tr><td>${r.department_name}</td><td>${r.employee_count}</td><td>${r.total_work}</td><td>${r.late_count}</td><td>${r.absent_count}</td></tr>`).join(''); const logs = await api(`/api/admin/attendance/audit-log?month=${m}&year=${y}`); attendanceAudit.innerHTML = logs.map(l => `<li>${l.time || ''} | ${l.action} | ${l.description || ''}</li>`).join(''); }
 async function lockMonth() { setDefaults(); await api('/api/admin/attendance/lock-month', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value }) }); loadAttendanceSummary(); }
@@ -611,7 +846,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (currentDepartmentDetailId) deactivateDepartmentWithChecks(currentDepartmentDetailId);
     });
   }
-  if (window.ADMIN_PAGE === 'positions') await loadPositions();
+  if (window.ADMIN_PAGE === 'positions') {
+    await loadPositions();
+    document.getElementById('add-job-title-btn')?.addEventListener('click', () => openPositionForm('create'));
+    document.getElementById('search-job-title')?.addEventListener('input', () => loadPositions());
+    document.getElementById('positionStatusFilter')?.addEventListener('change', () => loadPositions());
+    document.getElementById('positionSalaryFrom')?.addEventListener('change', () => loadPositions());
+    document.getElementById('positionSalaryTo')?.addEventListener('change', () => loadPositions());
+    document.getElementById('closeJobTitleDetailBtn')?.addEventListener('click', () => {
+      const card = document.getElementById('job-title-detail-card');
+      if (card) card.style.display = 'none';
+    });
+    document.getElementById('editJobTitleFromDetailBtn')?.addEventListener('click', () => {
+      if (currentPositionDetailId) openPositionForm('edit', currentPositionDetailId);
+    });
+    document.getElementById('disableJobTitleFromDetailBtn')?.addEventListener('click', () => {
+      if (currentPositionDetailId) deactivatePositionWithChecks(currentPositionDetailId);
+    });
+  }
   if (window.ADMIN_PAGE === 'attendance') await loadAttendanceSummary();
   if (window.ADMIN_PAGE === 'salary') await loadSalaryAggregate();
 });
