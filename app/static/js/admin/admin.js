@@ -71,7 +71,7 @@ function employeeFiltersAsQuery() {
     working_status: get('filterWorkingStatus'), account_status: get('filterAccountStatus'),
     employment_type: get('filterEmploymentType'), probation: get('filterProbation'),
     hire_date_from: get('filterHireFrom'), hire_date_to: get('filterHireTo'),
-    month: get('month'), year: get('year'), top_department_id: get('department')
+    top_department_id: get('department')
   };
   Object.entries(mapping).forEach(([k, v]) => { if (v) params.set(k, v); });
   return params.toString();
