@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from io import StringIO
 import csv
+import os
 
 from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
 from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import (
     Attendance,
@@ -15,6 +17,7 @@ from app.models import (
     Contract,
     Department,
     Employee,
+    EmployeeAllowance,
     HistoryLog,
     LeaveRequest,
     Position,
@@ -57,6 +60,46 @@ def _permissions_for_role(role: str) -> list[str]:
 
 def _to_float(v):
     return float(v or 0)
+def _employee_code(employee: Employee | None) -> str:
+    if not employee:
+        return "N/A"
+    return f"EMP{employee.id:04d}"
+
+
+def _setting_key(user_id: int, field: str) -> str:
+    return f"admin_profile:{user_id}:{field}"
+
+
+def _get_profile_extras(user_id: int) -> dict[str, str]:
+    fields = ["personal_email", "marital_status", "emergency_contact_name", "emergency_contact_phone"]
+    mapping = {}
+    for field in fields:
+        row = SystemSetting.query.filter_by(key=_setting_key(user_id, field)).first()
+        mapping[field] = row.value if row else ""
+    return mapping
+
+
+def _save_profile_extra(user_id: int, field: str, value: str) -> None:
+    key = _setting_key(user_id, field)
+    row = SystemSetting.query.filter_by(key=key).first()
+    if row:
+        row.value = value
+    else:
+        db.session.add(SystemSetting(key=key, value=value, description="Admin self profile extra field"))
+
+
+def _write_admin_audit(user: User, employee: Employee, action: str, entity_type: str, entity_id: int | None = None, description: str = "") -> None:
+    db.session.add(
+        HistoryLog(
+            employee_id=employee.id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            description=f"{description} | ip={request.remote_addr or 'N/A'}",
+            performed_by=user.id,
+        )
+    )
+
 
 
 # -------------------------
@@ -153,31 +196,149 @@ def admin_profile_page():
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
-
-        if not check_password_hash(user.password_hash, current_password):
-            flash("❌ Mật khẩu hiện tại không đúng.", "danger")
-            return redirect(url_for("admin.admin_profile_page"))
-
-        if len(new_password) < 8:
-            flash("❌ Mật khẩu mới cần tối thiểu 8 ký tự.", "danger")
-            return redirect(url_for("admin.admin_profile_page"))
-
-        if new_password != confirm_password:
-            flash("❌ Xác nhận mật khẩu không khớp.", "danger")
-            return redirect(url_for("admin.admin_profile_page"))
-
-        user.password_hash = generate_password_hash(new_password)
-        db.session.commit()
-        flash("✅ Đổi mật khẩu thành công.", "success")
-        return redirect(url_for("admin.admin_profile_page"))
-
-    complaints = (
-        Complaint.query.filter_by(employee_id=employee.id)
-        .order_by(Complaint.created_at.desc())
-        .limit(10)
+    latest_contract = (
+        Contract.query.filter_by(employee_id=employee.id)
+        .order_by(Contract.start_date.desc(), Contract.created_at.desc())
+        .first()
+    )
+    latest_salary = (
+        Salary.query.filter_by(employee_id=employee.id)
+        .order_by(Salary.year.desc(), Salary.month.desc())
+        .first()
+    )
+    total_allowance = (
+        db.session.query(func.coalesce(func.sum(EmployeeAllowance.amount), 0))
+        .filter(EmployeeAllowance.employee_id == employee.id, EmployeeAllowance.status.is_(True))
+        .scalar()
+    )
+    created_by_log = (
+        HistoryLog.query.filter(
+            HistoryLog.employee_id == employee.id,
+            HistoryLog.action.in_(["CREATE_EMPLOYEE", "Tạo nhân viên", "CREATE_ADMIN"]),
+        )
+        .order_by(HistoryLog.created_at.asc())
+        .first()
+    )
+    creator = User.query.get(created_by_log.performed_by) if created_by_log and created_by_log.performed_by else None
+    audit_logs = (
+        HistoryLog.query.filter_by(performed_by=user.id)
+        .order_by(HistoryLog.created_at.desc())
+        .limit(50)
         .all()
     )
-    return render_template("admin/profile.html", employee=employee, user=user, complaints=complaints)
+    ip_recent = request.remote_addr or "127.0.0.1"
+    session_devices = [
+        {
+            "device": request.user_agent.string or "Unknown Device",
+            "logged_in_at": user.updated_at or user.created_at,
+            "ip": ip_recent,
+        }
+    ]
+    extras = _get_profile_extras(user.id)
+
+    return render_template(
+        "admin/profile.html",
+        employee=employee,
+        user=user,
+        latest_contract=latest_contract,
+        latest_salary=latest_salary,
+        total_allowance=float(total_allowance or 0),
+        creator=creator,
+        session_devices=session_devices,
+        audit_logs=audit_logs,
+        employee_code=_employee_code(employee),
+        extras=extras,
+        enum_labelize=_labelize_enum,
+    )
+
+@admin_bp.post("/admin/profile/update")
+def admin_profile_update_api():
+    guard = _guard_login()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        return jsonify({"error": "Không tìm thấy hồ sơ admin"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        employee.phone = (payload.get("phone") or "").strip() or None
+        employee.address_detail = (payload.get("address_detail") or "").strip() or None
+        _save_profile_extra(user.id, "personal_email", (payload.get("personal_email") or "").strip())
+        _save_profile_extra(user.id, "marital_status", (payload.get("marital_status") or "").strip())
+        _save_profile_extra(user.id, "emergency_contact_name", (payload.get("emergency_contact_name") or "").strip())
+        _save_profile_extra(user.id, "emergency_contact_phone", (payload.get("emergency_contact_phone") or "").strip())
+        _write_admin_audit(user, employee, "UPDATE_ADMIN_PROFILE", "admin_profile", user.id, "Cập nhật thông tin cá nhân admin")
+        db.session.commit()
+        return jsonify({"message": "Thông tin cá nhân đã được lưu"})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 500
+
+@admin_bp.post("/admin/profile/change-password")
+def admin_profile_change_password_api():
+    guard = _guard_login()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        return jsonify({"error": "Không tìm thấy hồ sơ admin"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    current_password = payload.get("current_password", "")
+    new_password = payload.get("new_password", "")
+    confirm_password = payload.get("confirm_password", "")
+    if not check_password_hash(user.password_hash, current_password):
+        return jsonify({"error": "Mật khẩu hiện tại không đúng"}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Mật khẩu mới cần tối thiểu 8 ký tự"}), 400
+    if new_password != confirm_password:
+        return jsonify({"error": "Xác nhận mật khẩu không khớp"}), 400
+
+    user.password_hash = generate_password_hash(new_password)
+    _write_admin_audit(user, employee, "CHANGE_PASSWORD", "user", user.id, "Admin đổi mật khẩu tài khoản")
+    db.session.commit()
+    return jsonify({"message": "Mật khẩu đã được cập nhật"})
+
+
+@admin_bp.post("/admin/profile/upload-avatar")
+def admin_profile_upload_avatar_api():
+    guard = _guard_login()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        return jsonify({"error": "Không tìm thấy hồ sơ admin"}), 404
+
+    file = request.files.get("avatar")
+    if not file:
+        return jsonify({"error": "Bạn chưa chọn file ảnh"}), 400
+    filename = secure_filename(file.filename)
+    upload_folder = os.path.join("app", "static", "uploads")
+    os.makedirs(upload_folder, exist_ok=True)
+    file.save(os.path.join(upload_folder, filename))
+    employee.avatar = f"/static/uploads/{filename}"
+    _write_admin_audit(user, employee, "UPLOAD_AVATAR", "employee", employee.id, "Admin cập nhật ảnh đại diện")
+    db.session.commit()
+    return jsonify({"message": "Upload avatar thành công", "url": employee.avatar})
+
+
+@admin_bp.post("/admin/profile/logout-all-sessions")
+def admin_profile_logout_sessions_api():
+    guard = _guard_login()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
+    employee = _current_employee()
+    user = _current_user()
+    if not employee or not user:
+        return jsonify({"error": "Không tìm thấy hồ sơ admin"}), 404
+    _write_admin_audit(user, employee, "LOGOUT_ALL_SESSIONS", "user", user.id, "Admin đăng xuất mọi phiên đăng nhập")
+    db.session.commit()
+    session.clear()
+    return jsonify({"message": "Đã đăng xuất mọi phiên (bao gồm phiên hiện tại)."})
 
 
 @admin_bp.get("/admin/staff-profile")

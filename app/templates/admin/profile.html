@@ -1,128 +1,155 @@
 {% extends "admin/base_admin.html" %}
-{% block title %}Hồ sơ admin{% endblock %}
+{% block title %}Admin • Thông tin cá nhân{% endblock %}
 
 {% block admin_styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee/profile.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/profile.css') }}">
 {% endblock %}
 
 {% block admin_content %}
-<div class="profile-container">
-  <div class="profile-header">
-    <h2>Hồ sơ cá nhân</h2>
-    <p>Quản lý thông tin và bảo mật</p>
-  </div>
-
-  <div class="profile-card">
-    <div class="profile-left">
-      <div class="avatar-wrapper" onclick="document.getElementById('avatarInput').click()">
-        {% if employee.avatar %}
-          <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar">
-        {% else %}
-          <div class="avatar-placeholder">
-            {{ employee.full_name[0] }}
-          </div>
-        {% endif %}
-      </div>
-      <input type="file" id="avatarInput" hidden>
-
-      <div class="avatar-actions">
-        <button onclick="document.getElementById('avatarInput').click()">Chọn ảnh</button>
-        <button class="primary" id="uploadAvatarBtn">Cập nhật ảnh</button>
-      </div>
+<div class="admin-profile-page">
+  <section class="overview-card">
+    <div>
+      <p class="sub">Xin chào Admin</p>
+      <h2>{{ employee.full_name }}</h2>
+      <p>Lần đăng nhập gần nhất: {{ (user.updated_at or user.created_at).strftime('%d/%m/%Y %H:%M') if (user.updated_at or user.created_at) else 'N/A' }}</p>
     </div>
 
-    <div class="profile-right">
-      <h3>{{ employee.full_name }}</h3>
-      <p>ID: #{{ employee.id }}</p>
-      <p>Vai trò: {{ user.role.name if user.role else 'Nhân viên' }}</p>
-      <p>Email: {{ user.email }}</p>
+      <span class="chip">Trạng thái tài khoản: {{ 'Đang hoạt động' if user.is_active else 'Đã khóa' }}</span>
+      <span class="chip">Role: {{ user.role.name if user.role else 'ADMIN' }}</span>
+      <span class="chip">Mã nhân viên: {{ employee_code }}</span>
     </div>
-  </div>
+  </section>
+
+  <section class="quick-actions">
+    <button type="button" data-quick-tab="security" data-focus="password">Đổi mật khẩu</button>
+    <button type="button" id="btnQuickUpload">Upload Avatar</button>
+    <button type="button" data-quick-tab="audit">Xem nhật ký</button>
+    <button type="button" id="btnQuickLogoutAll" class="danger">Đăng xuất mọi thiết bị</button>
+  </section>
 
   <div class="tabs">
-    <button class="tab active" data-tab="info">Thông tin</button>
-    <button class="tab" data-tab="security">Bảo mật</button>
-    <button class="tab" data-tab="complaint">Khiếu nại</button>
+    <button class="tab active" data-tab="personal">1. Thông tin cá nhân</button>
+    <button class="tab" data-tab="work">2. Thông tin công việc</button>
+    <button class="tab" data-tab="security">3. Bảo mật tài khoản</button>
+    <button class="tab" data-tab="audit">4. Nhật ký hoạt động hệ thống</button>
   </div>
 
   <div class="tab-content">
-    <div class="tab-pane active" id="info">
-      <form class="form-grid" id="profileForm">
-        <div class="input-group">
-          <label>Họ tên</label>
-          <input name="full_name" value="{{ employee.full_name }}" readonly class="readonly-input">
-        </div>
-        <div class="input-group">
-          <label>Email</label>
-          <input value="{{ user.email }}" readonly class="readonly-input">
-        </div>
-        <div class="input-group">
-          <label>SĐT</label>
-          <input name="phone" value="{{ employee.phone or '' }}" readonly class="readonly-input">
-        </div>
-
-        <div class="address-section">
-          <label>ĐỊA CHỈ LIÊN HỆ</label>
-          <div class="address-grid" id="addressData" data-province="{{ employee.province_id or '' }}" data-district="{{ employee.district_id or '' }}" data-ward="{{ employee.ward_id or '' }}">
-            <select id="province" name="province" disabled><option value="">Chọn Tỉnh/Thành</option></select>
-            <select id="district" name="district" disabled><option value="">Chọn Quận/Huyện</option></select>
-            <select id="ward" name="ward" disabled><option value="">Chọn Phường/Xã</option></select>
-
-            <input id="detailAddress" name="address_detail" value="{{ employee.address_detail or '' }}" placeholder="Số nhà, tên đường..." readonly class="readonly-input">
+    <section id="personal" class="tab-pane active">
+      <div class="profile-header-row">
+        <div class="avatar-block">
+          <div class="avatar-wrapper" id="avatarPreviewTrigger">
+            {% if employee.avatar %}
+              <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" class="profile-avatar" alt="avatar">
+            {% else %}
+              <div class="avatar-placeholder">{{ employee.full_name[0] }}</div>
+            {% endif %}
           </div>
+          <input type="file" id="avatarInput" hidden accept="image/*">
+          <button type="button" id="btnUploadAvatar">Upload Avatar</button>
         </div>
 
-        <div class="form-actions">
-          <button type="button" id="editBtn" class="primary">Chỉnh sửa</button>
-          <div id="saveCancelActions" style="display: none;">
-            <button type="submit" class="success-btn">Lưu thay đổi</button>
-            <button type="button" id="cancelBtn" class="secondary">Hủy</button>
+        <form id="personalForm" class="grid-form">
+          <div><label>Mã nhân viên</label><input value="{{ employee_code }}" readonly></div>
+          <div><label>Họ tên</label><input value="{{ employee.full_name }}" readonly></div>
+          <div><label>Ngày sinh</label><input value="{{ employee.dob.strftime('%d/%m/%Y') if employee.dob else 'N/A' }}" readonly></div>
+          <div><label>Giới tính</label><input value="{{ enum_labelize(employee.gender) }}" readonly></div>
+
+          <div><label>Số điện thoại</label><input name="phone" value="{{ employee.phone or '' }}" readonly></div>
+          <div><label>Email cá nhân</label><input name="personal_email" value="{{ extras.personal_email or '' }}" readonly></div>
+          <div><label>Địa chỉ</label><input name="address_detail" value="{{ employee.address_detail or '' }}" readonly></div>
+          <div><label>Tình trạng hôn nhân</label><input name="marital_status" value="{{ extras.marital_status or '' }}" readonly></div>
+          <div><label>Liên hệ khẩn cấp (Tên)</label><input name="emergency_contact_name" value="{{ extras.emergency_contact_name or '' }}" readonly></div>
+          <div><label>Liên hệ khẩn cấp (SĐT)</label><input name="emergency_contact_phone" value="{{ extras.emergency_contact_phone or '' }}" readonly></div>
+          <div><label>Email đăng nhập hệ thống</label><input value="{{ user.email }}" readonly></div>
+          <div><label>Quyền admin</label><input value="Không thể chỉnh sửa tại trang này" readonly></div>
+
+          <div class="form-actions full">
+            <button type="button" id="btnEditPersonal">Chỉnh sửa thông tin</button>
+            <button type="submit" id="btnSavePersonal" class="primary" hidden>Lưu cập nhật</button>
+            <button type="button" id="btnCancelPersonal" hidden>Hủy</button>
           </div>
-        </div>
-      </form>
-    </div>
-
-    <div class="tab-pane" id="security">
-      <form class="form-grid" method="POST" action="{{ url_for('admin.admin_profile_page') }}">
-        <input type="hidden" name="action" value="change_password">
-        <label>Mật khẩu hiện tại
-          <input type="password" name="current_password" required>
-        </label>
-        <label>Mật khẩu mới
-          <input type="password" name="new_password" required>
-        </label>
-        <label>Xác nhận mật khẩu
-          <input type="password" name="confirm_password" required>
-        </label>
-        <button type="submit" class="primary">Đổi mật khẩu</button>
-      </form>
-    </div>
-
-    <div class="tab-pane" id="complaint">
-      <form class="form-grid">
-        <input placeholder="Tiêu đề">
-        <textarea placeholder="Nội dung"></textarea>
-        <button class="primary">Gửi</button>
-      </form>
-
-      <div class="list">
-        {% for c in complaints %}
-        <div class="item">
-          <div>
-            <strong>{{ c.title }}</strong>
-            <small>{{ c.created_at.strftime('%d/%m %H:%M') }}</small>
-          </div>
-          <span class="badge {{ c.status }}">
-            {{ c.status }}
-          </span>
-        </div>
-        {% endfor %}
+        </form>
       </div>
-    </div>
+    </section>
+
+    <section id="work" class="tab-pane">
+      <div class="read-grid">
+        <div><label>Role</label><p>ADMIN</p></div>
+        <div><label>Chức danh</label><p>{{ employee.position.job_title if employee.position else 'Chưa cập nhật' }}</p></div>
+        <div><label>Phòng ban</label><p>{{ employee.department.name if employee.department else 'Chưa cập nhật' }}</p></div>
+        <div><label>Ngày vào làm</label><p>{{ employee.hire_date.strftime('%d/%m/%Y') if employee.hire_date else 'Chưa cập nhật' }}</p></div>
+        <div><label>Loại hợp đồng</label><p>{{ enum_labelize(employee.employment_type) }}</p></div>
+        <div><label>Ngày bắt đầu hợp đồng</label><p>{{ latest_contract.start_date.strftime('%d/%m/%Y') if latest_contract and latest_contract.start_date else 'N/A' }}</p></div>
+        <div><label>Ngày kết thúc hợp đồng</label><p>{{ latest_contract.end_date.strftime('%d/%m/%Y') if latest_contract and latest_contract.end_date else 'Không xác định' }}</p></div>
+        <div><label>Trạng thái làm việc</label><p>{{ enum_labelize(employee.working_status) }}</p></div>
+        <div><label>Mức lương cơ bản</label><p>{{ '{:,.0f}'.format((latest_contract.basic_salary or 0)|float) if latest_contract else '0' }} VNĐ</p></div>
+        <div><label>Phụ cấp</label><p>{{ '{:,.0f}'.format(total_allowance) }} VNĐ</p></div>
+        <div><label>Người tạo tài khoản</label><p>{{ creator.username if creator else 'System Seeder / Chưa có log' }}</p></div>
+      </div>
+      <p class="note">Admin chỉ xem thông tin công việc. Các chỉnh sửa cần thực hiện tại module Quản lý nhân viên.</p>
+    </section>
+
+    <section id="security" class="tab-pane">
+      <form id="passwordForm" class="security-card">
+        <h3>Đổi mật khẩu</h3>
+        <label>Mật khẩu cũ <input type="password" name="current_password" required></label>
+        <label>Mật khẩu mới <input type="password" name="new_password" required></label>
+        <label>Xác nhận mật khẩu mới <input type="password" name="confirm_password" required></label>
+        <button type="submit" class="primary">Cập nhật mật khẩu</button>
+      </form>
+
+      <div class="security-card">
+        <h3>Quản lý phiên đăng nhập</h3>
+        <table>
+          <thead>
+            <tr><th>Thiết bị</th><th>Thời gian đăng nhập</th><th>IP gần nhất</th></tr>
+          </thead>
+          <tbody>
+            {% for item in session_devices %}
+            <tr>
+              <td>{{ item.device }}</td>
+              <td>{{ item.logged_in_at.strftime('%d/%m/%Y %H:%M') if item.logged_in_at else 'N/A' }}</td>
+              <td>{{ item.ip }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="danger" id="btnLogoutAllSessions">Đăng xuất tất cả phiên</button>
+      </div>
+    </section>
+
+    <section id="audit" class="tab-pane">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Hành động</th>
+            <th>Đối tượng tác động</th>
+            <th>IP</th>
+            <th>Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in audit_logs %}
+          {% set raw_ip = (row.description.split('ip=')[-1] if row.description and 'ip=' in row.description else 'N/A') %}
+          <tr>
+            <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M') if row.created_at else 'N/A' }}</td>
+            <td>{{ row.action }}</td>
+            <td>{{ (row.entity_type or '-') ~ (('#' ~ row.entity_id|string) if row.entity_id else '') }}</td>
+            <td>{{ raw_ip }}</td>
+            <td>{{ row.description.split('| ip=')[0] if row.description else '' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">Chưa có nhật ký hoạt động.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
   </div>
 </div>
 {% endblock %}
 
 {% block admin_scripts %}
-<script src="{{ url_for('static', filename='js/employee/profile.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/profile.js') }}"></script>
 {% endblock %}
