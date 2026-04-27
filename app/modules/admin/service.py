@@ -45,6 +45,14 @@ def _as_date(value: str | None, field_name: str, required: bool = False) -> date
     except ValueError as exc:
         raise ServiceValidationError(f"{field_name} không đúng định dạng YYYY-MM-DD") from exc
 
+def _as_int(value: Any, field_name: str) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ServiceValidationError(f"{field_name} không hợp lệ") from exc
+
 
 def _as_decimal(value: Any, field_name: str, required: bool = False) -> Decimal | None:
     if value in (None, ""):
@@ -224,20 +232,18 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     employee_code = (filters.get("employee_code") or "").strip().upper()
     email = (filters.get("email") or "").strip()
     phone = (filters.get("phone") or "").strip()
-    user_id = filters.get("user_id", type=int) if hasattr(filters, "get") else filters.get("user_id")
-    phone = (filters.get("phone") or "").strip()
-    user_id = filters.get("user_id", type=int) if hasattr(filters, "get") else filters.get("user_id")
-    department_id = filters.get("department_id", type=int) if hasattr(filters, "get") else filters.get("department_id")
-    top_department_id = filters.get("top_department_id", type=int) if hasattr(filters, "get") else filters.get("top_department_id")
-    position_id = filters.get("position_id", type=int) if hasattr(filters, "get") else filters.get("position_id")
-    role_id = filters.get("role_id", type=int) if hasattr(filters, "get") else filters.get("role_id")
+    user_id = _as_int(filters.get("user_id"), "user_id")
+    department_id = _as_int(filters.get("department_id"), "department_id")
+    top_department_id = _as_int(filters.get("top_department_id"), "top_department_id")
+    position_id = _as_int(filters.get("position_id"), "position_id")
+    role_id = _as_int(filters.get("role_id"), "role_id")
     working_status = (filters.get("working_status") or "").strip()
     account_status = (filters.get("account_status") or "").strip()
     account_status = (filters.get("account_status") or "").strip()
     employment_type = (filters.get("employment_type") or "").strip()
     probation = (filters.get("probation") or "").strip()
-    month = filters.get("month", type=int) if hasattr(filters, "get") else filters.get("month")
-    year = filters.get("year", type=int) if hasattr(filters, "get") else filters.get("year")
+    month = _as_int(filters.get("month"), "month")
+    year = _as_int(filters.get("year"), "year")
     hire_date_from = _as_date(filters.get("hire_date_from"), "hire_date_from")
     hire_date_to = _as_date(filters.get("hire_date_to"), "hire_date_to")
 
@@ -251,7 +257,6 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
                 User.username.ilike(f"%{keyword}%"),
                 User.email.ilike(f"%{keyword}%"),
                 Employee.phone.ilike(f"%{keyword}%"),
-                Employee.phone.ilike(f"%{keyword}%"),
             )
 
         )
@@ -264,37 +269,17 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     if phone:
         q = q.filter(Employee.phone.ilike(f"%{phone}%"))
     if user_id:
-        q = q.filter(User.id == int(user_id))
-    if phone:
-        q = q.filter(Employee.phone.ilike(f"%{phone}%"))
-    if user_id:
-        q = q.filter(User.id == int(user_id))
+        q = q.filter(User.id == user_id)
     if department_id:
-        q = q.filter(Employee.department_id == int(department_id))
+        q = q.filter(Employee.department_id == department_id)
     if top_department_id:
-        q = q.filter(Employee.department_id == int(top_department_id))
+        q = q.filter(Employee.department_id == top_department_id)
     if position_id:
-        q = q.filter(Employee.position_id == int(position_id))
+        q = q.filter(Employee.position_id == position_id)
     if role_id:
-        q = q.filter(User.role_id == int(role_id))
+        q = q.filter(User.role_id == role_id)
     if working_status:
         q = q.filter(Employee.working_status == working_status)
-    if account_status:
-        if account_status == "active":
-            q = q.filter(User.is_active.is_(True), User.is_deleted.is_(False))
-        elif account_status == "locked":
-            q = q.filter(User.is_active.is_(False), User.locked_at.isnot(None), User.is_deleted.is_(False))
-        elif account_status == "inactive":
-            q = q.filter(
-                or_(
-                    User.is_deleted.is_(True),
-                    db.and_(User.is_active.is_(False), User.locked_at.is_(None)),
-                )
-            )
-        elif account_status == "pending":
-            q = q.filter(User.id.is_(None))
-        else:
-            raise ServiceValidationError("Trạng thái tài khoản không hợp lệ")
     if account_status:
         if account_status == "active":
             q = q.filter(User.is_active.is_(True), User.is_deleted.is_(False))
@@ -326,10 +311,25 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     if hire_date_to:
         q = q.filter(Employee.hire_date <= hire_date_to)
 
-    if any([department_id, top_department_id, position_id, working_status, employment_type, probation, month, year, hire_date_from, hire_date_to]):
-        q = q.filter(Employee.id.isnot(None), Employee.is_deleted.is_(False))
-    else:
-        q = q.filter(or_(Employee.id.is_(None), Employee.is_deleted.is_(False)))
+    employee_filter_active = any([
+        name,
+        keyword,
+        employee_code,
+        phone,
+        department_id,
+        top_department_id,
+        position_id,
+        working_status,
+        employment_type,
+        probation,
+        month,
+        year,
+        hire_date_from,
+        hire_date_to,
+    ])
+    q = q.filter(or_(Employee.id.is_(None), Employee.is_deleted.is_(False)))
+    if employee_filter_active:
+        q = q.filter(Employee.id.isnot(None))
 
     rows = q.order_by(User.created_at.desc()).all()
     return [_user_employee_to_row(user, user.employee_profile) for user in rows]
