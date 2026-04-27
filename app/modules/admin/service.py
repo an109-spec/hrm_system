@@ -69,8 +69,13 @@ def _account_status(user: User | None) -> str:
 
 def _user_employee_to_row(user: User | None, employee: Employee | None) -> dict[str, Any]:
     latest_contract = None
+    allowance_total = 0
     if employee:
         latest_contract = employee.contracts.order_by(Contract.start_date.desc(), Contract.created_at.desc()).first()
+        allowance_total = db.session.query(func.coalesce(func.sum(EmployeeAllowance.amount), 0)).filter(
+            EmployeeAllowance.employee_id == employee.id,
+            EmployeeAllowance.status.is_(True),
+        ).scalar()
     return {
         "id": int(employee.id) if employee else None,
         "employee_code": f"EMP-{employee.id:05d}" if employee else None,
