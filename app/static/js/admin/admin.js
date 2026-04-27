@@ -90,6 +90,13 @@ function renderAlertCards(items) {
 
 function rowActions(employee) {
   if (!employee.user_id) return '<span class="muted">Chưa có tài khoản</span>';
+  if (!employee.id) {
+    return `
+      <div class="table-actions">
+        <span class="muted">Chưa có hồ sơ nhân sự</span>
+        <button onclick="resetPassword(${employee.user_id})">Reset mật khẩu</button>
+      </div>`;
+  }
   const lockBtn = employee.account_status === 'locked'
     ? `<button onclick="unlockEmployee(${employee.user_id})">Mở khóa</button>`
     : `<button onclick="lockEmployee(${employee.user_id})">Khóa tài khoản</button>`;
@@ -119,10 +126,10 @@ function renderEmployeeRows(rows) {
       <td>${esc(e.role || '--')}</td>
       <td>${fmtDate(e.hire_date)}</td>
       <td><span class="badge b-info">${esc(LABELS.employment[e.employment_type] || e.employment_type || '--')}</span></td>
-      <td><span class="badge ${e.working_status === 'active' ? 'b-success' : e.working_status === 'on_leave' ? 'b-warning' : 'b-danger'}">${esc(LABELS.working[e.working_status] || e.working_status || '--')}</span></td>
+      <td><span class="badge ${e.working_status ? (e.working_status === 'active' ? 'b-success' : e.working_status === 'on_leave' ? 'b-warning' : 'b-danger') : 'b-warning'}">${esc(LABELS.working[e.working_status] || e.working_status || '--')}</span></td>
       <td><span class="badge ${e.account_status === 'active' ? 'b-success' : e.account_status === 'locked' ? 'b-danger' : 'b-warning'}">${esc(LABELS.account[e.account_status] || e.account_status)}</span></td>
       <td>${rowActions(e)}</td>
-    </tr>`).join('') : '<tr><td colspan="13">Không có dữ liệu nhân viên</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="13">Không tìm thấy nhân viên phù hợp</td></tr>';
 }
 async function loadEmployees({ notify = false, isReset = false } = {}) {
   try {
@@ -131,7 +138,11 @@ async function loadEmployees({ notify = false, isReset = false } = {}) {
     const rows = await api(`/api/admin/employees${q ? `?${q}` : ''}`);
     renderEmployeeRows(rows);
     if (rows.length === 0) {
-      await Swal.fire({ icon: 'info', title: 'Không tìm thấy dữ liệu phù hợp' });
+      await Swal.fire({
+        icon: 'info',
+        title: 'Không có dữ liệu phù hợp',
+        text: 'Không tìm thấy nhân viên thuộc bộ lọc đã chọn'
+      });
     } else if (notify) {
       await Swal.fire({ icon: 'success', title: isReset ? 'Đã xóa lọc và tải lại danh sách đầy đủ' : 'Lọc dữ liệu thành công' });
     }

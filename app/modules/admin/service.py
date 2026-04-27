@@ -65,25 +65,26 @@ def _account_status(user: User | None) -> str:
     return "active"
 
 
-def _employee_to_row(employee: Employee) -> dict[str, Any]:
-    user = employee.user
-    latest_contract = employee.contracts.order_by(Contract.start_date.desc(), Contract.created_at.desc()).first()
+def _user_employee_to_row(user: User | None, employee: Employee | None) -> dict[str, Any]:
+    latest_contract = None
+    if employee:
+        latest_contract = employee.contracts.order_by(Contract.start_date.desc(), Contract.created_at.desc()).first()
     return {
-        "id": int(employee.id),
-        "employee_code": f"EMP-{employee.id:05d}",
-        "avatar": employee.avatar,
-        "full_name": employee.full_name,
+        "id": int(employee.id) if employee else None,
+        "employee_code": f"EMP-{employee.id:05d}" if employee else None,
+        "avatar": employee.avatar if employee else None,
+        "full_name": employee.full_name if employee else (user.username if user else "N/A"),
         "email": user.email if user else None,
-        "phone": employee.phone,
-        "department": employee.department.name if employee.department else None,
-        "department_id": int(employee.department_id) if employee.department_id else None,
-        "position": employee.position.job_title if employee.position else None,
-        "position_id": int(employee.position_id) if employee.position_id else None,
+        "phone": employee.phone if employee else None,
+        "department": employee.department.name if employee and employee.department else None,
+        "department_id": int(employee.department_id) if employee and employee.department_id else None,
+        "position": employee.position.job_title if employee and employee.position else None,
+        "position_id": int(employee.position_id) if employee and employee.position_id else None,
         "role": user.role.name if user and user.role else "Employee",
         "role_id": int(user.role_id) if user and user.role_id else None,
-        "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
-        "employment_type": employee.employment_type,
-        "working_status": employee.working_status,
+        "hire_date": employee.hire_date.isoformat() if employee and employee.hire_date else None,
+        "employment_type": employee.employment_type if employee else None,
+        "working_status": employee.working_status if employee else None,
         "account_status": _account_status(user),
         "username": user.username if user else None,
         "user_id": int(user.id) if user else None,
@@ -95,6 +96,8 @@ def _employee_to_row(employee: Employee) -> dict[str, Any]:
         },
     }
 
+def _employee_to_row(employee: Employee) -> dict[str, Any]:
+    return _user_employee_to_row(employee.user, employee)
 
 def employee_summary_cards(today: date | None = None) -> dict[str, int]:
     today = today or date.today()
@@ -191,16 +194,15 @@ def employee_notifications(today: date | None = None) -> list[dict[str, Any]]:
 
 
 def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
-    q = Employee.query.join(User, Employee.user_id == User.id, isouter=True).filter(Employee.is_deleted.is_(False))
     q = (
-        Employee.query
-        .join(User, Employee.user_id == User.id, isouter=True)
+        User.query
+        .outerjoin(Employee, Employee.user_id == User.id)
         .options(
-            selectinload(Employee.user).selectinload(User.role),
-            selectinload(Employee.department),
-            selectinload(Employee.position),
+            selectinload(User.role),
+            selectinload(User.employee_profile).selectinload(Employee.department),
+            selectinload(User.employee_profile).selectinload(Employee.position),
         )
-        .filter(Employee.is_deleted.is_(False))
+        .filter(User.is_deleted.is_(False))
     )
     name = (filters.get("name") or "").strip()
     keyword = (filters.get("keyword") or "").strip()
@@ -225,6 +227,7 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
             or_(
                 Employee.full_name.ilike(f"%{keyword}%"),
                 func.cast(Employee.id, db.String).ilike(f"%{keyword}%"),
+                User.username.ilike(f"%{keyword}%"),
                 User.email.ilike(f"%{keyword}%"),
             )
         )
@@ -259,8 +262,13 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     if hire_date_to:
         q = q.filter(Employee.hire_date <= hire_date_to)
 
-    rows = q.order_by(Employee.created_at.desc()).all()
-    return [_employee_to_row(row) for row in rows]
+    if any([department_id, top_department_id, position_id, working_status, employment_type, probation, month, year, hire_date_from, hire_date_to]):
+        q = q.filter(Employee.id.isnot(None), Employee.is_deleted.is_(False))
+    else:
+        q = q.filter(or_(Employee.id.is_(None), Employee.is_deleted.is_(False)))
+
+    rows = q.order_by(User.created_at.desc()).all()
+    return [_user_employee_to_row(user, user.employee_profile) for user in rows]
 
 
 def create_employee(payload: dict[str, Any], actor_id: int) -> dict[str, Any]:
