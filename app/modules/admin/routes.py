@@ -25,7 +25,7 @@ from app.models import (
 )
 
 from . import admin_bp
-
+from . import service as admin_service
 
 def _current_user() -> User | None:
     uid = session.get("user_id")
@@ -436,6 +436,94 @@ def dashboard_activities():
 # -------------------------
 # Employee admin actions
 # -------------------------
+@admin_bp.get("/api/admin/employees/summary")
+def admin_employee_summary():
+    return jsonify(admin_service.employee_summary_cards())
+
+
+@admin_bp.get("/api/admin/employees/notifications")
+def admin_employee_notifications():
+    return jsonify(admin_service.employee_notifications())
+
+
+@admin_bp.get("/api/admin/employees/meta")
+def admin_employee_meta():
+    return jsonify(admin_service.employee_filter_metadata())
+
+
+@admin_bp.get("/api/admin/employees")
+def admin_list_employees():
+    try:
+        data = admin_service.query_employees(request.args)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(data)
+
+
+@admin_bp.post("/api/admin/employees")
+def admin_create_employee():
+    actor = _current_user()
+    if not actor:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        row = admin_service.create_employee(payload, actor.id)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(row), 201
+
+
+@admin_bp.get("/api/admin/employees/<int:employee_id>")
+def admin_employee_detail(employee_id: int):
+    return jsonify(admin_service.employee_detail(employee_id))
+
+
+@admin_bp.patch("/api/admin/employees/<int:employee_id>")
+def admin_update_employee(employee_id: int):
+    actor = _current_user()
+    if not actor:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        row = admin_service.update_employee(employee_id, payload, actor.id)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(row)
+
+
+@admin_bp.patch("/api/admin/employees/<int:employee_id>/transfer")
+def admin_transfer_employee(employee_id: int):
+    actor = _current_user()
+    if not actor:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        row = admin_service.transfer_employee(employee_id, payload, actor.id)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(row)
+
+
+@admin_bp.post("/api/admin/users/<int:user_id>/reset-password")
+def admin_reset_password(user_id: int):
+    actor = _current_user()
+    if not actor:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        admin_service.reset_employee_password(user_id, payload.get("new_password"), actor.id)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True})
+
+
+@admin_bp.patch("/api/admin/employees/<int:employee_id>/inactive")
+def admin_soft_delete_employee(employee_id: int):
+    actor = _current_user()
+    if not actor:
+        return jsonify({"error": "unauthorized"}), 401
+    admin_service.soft_delete_employee(employee_id, actor.id)
+    return jsonify({"success": True})
 @admin_bp.patch("/api/admin/users/<int:user_id>/lock")
 def lock_user(user_id: int):
     actor = _current_user()

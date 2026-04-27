@@ -1,5 +1,78 @@
 {% extends "admin/base_admin.html" %}
 {% block admin_content %}
-<div class="card"><h3>Nhân viên (khóa tài khoản & phân quyền)</h3><table><thead><tr><th>ID</th><th>Tên</th><th>User</th><th>Role</th><th>Tài khoản</th><th>Hành động</th></tr></thead><tbody id="employeeRows"></tbody></table></div>
+<section class="employee-admin-page">
+  <div class="employee-head">
+    <div>
+      <h2>Quản lý nhân viên toàn hệ thống</h2>
+      <p>Full Employee Management Center cho Admin: hồ sơ, tài khoản, quyền hạn, hợp đồng và điều chuyển.</p>
+    </div>
+    <button class="btn-primary" id="btnAddEmployee">+ Thêm nhân viên</button>
+  </div>
+
+  <div class="summary-grid" id="employeeSummaryCards"></div>
+  <div class="notification-grid" id="employeeAlertCards"></div>
+
+  <div class="card employee-filter-card">
+    <h3>Bộ lọc nhân sự</h3>
+    <div class="filter-grid">
+      <input id="filterName" placeholder="Tên nhân viên">
+      <input id="filterCode" placeholder="Mã nhân viên (EMP-00001)">
+      <input id="filterEmail" placeholder="Email">
+      <select id="filterDepartment"><option value="">Phòng ban</option></select>
+      <select id="filterPosition"><option value="">Chức danh</option></select>
+      <select id="filterRole"><option value="">Role</option></select>
+      <select id="filterWorkingStatus">
+        <option value="">Trạng thái làm việc</option>
+        <option value="working">Đang làm việc</option>
+        <option value="on_leave">Tạm nghỉ</option>
+        <option value="resigned">Đã nghỉ việc</option>
+      </select>
+      <select id="filterEmploymentType">
+        <option value="">Loại hợp đồng</option>
+        <option value="probation">Thử việc</option>
+        <option value="permanent">Chính thức</option>
+        <option value="intern">Thực tập</option>
+        <option value="contract">Hợp đồng</option>
+      </select>
+      <select id="filterProbation">
+        <option value="">Probation</option>
+        <option value="true">Đang probation</option>
+        <option value="false">Không probation</option>
+      </select>
+      <input id="filterHireFrom" type="date" title="Ngày vào làm từ">
+      <input id="filterHireTo" type="date" title="Ngày vào làm đến">
+    </div>
+    <div class="employee-filter-actions">
+      <button class="btn-primary" id="btnFilterEmployees">Tìm kiếm</button>
+      <button class="btn-ghost" id="btnResetFilters">Xóa lọc</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Bảng nhân viên</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã NV</th>
+            <th>Avatar</th>
+            <th>Họ tên</th>
+            <th>Email</th>
+            <th>Điện thoại</th>
+            <th>Phòng ban</th>
+            <th>Chức danh</th>
+            <th>Role</th>
+            <th>Ngày vào làm</th>
+            <th>Loại HĐ</th>
+            <th>Trạng thái làm việc</th>
+            <th>Tài khoản</th>
+            <th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="employeeRows"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
 {% endblock %}
 {% block admin_scripts %}<script>window.ADMIN_PAGE='employees';</script>{% endblock %}
