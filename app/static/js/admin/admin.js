@@ -8,6 +8,7 @@ async function api(url, options = {}) {
 }
 
 const now = new Date();
+let currentUser = null;
 const LABELS = {
   employment: { probation: 'Thử việc', permanent: 'Chính thức', intern: 'Thực tập', contract: 'Hợp đồng' },
   working: { active: 'Đang làm việc', probation: 'Thử việc', on_leave: 'Tạm nghỉ', pending_resignation: 'Chờ nghỉ việc', resigned: 'Đã nghỉ việc', inactive: 'Inactive', terminated: 'Chấm dứt', retired: 'Nghỉ hưu' },
@@ -65,8 +66,10 @@ function employeeFiltersAsQuery() {
   const mapping = {
     keyword,
     name: get('filterName'), employee_code: get('filterCode'), email: get('filterEmail'),
+    phone: get('filterPhone'),
     department_id: get('filterDepartment'), position_id: get('filterPosition'), role_id: get('filterRole'),
-    working_status: get('filterWorkingStatus'), employment_type: get('filterEmploymentType'), probation: get('filterProbation'),
+    working_status: get('filterWorkingStatus'), account_status: get('filterAccountStatus'),
+    employment_type: get('filterEmploymentType'), probation: get('filterProbation'),
     hire_date_from: get('filterHireFrom'), hire_date_to: get('filterHireTo'),
     month: get('month'), year: get('year'), top_department_id: get('department')
   };
@@ -100,14 +103,16 @@ function rowActions(employee) {
   const lockBtn = employee.account_status === 'locked'
     ? `<button onclick="unlockEmployee(${employee.user_id})">Mở khóa</button>`
     : `<button onclick="lockEmployee(${employee.user_id})">Khóa tài khoản</button>`;
+  const disableSelf = currentUser && Number(currentUser.user_id) === Number(employee.user_id);
+  const selfAttr = disableSelf ? 'disabled title="Không thao tác trên chính mình"' : '';
   return `
     <div class="table-actions">
       <button onclick="viewEmployeeDetail(${employee.id})">Xem chi tiết</button>
-      <button onclick="editEmployee(${employee.id})">Chỉnh sửa</button>
-      ${lockBtn}
+      <button onclick="openRolePanel(${employee.user_id})" ${selfAttr}>Phân quyền</button>
+      ${lockBtn.replace('<button ', `<button ${selfAttr} `)}
       <button onclick="resetPassword(${employee.user_id})">Reset mật khẩu</button>
       <button onclick="transferEmployee(${employee.id})">Chuyển phòng ban</button>
-      <button class="btn-danger" onclick="inactiveEmployee(${employee.id})">Set Inactive</button>
+      <button class="btn-danger" onclick="inactiveEmployee(${employee.id})" ${selfAttr}>Set Inactive</button>
       <button onclick="reviewResignationAdmin(${employee.id})">Duyệt nghỉ việc</button>
     </div>`;
 }
@@ -117,19 +122,16 @@ function renderEmployeeRows(rows) {
   tr.innerHTML = rows.length ? rows.map(e => `
     <tr>
       <td>${esc(e.employee_code)}</td>
-      <td>${e.avatar ? `<img src="${esc(e.avatar)}" class="avatar">` : '<span class="avatar-fallback">👤</span>'}</td>
-      <td>${esc(e.full_name)}</td>
+      <td>${e.avatar ? `<img src="${esc(e.avatar)}" class="avatar"> ${esc(e.full_name)}` : esc(e.full_name)}</td>
       <td>${esc(e.email || '--')}</td>
       <td>${esc(e.phone || '--')}</td>
       <td>${esc(e.department || '--')}</td>
       <td>${esc(e.position || '--')}</td>
-      <td>${esc(e.role || '--')}</td>
-      <td>${fmtDate(e.hire_date)}</td>
-      <td><span class="badge b-info">${esc(LABELS.employment[e.employment_type] || e.employment_type || '--')}</span></td>
+      <td>${esc(e.username || '--')}</td>
       <td><span class="badge ${e.working_status ? (e.working_status === 'active' ? 'b-success' : e.working_status === 'on_leave' ? 'b-warning' : 'b-danger') : 'b-warning'}">${esc(LABELS.working[e.working_status] || e.working_status || '--')}</span></td>
       <td><span class="badge ${e.account_status === 'active' ? 'b-success' : e.account_status === 'locked' ? 'b-danger' : 'b-warning'}">${esc(LABELS.account[e.account_status] || e.account_status)}</span></td>
       <td>${rowActions(e)}</td>
-    </tr>`).join('') : '<tr><td colspan="13">Không tìm thấy nhân viên phù hợp</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="10">Không tìm thấy nhân viên phù hợp</td></tr>';
 }
 async function loadEmployees({ notify = false, isReset = false } = {}) {
   try {
@@ -208,19 +210,59 @@ async function addEmployee() {
 
 async function viewEmployeeDetail(id) {
   const d = await api(`/api/admin/employees/${id}`);
-  await Swal.fire({
-    title: `Chi tiết: ${esc(d.full_name)}`,
-    width: 920,
-    html: `<div class="detail-grid">
-      <div><b>Profile</b><p>Email: ${esc(d.email || '--')}</p><p>Phone: ${esc(d.phone || '--')}</p><p>Địa chỉ: ${esc(d.profile?.address || '--')}</p></div>
-      <div><b>Attendance summary</b><p>Số ngày: ${d.attendance_summary?.total_days ?? 0}</p><p>Giờ làm: ${d.attendance_summary?.working_hours ?? 0}</p></div>
-      <div><b>Leave summary</b><p>Pending: ${d.leave_summary?.pending ?? 0}</p><p>Approved: ${d.leave_summary?.approved ?? 0}</p></div>
-      <div><b>Payroll summary</b><p>Lương net: ${(d.payroll_summary?.net_salary ?? 0).toLocaleString('vi-VN')}</p><p>Status: ${esc(d.payroll_summary?.status || '--')}</p></div>
-      <div><b>Contract info</b><p>Mã: ${esc(d.contract_info?.contract_code || '--')}</p><p>Hiệu lực: ${fmtDate(d.contract_info?.start_date)} - ${fmtDate(d.contract_info?.end_date)}</p></div>
-      <div><b>Complaint liên quan</b><p>${(d.complaints || []).length} complaint</p></div>
-      <div class="detail-history"><b>History log</b><ul>${(d.history_log || []).map(h => `<li>${fmtDate(h.time)} - ${esc(h.action)}: ${esc(h.description || '')}</li>`).join('') || '<li>--</li>'}</ul></div>
-    </div>`
+  const panel = document.getElementById('employeeDetailPanel');
+  const content = document.getElementById('employeeDetailContent');
+  if (!panel || !content) return;
+  content.innerHTML = `
+    <div class="detail-grid">
+      <div><h4>Thông tin cá nhân</h4><p>Họ tên: ${esc(d.full_name || '--')}</p><p>Tuổi: ${esc(d.profile?.age || '--')}</p><p>Giới tính: ${esc(d.profile?.gender || '--')}</p><p>SĐT: ${esc(d.phone || '--')}</p><p>Email: ${esc(d.email || '--')}</p><p>Địa chỉ: ${esc(d.profile?.address || '--')}</p></div>
+      <div><h4>Thông tin công việc</h4><p>Phòng ban: ${esc(d.work_info?.department || '--')}</p><p>Chức vụ: ${esc(d.work_info?.position || '--')}</p><p>Manager: ${esc(d.work_info?.manager || '--')}</p><p>Ngày vào làm: ${fmtDate(d.work_info?.hire_date)}</p><p>Loại hợp đồng: ${esc(LABELS.employment[d.work_info?.employment_type] || d.work_info?.employment_type || '--')}</p><p>Trạng thái làm việc: ${esc(LABELS.working[d.work_info?.working_status] || d.work_info?.working_status || '--')}</p></div>
+      <div><h4>Hợp đồng</h4><p>Loại hợp đồng: ${esc(LABELS.employment[d.contract_info?.type] || d.contract_info?.type || '--')}</p><p>Ngày bắt đầu: ${fmtDate(d.contract_info?.start_date)}</p><p>Ngày kết thúc: ${fmtDate(d.contract_info?.end_date)}</p></div>
+      <div><h4>Thu nhập</h4><p>Lương cơ bản: ${(d.income_info?.basic_salary || 0).toLocaleString('vi-VN')} VND</p><p>Phụ cấp: ${(d.income_info?.allowance_total || 0).toLocaleString('vi-VN')} VND</p></div>
+    </div>`;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function openRolePanel(userId) {
+  const rows = await api(`/api/admin/employees?user_id=${userId}`).catch(() => []);
+  const employee = (rows || []).find((item) => Number(item.user_id) === Number(userId));
+  const roleOptions = Array.from(document.getElementById('filterRole')?.options || [])
+    .filter((opt) => opt.value)
+    .map((opt) => `<option value="${opt.value}">${esc(opt.textContent || '')}</option>`)
+    .join('');
+  const { isConfirmed, value } = await Swal.fire({
+    title: 'Phân quyền tài khoản',
+    html: `
+      <p><b>${esc(employee?.full_name || employee?.username || '--')}</b></p>
+      <p>${esc(employee?.email || '--')}</p>
+      <p>Role hiện tại: <b>${esc(employee?.role || '--')}</b></p>
+      <select id="roleAssign" class="swal2-input">${roleOptions}</select>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Save',
+    cancelButtonText: 'Cancel',
+    didOpen: () => {
+      const select = document.getElementById('roleAssign');
+      if (select && employee?.role_id) select.value = String(employee.role_id);
+    },
+    preConfirm: async () => {
+      const roleId = Number(document.getElementById('roleAssign').value);
+      const ask = await Swal.fire({
+        title: 'Xác nhận phân quyền?',
+        text: 'Thay đổi role sẽ ảnh hưởng phạm vi truy cập của nhân viên.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Xác nhận'
+      });
+      if (!ask.isConfirmed) return false;
+      return { role_id: roleId };
+    }
   });
+  if (!isConfirmed || !value) return;
+  await api(`/api/admin/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify(value) });
+  await Swal.fire({ icon: 'success', title: 'Đã cập nhật role' });
+  loadEmployees();
 }
 
 async function editEmployee(id) {
@@ -318,7 +360,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnAddEmployee')?.addEventListener('click', addEmployee);
   document.getElementById('btnFilterEmployees')?.addEventListener('click', () => loadEmployees({ notify: true }));
   document.getElementById('btnResetFilters')?.addEventListener('click', () => {
-    ['filterName', 'filterCode', 'filterEmail', 'filterDepartment', 'filterPosition', 'filterRole', 'filterWorkingStatus', 'filterEmploymentType', 'filterProbation', 'filterHireFrom', 'filterHireTo']
+    ['filterName', 'filterCode', 'filterEmail', 'filterPhone', 'filterDepartment', 'filterPosition', 'filterRole', 'filterWorkingStatus', 'filterAccountStatus', 'filterEmploymentType', 'filterProbation', 'filterHireFrom', 'filterHireTo']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const monthEl = document.getElementById('month');
     const yearEl = document.getElementById('year');
@@ -328,6 +370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (departmentEl) departmentEl.value = '';
     loadEmployees({ notify: true, isReset: true });
   });
+  currentUser = await api('/api/auth/me').catch(() => null);
   document.getElementById('btnTopFilter')?.addEventListener('click', async (event) => {
     event.preventDefault();
     if (window.ADMIN_PAGE === 'employees') {

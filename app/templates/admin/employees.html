@@ -14,22 +14,30 @@
   <div class="card employee-filter-card">
     <h3>Bộ lọc nhân sự</h3>
     <div class="filter-grid">
-      <input id="filterName" placeholder="Tên nhân viên">
+      <input id="filterName" placeholder="Tìm tên, email hoặc SDT...">
       <input id="filterCode" placeholder="Mã nhân viên (EMP-00001)">
       <input id="filterEmail" placeholder="Email">
+      <input id="filterPhone" placeholder="Số điện thoại">
       <select id="filterDepartment"><option value="">Phòng ban</option></select>
       <select id="filterPosition"><option value="">Chức danh</option></select>
       <select id="filterRole"><option value="">Role</option></select>
       <select id="filterWorkingStatus">
         <option value="">Trạng thái làm việc</option>
         <option value="active">Đang làm việc</option>
-        <option value="probation">Thử việc</option>
-        <option value="on_leave">Tạm nghỉ</option>
-        <option value="pending_resignation">Chờ nghỉ việc</option>
+        <option value="on_leave">Nghỉ phép</option>
         <option value="resigned">Đã nghỉ việc</option>
+        <option value="probation">Thử việc</option>
+        <option value="pending_resignation">Chờ nghỉ việc</option>
         <option value="inactive">Inactive</option>
         <option value="terminated">Chấm dứt</option>
         <option value="retired">Nghỉ hưu</option>
+      </select>
+      <select id="filterAccountStatus">
+        <option value="">Trạng thái tài khoản</option>
+        <option value="active">Active</option>
+        <option value="locked">Locked</option>
+        <option value="inactive">Inactive</option>
+        <option value="pending">Pending</option>
       </select>
       <select id="filterEmploymentType">
         <option value="">Loại hợp đồng</option>
@@ -58,24 +66,25 @@
       <table>
         <thead>
           <tr>
-            <th>Mã NV</th>
-            <th>Avatar</th>
-            <th>Họ tên</th>
+            <th>Mã nhân viên</th>
+            <th>Tên nhân viên</th>
             <th>Email</th>
             <th>Điện thoại</th>
             <th>Phòng ban</th>
             <th>Chức danh</th>
-            <th>Role</th>
-            <th>Ngày vào làm</th>
-            <th>Loại HĐ</th>
+           <th>Tên tài khoản</th>
             <th>Trạng thái làm việc</th>
-            <th>Tài khoản</th>
+            <th>Trạng thái tài khoản</th>
             <th>Hành động</th>
           </tr>
         </thead>
         <tbody id="employeeRows"></tbody>
       </table>
     </div>
+  </div>
+  <div class="card" id="employeeDetailPanel" style="display:none">
+    <h3>Hồ sơ nhân viên</h3>
+    <div id="employeeDetailContent"></div>
   </div>
 </section>
 {% endblock %}

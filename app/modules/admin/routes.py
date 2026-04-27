@@ -27,7 +27,7 @@ from app.models import (
     SystemSetting,
     User,
 )
-
+from app.modules.resignation_service import ResignationService
 from . import admin_bp
 from . import service as admin_service
 
@@ -40,6 +40,11 @@ def _guard_login():
     if not session.get("user_id"):
         return redirect(url_for("auth.login", next=request.url))
     return None
+def _guard_admin_access() -> bool:
+    user = _current_user()
+    if not user:
+        return True
+    return (user.role.name.lower() if user.role else "") != "admin"
 
 
 def _role_name(user: User | None) -> str:
@@ -709,7 +714,10 @@ def admin_soft_delete_employee(employee_id: int):
     actor = _current_user()
     if not actor:
         return jsonify({"error": "unauthorized"}), 401
-    admin_service.soft_delete_employee(employee_id, actor.id)
+    try:
+        admin_service.soft_delete_employee(employee_id, actor.id)
+    except admin_service.ServiceValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"success": True})
 @admin_bp.patch("/api/admin/users/<int:user_id>/lock")
 def lock_user(user_id: int):

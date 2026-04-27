@@ -15,6 +15,8 @@ from app.models import (
     Contract,
     Department,
     Employee,
+    EmployeeAllowance,
+    EmployeeAllowance,
     HistoryLog,
     LeaveRequest,
     Notification,
@@ -93,6 +95,14 @@ def _user_employee_to_row(user: User | None, employee: Employee | None) -> dict[
             "end_date": latest_contract.end_date.isoformat() if latest_contract and latest_contract.end_date else None,
             "status": latest_contract.status if latest_contract else None,
             "basic_salary": float(latest_contract.basic_salary) if latest_contract and latest_contract.basic_salary is not None else None,
+        },
+        "income_info": {
+            "basic_salary": float(latest_contract.basic_salary) if latest_contract and latest_contract.basic_salary is not None else 0,
+            "allowance_total": float(allowance_total or 0),
+        },
+        "income_info": {
+            "basic_salary": float(latest_contract.basic_salary) if latest_contract and latest_contract.basic_salary is not None else 0,
+            "allowance_total": float(allowance_total or 0),
         },
     }
 
@@ -208,11 +218,17 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
     keyword = (filters.get("keyword") or "").strip()
     employee_code = (filters.get("employee_code") or "").strip().upper()
     email = (filters.get("email") or "").strip()
+    phone = (filters.get("phone") or "").strip()
+    user_id = filters.get("user_id", type=int) if hasattr(filters, "get") else filters.get("user_id")
+    phone = (filters.get("phone") or "").strip()
+    user_id = filters.get("user_id", type=int) if hasattr(filters, "get") else filters.get("user_id")
     department_id = filters.get("department_id", type=int) if hasattr(filters, "get") else filters.get("department_id")
     top_department_id = filters.get("top_department_id", type=int) if hasattr(filters, "get") else filters.get("top_department_id")
     position_id = filters.get("position_id", type=int) if hasattr(filters, "get") else filters.get("position_id")
     role_id = filters.get("role_id", type=int) if hasattr(filters, "get") else filters.get("role_id")
     working_status = (filters.get("working_status") or "").strip()
+    account_status = (filters.get("account_status") or "").strip()
+    account_status = (filters.get("account_status") or "").strip()
     employment_type = (filters.get("employment_type") or "").strip()
     probation = (filters.get("probation") or "").strip()
     month = filters.get("month", type=int) if hasattr(filters, "get") else filters.get("month")
@@ -229,7 +245,10 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
                 func.cast(Employee.id, db.String).ilike(f"%{keyword}%"),
                 User.username.ilike(f"%{keyword}%"),
                 User.email.ilike(f"%{keyword}%"),
+                Employee.phone.ilike(f"%{keyword}%"),
+                Employee.phone.ilike(f"%{keyword}%"),
             )
+
         )
     if employee_code.startswith("EMP-") and employee_code[4:].isdigit():
         q = q.filter(Employee.id == int(employee_code[4:]))
@@ -237,6 +256,14 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
         q = q.filter(func.cast(Employee.id, db.String).ilike(f"%{employee_code.replace('EMP-', '')}%"))
     if email:
         q = q.filter(User.email.ilike(f"%{email}%"))
+    if phone:
+        q = q.filter(Employee.phone.ilike(f"%{phone}%"))
+    if user_id:
+        q = q.filter(User.id == int(user_id))
+    if phone:
+        q = q.filter(Employee.phone.ilike(f"%{phone}%"))
+    if user_id:
+        q = q.filter(User.id == int(user_id))
     if department_id:
         q = q.filter(Employee.department_id == int(department_id))
     if top_department_id:
@@ -247,6 +274,38 @@ def query_employees(filters: dict[str, Any]) -> list[dict[str, Any]]:
         q = q.filter(User.role_id == int(role_id))
     if working_status:
         q = q.filter(Employee.working_status == working_status)
+    if account_status:
+        if account_status == "active":
+            q = q.filter(User.is_active.is_(True), User.is_deleted.is_(False))
+        elif account_status == "locked":
+            q = q.filter(User.is_active.is_(False), User.locked_at.isnot(None), User.is_deleted.is_(False))
+        elif account_status == "inactive":
+            q = q.filter(
+                or_(
+                    User.is_deleted.is_(True),
+                    db.and_(User.is_active.is_(False), User.locked_at.is_(None)),
+                )
+            )
+        elif account_status == "pending":
+            q = q.filter(User.id.is_(None))
+        else:
+            raise ServiceValidationError("Trạng thái tài khoản không hợp lệ")
+    if account_status:
+        if account_status == "active":
+            q = q.filter(User.is_active.is_(True), User.is_deleted.is_(False))
+        elif account_status == "locked":
+            q = q.filter(User.is_active.is_(False), User.locked_at.isnot(None), User.is_deleted.is_(False))
+        elif account_status == "inactive":
+            q = q.filter(
+                or_(
+                    User.is_deleted.is_(True),
+                    db.and_(User.is_active.is_(False), User.locked_at.is_(None)),
+                )
+            )
+        elif account_status == "pending":
+            q = q.filter(User.id.is_(None))
+        else:
+            raise ServiceValidationError("Trạng thái tài khoản không hợp lệ")
     if employment_type:
         q = q.filter(Employee.employment_type == employment_type)
     if probation == "true":
@@ -408,6 +467,14 @@ def employee_detail(employee_id: int) -> dict[str, Any]:
 
     payroll_summary = Salary.query.filter_by(employee_id=employee.id, month=current_month, year=current_year, is_deleted=False).first()
     latest_contract = employee.contracts.order_by(Contract.start_date.desc(), Contract.created_at.desc()).first()
+    allowance_total = db.session.query(func.coalesce(func.sum(EmployeeAllowance.amount), 0)).filter(
+        EmployeeAllowance.employee_id == employee.id,
+        EmployeeAllowance.status.is_(True),
+    ).scalar()
+    allowance_total = db.session.query(func.coalesce(func.sum(EmployeeAllowance.amount), 0)).filter(
+        EmployeeAllowance.employee_id == employee.id,
+        EmployeeAllowance.status.is_(True),
+    ).scalar()
     history = HistoryLog.query.filter(
         or_(HistoryLog.employee_id == employee.id, db.and_(HistoryLog.entity_type == "user", HistoryLog.entity_id == employee.user_id))
     ).order_by(HistoryLog.created_at.desc()).limit(20).all()
@@ -418,8 +485,26 @@ def employee_detail(employee_id: int) -> dict[str, Any]:
     row.update({
         "profile": {
             "dob": employee.dob.isoformat() if employee.dob else None,
+            "age": employee.age,
+            "age": employee.age,
             "gender": employee.gender,
             "address": employee.address_detail or employee.address,
+        },
+        "work_info": {
+            "department": employee.department.name if employee.department else None,
+            "position": employee.position.job_title if employee.position else None,
+            "manager": employee.manager.full_name if employee.manager else None,
+            "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
+            "employment_type": employee.employment_type,
+            "working_status": employee.working_status,
+        },
+        "work_info": {
+            "department": employee.department.name if employee.department else None,
+            "position": employee.position.job_title if employee.position else None,
+            "manager": employee.manager.full_name if employee.manager else None,
+            "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
+            "employment_type": employee.employment_type,
+            "working_status": employee.working_status,
         },
         "attendance_summary": {
             "total_days": int(attendance_summary.total or 0),
@@ -434,6 +519,8 @@ def employee_detail(employee_id: int) -> dict[str, Any]:
         },
         "contract_info": {
             "contract_code": latest_contract.contract_code if latest_contract else None,
+            "type": employee.employment_type,
+            "type": employee.employment_type,
             "start_date": latest_contract.start_date.isoformat() if latest_contract else None,
             "end_date": latest_contract.end_date.isoformat() if latest_contract and latest_contract.end_date else None,
             "status": latest_contract.status if latest_contract else None,
@@ -542,6 +629,10 @@ def update_employee(employee_id: int, payload: dict[str, Any], actor_id: int) ->
 
 def soft_delete_employee(employee_id: int, actor_id: int) -> None:
     employee = Employee.query.filter_by(id=employee_id, is_deleted=False).first_or_404()
+    if employee.user_id == actor_id:
+        raise ServiceValidationError("Admin không thể tự set inactive chính mình")
+    if employee.user_id == actor_id:
+        raise ServiceValidationError("Admin không thể tự set inactive chính mình")
     employee.is_deleted = True
     employee.working_status = "resigned"
     if employee.user:
