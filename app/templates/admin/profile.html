@@ -13,7 +13,7 @@
       <h2>{{ employee.full_name }}</h2>
       <p>Lần đăng nhập gần nhất: {{ (user.updated_at or user.created_at).strftime('%d/%m/%Y %H:%M') if (user.updated_at or user.created_at) else 'N/A' }}</p>
     </div>
-    <div class="overview-meta"></div>
+    <div class="overview-meta">
       <span class="chip">Trạng thái tài khoản: {{ 'Đang hoạt động' if user.is_active else 'Đã khóa' }}</span>
       <span class="chip">Role: {{ user.role.name if user.role else 'ADMIN' }}</span>
       <span class="chip">Mã nhân viên: {{ employee_code }}</span>

@@ -165,7 +165,10 @@
 }
 
 .field {
-  min-width: 0;
+min-width: 0;
+display: flex;
+flex-direction: column;
+gap: 6px;
 }
 
 .grid-form label,
@@ -173,19 +176,34 @@
   display: block;
   font-size: 13px;
   color: #64748b;
-  margin-bottom: 6px;
   font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+  word-break: normal;
+  white-space: normal;
 }
 
 .grid-form input,
 .security-card input {
+  display: block;
   width: 100%;
+  max-width: 100%;
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   font-size: 14px;
   background: #fff;
+}
+.admin-profile-page .tabs,
+.admin-profile-page .tab,
+.admin-profile-page .tab-pane,
+.admin-profile-page .table-wrap,
+.admin-profile-page .danger,
+.admin-profile-page .primary,
+.admin-profile-page .field,
+.admin-profile-page .full {
+  box-sizing: border-box;
 }
 
 .read-grid p {
