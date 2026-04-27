@@ -63,3 +63,17 @@ th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-si
 .position-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .position-detail-grid h4{margin:0 0 8px}
 .position-detail-grid p{margin:6px 0}
+
+.attendance-admin-page{display:flex;flex-direction:column;gap:14px}
+.attendance-head h2{margin:0}.attendance-head p{margin:4px 0 0;color:var(--muted)}
+.attendance-action-bar{display:flex;flex-direction:column;gap:10px}
+.attendance-filters-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.attendance-filters-grid input,.attendance-filters-grid select{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px}
+.attendance-action-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.attendance-summary-grid{grid-template-columns:repeat(7,minmax(0,1fr))}
+.badge-lock{background:var(--info);color:#fff}
+.badge-normal{background:var(--success);color:#fff}
+.badge-late{background:var(--warning);color:#fff}
+.badge-ot{background:#f97316;color:#fff}
+.badge-abnormal{background:var(--danger);color:#fff}
+.attendance-action-select{width:100%;padding:7px;border:1px solid var(--border);border-radius:8px;background:#fff}

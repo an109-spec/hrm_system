@@ -796,9 +796,210 @@ async function handlePositionAction(id, action) {
 window.handlePositionAction = handlePositionAction;
 window.createPositionPrompt = () => openPositionForm('create');
 
-async function loadAttendanceSummary() { setDefaults(); const m = month.value, y = year.value; const rows = await api(`/api/admin/attendance/summary?month=${m}&year=${y}`); attendanceRows.innerHTML = rows.map(r => `<tr><td>${r.department_name}</td><td>${r.employee_count}</td><td>${r.total_work}</td><td>${r.late_count}</td><td>${r.absent_count}</td></tr>`).join(''); const logs = await api(`/api/admin/attendance/audit-log?month=${m}&year=${y}`); attendanceAudit.innerHTML = logs.map(l => `<li>${l.time || ''} | ${l.action} | ${l.description || ''}</li>`).join(''); }
-async function lockMonth() { setDefaults(); await api('/api/admin/attendance/lock-month', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value }) }); loadAttendanceSummary(); }
-async function reopenMonth() { setDefaults(); const { value: reason } = await Swal.fire({ title: 'Nhập lý do mở lại công', input: 'text', showCancelButton: true }); if (reason === undefined) return; await api('/api/admin/attendance/reopen-month', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value, reason: reason || '' }) }); await Swal.fire({ icon: 'success', title: 'Đã mở lại bảng công' }); loadAttendanceSummary(); }
+function attendanceFilterPayload() {
+  return {
+    keyword: document.getElementById('attendanceSearch')?.value?.trim() || '',
+    department_id: document.getElementById('attendanceDepartment')?.value || '',
+    status: document.getElementById('attendanceStatus')?.value || '',
+    month: document.getElementById('attendanceMonth')?.value || (now.getMonth() + 1),
+    year: document.getElementById('attendanceYear')?.value || now.getFullYear(),
+    shift_type: document.getElementById('attendanceShiftType')?.value || '',
+    ot_status: document.getElementById('attendanceOtStatus')?.value || ''
+  };
+}
+
+function attendanceStatusBadge(status) {
+  if (status === 'normal') return '<span class="badge badge-normal">Bình thường</span>';
+  if (status === 'late_early') return '<span class="badge badge-late">Đi muộn / Về sớm</span>';
+  if (status === 'ot_pending') return '<span class="badge badge-ot">Chờ duyệt OT</span>';
+  return '<span class="badge badge-abnormal">Bất thường / Vắng không phép</span>';
+}
+
+function attendanceRowActions(row) {
+  const disabled = row.lock_status === 'locked' ? 'disabled' : '';
+  return `
+    <select class="attendance-action-select" onchange="handleAttendanceAction('${row.attendance_id}', this.value)" ${disabled}>
+      <option value="">Chọn hành động</option>
+      <option value="detail">Xem chi tiết</option>
+      <option value="edit">Chỉnh sửa công thủ công</option>
+      <option value="approve_ot">Duyệt OT</option>
+      <option value="abnormal">Đánh dấu bất thường</option>
+      <option value="reopen">Mở lại công</option>
+      <option value="lock_employee">Khóa công nhân viên</option>
+    </select>
+  `;
+}
+
+function renderAttendanceSummaryCards(stats) {
+  const wrap = document.getElementById('attendanceSummaryCards');
+  if (!wrap) return;
+  const cards = [
+    ['Tổng nhân viên đi làm', stats.present_total],
+    ['Đi muộn', stats.late_total],
+    ['Nghỉ phép', stats.leave_total],
+    ['OT chờ duyệt', stats.ot_pending],
+    ['Chấm công bất thường', stats.abnormal_total],
+    ['Đã chốt công', stats.locked_total],
+    ['Chưa chốt công', stats.unlocked_total]
+  ];
+  wrap.innerHTML = cards.map(([title, value]) => `<article class="summary-card"><h4>${title}</h4><p>${value || 0}</p></article>`).join('');
+}
+
+function fillAttendanceRows(rows) {
+  const body = document.getElementById('attendanceRows');
+  if (!body) return;
+  body.innerHTML = rows.length ? rows.map((r) => `
+    <tr>
+      <td>${esc(r.employee_code)}</td>
+      <td>${esc(r.employee_name)}</td>
+      <td>${esc(r.department)}</td>
+      <td>${esc(r.position)}</td>
+      <td>${fmtDate(r.work_date)}</td>
+      <td>${r.check_in ? new Date(r.check_in).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+      <td>${r.check_out ? new Date(r.check_out).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+      <td>${r.working_hours}</td>
+      <td>${r.regular_hours}</td>
+      <td>${r.overtime_hours}</td>
+      <td>${esc(r.late_early_text || '--')}</td>
+      <td>${attendanceStatusBadge(r.status)}</td>
+      <td>${r.lock_status === 'locked' ? '<span class="badge badge-lock">Đã chốt công</span>' : '<span class="badge b-warning">Chưa chốt</span>'}</td>
+      <td>${attendanceRowActions(r)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="14">Không có dữ liệu attendance phù hợp.</td></tr>';
+}
+
+async function loadAttendanceSummary() {
+  const f = attendanceFilterPayload();
+  const query = new URLSearchParams(f).toString();
+  const [rows, stats, logs] = await Promise.all([
+    api(`/api/admin/attendance/records?${query}`),
+    api(`/api/admin/attendance/stats?month=${f.month}&year=${f.year}`),
+    api(`/api/admin/attendance/audit-log?month=${f.month}&year=${f.year}`)
+  ]);
+  fillAttendanceRows(rows);
+  renderAttendanceSummaryCards(stats);
+  const logEl = document.getElementById('attendanceAudit');
+  if (logEl) logEl.innerHTML = logs.map(l => `<li>${fmtDate(l.time)} ${l.action} | ${esc(l.description || '')}</li>`).join('') || '<li>Chưa có log.</li>';
+}
+
+async function lockMonth() {
+  const f = attendanceFilterPayload();
+  const confirm = await Swal.fire({
+    title: `Xác nhận chốt công tháng ${String(f.month).padStart(2, '0')}/${f.year}?`,
+    html: 'Sau khi chốt:<br>- không thể chỉnh sửa attendance<br>- dữ liệu sẽ chuyển sang tính lương<br>- chỉ Admin mới có thể mở lại',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Chốt công',
+    cancelButtonText: 'Hủy'
+  });
+  if (!confirm.isConfirmed) return;
+  await api('/api/admin/attendance/lock-month', { method: 'POST', body: JSON.stringify({ month: +f.month, year: +f.year }) });
+  await Swal.fire({ icon: 'success', title: 'Đã chốt công tháng' });
+  await loadAttendanceSummary();
+}
+
+async function reopenMonth() {
+  const f = attendanceFilterPayload();
+  const { isConfirmed, value } = await Swal.fire({
+    title: 'Lý do mở lại công:',
+    input: 'text',
+    inputPlaceholder: 'Nhập lý do bắt buộc',
+    showCancelButton: true,
+    confirmButtonText: 'Mở lại công',
+    preConfirm: (v) => {
+      if (!v || !v.trim()) {
+        Swal.showValidationMessage('Vui lòng nhập lý do mở lại công');
+        return false;
+      }
+      return v.trim();
+    }
+  });
+  if (!isConfirmed) return;
+  await api('/api/admin/attendance/reopen-month', { method: 'POST', body: JSON.stringify({ month: +f.month, year: +f.year, reason: value }) });
+  await Swal.fire({ icon: 'success', title: 'Đã mở lại bảng công' });
+  await loadAttendanceSummary();
+}
+
+async function handleAttendanceAction(attendanceId, action) {
+  if (!action) return;
+  const record = await api(`/api/admin/attendance/records?month=${attendanceFilterPayload().month}&year=${attendanceFilterPayload().year}`)
+    .then((rows) => rows.find((x) => Number(x.attendance_id) === Number(attendanceId)));
+  if (!record) return;
+  if (action === 'detail') {
+    await Swal.fire({ title: `${record.employee_name} - ${fmtDate(record.work_date)}`, html: `<p>Giờ vào: ${record.check_in || '--'}</p><p>Giờ ra: ${record.check_out || '--'}</p><p>Trạng thái: ${record.status_label}</p>`, icon: 'info' });
+  } else if (action === 'edit') {
+    const { isConfirmed, value } = await Swal.fire({
+      title: 'Chỉnh sửa công thủ công',
+      html: `
+        <input id="adCheckIn" class="swal2-input" type="datetime-local">
+        <input id="adCheckOut" class="swal2-input" type="datetime-local">
+        <input id="adOvertimeHours" class="swal2-input" type="number" min="0" step="0.5" placeholder="Số giờ OT">
+        <select id="adAttendanceType" class="swal2-input"><option value="normal">Bình thường</option><option value="late_early">Đi muộn / Về sớm</option><option value="abnormal">Bất thường</option></select>
+        <textarea id="adNote" class="swal2-textarea" placeholder="Ghi chú điều chỉnh: Quên check-in / Máy chấm công lỗi / Đi công tác..."></textarea>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Lưu chỉnh sửa',
+      preConfirm: () => ({
+        check_in: document.getElementById('adCheckIn').value || null,
+        check_out: document.getElementById('adCheckOut').value || null,
+        overtime_hours: Number(document.getElementById('adOvertimeHours').value || 0),
+        attendance_type: document.getElementById('adAttendanceType').value,
+        note: document.getElementById('adNote').value
+      })
+    });
+    if (!isConfirmed) return;
+    await api(`/api/admin/attendance/${attendanceId}/manual-update`, { method: 'POST', body: JSON.stringify(value) });
+    await Swal.fire({ icon: 'success', title: 'Đã cập nhật chấm công' });
+  } else if (action === 'approve_ot') {
+    await openPendingOvertimePanel();
+  } else if (action === 'abnormal') {
+    const { isConfirmed, value } = await Swal.fire({ title: 'Đánh dấu bất thường', input: 'text', inputLabel: 'Lý do xử lý bất thường', showCancelButton: true, confirmButtonText: 'Xác nhận' });
+    if (!isConfirmed) return;
+    await api(`/api/admin/attendance/${attendanceId}/mark-abnormal`, { method: 'POST', body: JSON.stringify({ note: value || '' }) });
+    await Swal.fire({ icon: 'success', title: 'Đã đánh dấu bất thường' });
+  } else if (action === 'reopen') {
+    await reopenMonth();
+  } else if (action === 'lock_employee') {
+    await api(`/api/admin/attendance/${attendanceId}/manual-update`, { method: 'POST', body: JSON.stringify({ attendance_type: 'locked', note: 'Admin khóa công nhân viên' }) });
+    await Swal.fire({ icon: 'success', title: 'Đã khóa công nhân viên' });
+  }
+  await loadAttendanceSummary();
+}
+
+async function openPendingOvertimePanel() {
+  const f = attendanceFilterPayload();
+  const pending = await api(`/api/admin/attendance/overtime/pending?month=${f.month}&year=${f.year}`);
+  if (!pending.length) {
+    await Swal.fire({ icon: 'info', title: 'Không có yêu cầu OT chờ Admin duyệt' });
+    return;
+  }
+  const html = `<div style="text-align:left;max-height:320px;overflow:auto">${pending.map((r) => `
+    <div style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px">
+      <b>${esc(r.employee_name)}</b> (${esc(r.employee_code)}) - ${esc(r.department)}<br>
+      ${fmtDate(r.date)} | ${r.hours} giờ<br>${esc(r.reason || '')}
+      <div style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button></div>
+    </div>`).join('')}</div>`;
+  await Swal.fire({ title: 'Duyệt tăng ca cuối cùng', html, width: 800, showConfirmButton: false, showCancelButton: true });
+}
+
+async function finalReviewOt(id, action) {
+  const { value: note, isConfirmed } = await Swal.fire({
+    title: action === 'approve' ? 'Duyệt OT' : 'Từ chối OT',
+    input: 'text',
+    inputPlaceholder: action === 'approve' ? 'Ghi chú duyệt OT' : 'Lý do từ chối',
+    showCancelButton: true,
+    confirmButtonText: 'Xác nhận'
+  });
+  if (!isConfirmed) return;
+  await api(`/api/admin/attendance/overtime/${id}/final-review`, { method: 'POST', body: JSON.stringify({ action, note: note || '' }) });
+  await Swal.fire({ icon: 'success', title: action === 'approve' ? 'Đã duyệt OT' : 'Đã từ chối OT' });
+  if (action === 'reject') {
+    await Swal.fire({ icon: 'warning', title: 'OT không được tính lương' });
+  }
+  await loadAttendanceSummary();
+}
+window.handleAttendanceAction = handleAttendanceAction;
+window.finalReviewOt = finalReviewOt;
 
 async function loadSalaryAggregate() { setDefaults(); const g = document.getElementById('groupBy').value; const m = month.value, y = year.value; const res = await api(`/api/admin/salaries/aggregate?month=${m}&year=${y}&group_by=${g}`); salaryStatus.textContent = `Trạng thái: ${res.status}`; salaryRows.innerHTML = res.data.map(r => `<tr><td>${r.group_name}</td><td>${r.employee_count}</td><td>${r.total_salary}</td><td>${r.avg_salary}</td></tr>`).join(''); const logs = await api('/api/admin/salaries/audit'); salaryAudit.innerHTML = logs.map(l => `<li>${l.time || ''} | ${l.action} | ${l.description || ''}</li>`).join(''); }
 async function lockSalary() { setDefaults(); await api('/api/admin/salaries/lock', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value }) }); loadSalaryAggregate(); }
@@ -864,7 +1065,41 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (currentPositionDetailId) deactivatePositionWithChecks(currentPositionDetailId);
     });
   }
-  if (window.ADMIN_PAGE === 'attendance') await loadAttendanceSummary();
+  if (window.ADMIN_PAGE === 'attendance') {
+    const monthEl = document.getElementById('attendanceMonth');
+    const yearEl = document.getElementById('attendanceYear');
+    if (monthEl) {
+      monthEl.innerHTML = '<option value="">Tháng</option>' + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">Tháng ${i + 1}</option>`).join('');
+      monthEl.value = String(now.getMonth() + 1);
+    }
+    if (yearEl) {
+      const currentYear = now.getFullYear();
+      yearEl.innerHTML = '<option value="">Năm</option>' + [currentYear - 1, currentYear, currentYear + 1].map((y) => `<option value="${y}">${y}</option>`).join('');
+      yearEl.value = String(currentYear);
+    }
+    const depSelect = document.getElementById('attendanceDepartment');
+    if (depSelect) {
+      const deps = await api('/api/departments').catch(() => []);
+      depSelect.innerHTML = '<option value="">Phòng ban</option>' + deps.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    }
+    document.getElementById('btnAttendanceFilter')?.addEventListener('click', () => loadAttendanceSummary());
+    ['attendanceMonth', 'attendanceYear', 'attendanceDepartment', 'attendanceStatus', 'attendanceShiftType', 'attendanceOtStatus'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => loadAttendanceSummary());
+    });
+    document.getElementById('attendanceSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAttendanceSummary(); });
+    document.getElementById('btnLockAttendanceMonth')?.addEventListener('click', () => lockMonth());
+    document.getElementById('btnExportAttendance')?.addEventListener('click', () => {
+      const f = attendanceFilterPayload();
+      window.location.href = `/api/admin/attendance/export?month=${f.month}&year=${f.year}`;
+    });
+    document.getElementById('btnApproveOt')?.addEventListener('click', () => openPendingOvertimePanel());
+    document.getElementById('btnHandleAbnormal')?.addEventListener('click', async () => {
+      const { isConfirmed, value } = await Swal.fire({ title: 'Xử lý bất thường', input: 'text', inputLabel: 'Nhập mã attendance ID cần xử lý', showCancelButton: true });
+      if (!isConfirmed || !value) return;
+      await handleAttendanceAction(value, 'abnormal');
+    });
+    await loadAttendanceSummary();
+  }
   if (window.ADMIN_PAGE === 'salary') await loadSalaryAggregate();
 });
 

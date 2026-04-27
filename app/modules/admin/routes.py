@@ -20,6 +20,7 @@ from app.models import (
     EmployeeAllowance,
     HistoryLog,
     LeaveRequest,
+    OvertimeRequest,
     Position,
     Role,
     ResignationRequest,
@@ -1209,7 +1210,27 @@ def disable_position(pid: int):
 def _month_lock_key(month: int, year: int) -> str:
     return f"attendance_lock:{year}-{month}"
 
+def _is_month_locked(month: int, year: int) -> bool:
+    row = SystemSetting.query.filter_by(key=_month_lock_key(month, year)).first()
+    return bool(row and row.value == "locked")
 
+
+def _attendance_base_query(month: int, year: int):
+    return (
+        db.session.query(Attendance, Employee, Department, Position, Role, AttendanceStatus)
+        .join(Employee, Employee.id == Attendance.employee_id)
+        .join(User, User.id == Employee.user_id, isouter=True)
+        .join(Role, Role.id == User.role_id, isouter=True)
+        .join(Department, Department.id == Employee.department_id, isouter=True)
+        .join(Position, Position.id == Employee.position_id, isouter=True)
+        .join(AttendanceStatus, AttendanceStatus.id == Attendance.status_id, isouter=True)
+        .filter(
+            func.extract("month", Attendance.date) == month,
+            func.extract("year", Attendance.date) == year,
+            Employee.is_attendance_required.is_(True),
+            func.coalesce(Role.name, "").notin_(["Admin", "HR"]),
+        )
+    )
 @admin_bp.get("/api/admin/attendance/summary")
 def attendance_summary():
     month = request.args.get("month", type=int) or datetime.utcnow().month
@@ -1236,7 +1257,132 @@ def attendance_summary():
         "absent_count": int(r.absent_count or 0),
     } for r in rows])
 
+@admin_bp.get("/api/admin/attendance/stats")
+def attendance_stats():
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    records = _attendance_base_query(month, year).all()
+    if not records:
+        return jsonify({
+            "present_total": 0,
+            "late_total": 0,
+            "leave_total": 0,
+            "ot_pending": 0,
+            "abnormal_total": 0,
+            "locked_total": 0,
+            "unlocked_total": 0,
+        })
 
+    present_total = late_total = leave_total = abnormal_total = locked_total = 0
+    for att, _, _, _, _, status in records:
+        code = (status.status_name if status else "").upper()
+        atype = (att.attendance_type or "").lower()
+        if code in {"PRESENT", "LEAVE"} or atype in {"normal", "overtime", "holiday", "leave_approved"}:
+            present_total += 1
+        if code == "LATE" or atype in {"late", "early", "late_early"}:
+            late_total += 1
+        if code == "LEAVE" or atype == "leave_approved":
+            leave_total += 1
+        if code == "ABSENT" or atype in {"abnormal", "abnormal_rejected", "absent"}:
+            abnormal_total += 1
+        if _is_month_locked(att.date.month, att.date.year):
+            locked_total += 1
+
+    ot_pending = (
+        db.session.query(func.count(OvertimeRequest.id))
+        .join(Employee, Employee.id == OvertimeRequest.employee_id)
+        .join(User, User.id == Employee.user_id, isouter=True)
+        .join(Role, Role.id == User.role_id, isouter=True)
+        .filter(
+            func.extract("month", OvertimeRequest.overtime_date) == month,
+            func.extract("year", OvertimeRequest.overtime_date) == year,
+            OvertimeRequest.status == "pending_admin",
+            Employee.is_attendance_required.is_(True),
+            func.coalesce(Role.name, "").notin_(["Admin", "HR"]),
+        )
+        .scalar()
+    )
+    return jsonify({
+        "present_total": int(present_total),
+        "late_total": int(late_total),
+        "leave_total": int(leave_total),
+        "ot_pending": int(ot_pending or 0),
+        "abnormal_total": int(abnormal_total),
+        "locked_total": int(locked_total),
+        "unlocked_total": int(len(records) - locked_total),
+    })
+
+
+@admin_bp.get("/api/admin/attendance/records")
+def attendance_records():
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    department_id = request.args.get("department_id", type=int)
+    keyword = (request.args.get("keyword") or "").strip().lower()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    shift_type = (request.args.get("shift_type") or "").strip().lower()
+    ot_status = (request.args.get("ot_status") or "").strip().lower()
+
+    query = _attendance_base_query(month, year)
+    if department_id:
+        query = query.filter(Employee.department_id == department_id)
+    if keyword:
+        query = query.filter(
+            or_(
+                func.lower(Employee.full_name).like(f"%{keyword}%"),
+                func.lower(cast(Employee.id, String)).like(f"%{keyword}%"),
+                func.lower(func.coalesce(Department.name, "")).like(f"%{keyword}%"),
+            )
+        )
+    if shift_type:
+        query = query.filter(func.lower(func.coalesce(Attendance.attendance_type, "")) == shift_type)
+
+    rows = query.order_by(Attendance.date.desc(), Employee.full_name.asc()).limit(500).all()
+    data = []
+    for att, emp, dept, pos, _, status in rows:
+        row_ot = OvertimeRequest.query.filter_by(employee_id=emp.id, overtime_date=att.date).order_by(OvertimeRequest.id.desc()).first()
+        if ot_status and (row_ot.status if row_ot else "") != ot_status:
+            continue
+        status_name = (status.status_name if status else "").upper()
+        attendance_type = (att.attendance_type or "").lower()
+        logical_status = "normal"
+        if attendance_type in {"late", "early", "late_early"} or status_name == "LATE":
+            logical_status = "late_early"
+        elif row_ot and row_ot.status == "pending_admin":
+            logical_status = "ot_pending"
+        elif attendance_type in {"abnormal", "abnormal_rejected", "absent"} or status_name == "ABSENT":
+            logical_status = "abnormal"
+        if status_filter and logical_status != status_filter:
+            continue
+
+        late_minutes = 0
+        early_minutes = 0
+        if att.check_in and att.check_in.hour >= 8 and att.check_in.minute > 0:
+            late_minutes = att.check_in.hour * 60 + att.check_in.minute - 8 * 60
+        if att.check_out and att.check_out.hour < 17:
+            early_minutes = 17 * 60 - (att.check_out.hour * 60 + att.check_out.minute)
+
+        data.append({
+            "attendance_id": att.id,
+            "employee_id": emp.id,
+            "employee_code": f"EMP{emp.id:04d}",
+            "employee_name": emp.full_name,
+            "department": dept.name if dept else "--",
+            "position": pos.job_title if pos else "--",
+            "work_date": att.date.isoformat(),
+            "check_in": att.check_in.isoformat() if att.check_in else None,
+            "check_out": att.check_out.isoformat() if att.check_out else None,
+            "working_hours": float(att.working_hours or 0),
+            "regular_hours": float(att.regular_hours or 0),
+            "overtime_hours": float(att.overtime_hours or 0),
+            "late_early_text": f"Late {late_minutes}p / Early {early_minutes}p" if (late_minutes or early_minutes) else "--",
+            "status": logical_status,
+            "status_label": status_name or attendance_type or "PRESENT",
+            "ot_status": row_ot.status if row_ot else None,
+            "lock_status": "locked" if _is_month_locked(att.date.month, att.date.year) else "open",
+        })
+
+    return jsonify(data)
 @admin_bp.get("/api/admin/attendance/config")
 def attendance_config_get():
     getv = lambda k, d: (SystemSetting.query.filter_by(key=k).first() or SystemSetting(key=k, value=str(d))).value
@@ -1289,6 +1435,10 @@ def attendance_lock_month():
         db.session.add(row)
     else:
         row.value = "locked"
+    Attendance.query.filter(
+        func.extract("month", Attendance.date) == month,
+        func.extract("year", Attendance.date) == year,
+    ).update({Attendance.attendance_type: "locked"}, synchronize_session=False)
     db.session.add(HistoryLog(action="LOCK_ATTENDANCE", entity_type="attendance", description=f"{month}/{year}", performed_by=actor.id if actor else None))
     db.session.commit()
     return jsonify({"success": True})
@@ -1310,10 +1460,151 @@ def attendance_reopen_month():
         db.session.add(row)
     else:
         row.value = "open"
+    Attendance.query.filter(
+        func.extract("month", Attendance.date) == month,
+        func.extract("year", Attendance.date) == year,
+        Attendance.attendance_type == "locked",
+    ).update({Attendance.attendance_type: "normal"}, synchronize_session=False)
     db.session.add(HistoryLog(action="REOPEN_ATTENDANCE", entity_type="attendance", description=f"{month}/{year} - {reason}", performed_by=actor.id if actor else None))
     db.session.commit()
     return jsonify({"success": True})
+@admin_bp.post("/api/admin/attendance/<int:attendance_id>/manual-update")
+def attendance_manual_update(attendance_id: int):
+    row = Attendance.query.get_or_404(attendance_id)
+    if _is_month_locked(row.date.month, row.date.year):
+        return jsonify({"error": "attendance month is locked"}), 409
+    payload = request.get_json(silent=True) or {}
+    check_in = payload.get("check_in")
+    check_out = payload.get("check_out")
+    if check_in:
+        row.check_in = datetime.fromisoformat(check_in)
+    if check_out:
+        row.check_out = datetime.fromisoformat(check_out)
+    if payload.get("status_id"):
+        row.status_id = int(payload.get("status_id"))
+    if payload.get("overtime_hours") is not None:
+        row.overtime_hours = payload.get("overtime_hours")
+    note = (payload.get("note") or "").strip()
+    row.attendance_type = payload.get("attendance_type") or row.attendance_type
+    db.session.add(HistoryLog(
+        employee_id=row.employee_id,
+        action="ADMIN_MANUAL_ATTENDANCE_UPDATE",
+        entity_type="attendance",
+        entity_id=row.id,
+        description=f"Manual update attendance {row.date.isoformat()} | {note}",
+        performed_by=session.get("user_id"),
+    ))
+    db.session.commit()
+    return jsonify({"success": True})
 
+
+@admin_bp.post("/api/admin/attendance/<int:attendance_id>/mark-abnormal")
+def attendance_mark_abnormal(attendance_id: int):
+    row = Attendance.query.get_or_404(attendance_id)
+    if _is_month_locked(row.date.month, row.date.year):
+        return jsonify({"error": "attendance month is locked"}), 409
+    payload = request.get_json(silent=True) or {}
+    note = (payload.get("note") or "").strip()
+    row.attendance_type = "abnormal"
+    db.session.add(HistoryLog(
+        employee_id=row.employee_id,
+        action="ADMIN_MARK_ABNORMAL_ATTENDANCE",
+        entity_type="attendance",
+        entity_id=row.id,
+        description=f"Mark abnormal {row.date.isoformat()} | {note}",
+        performed_by=session.get("user_id"),
+    ))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.get("/api/admin/attendance/overtime/pending")
+def attendance_pending_overtime():
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    rows = (
+        db.session.query(OvertimeRequest, Employee, Department)
+        .join(Employee, Employee.id == OvertimeRequest.employee_id)
+        .join(User, User.id == Employee.user_id, isouter=True)
+        .join(Role, Role.id == User.role_id, isouter=True)
+        .join(Department, Department.id == Employee.department_id, isouter=True)
+        .filter(
+            OvertimeRequest.status == "pending_admin",
+            func.extract("month", OvertimeRequest.overtime_date) == month,
+            func.extract("year", OvertimeRequest.overtime_date) == year,
+            Employee.is_attendance_required.is_(True),
+            func.coalesce(Role.name, "").notin_(["Admin", "HR"]),
+        ).all()
+    )
+    return jsonify([{
+        "id": ot.id,
+        "employee_name": emp.full_name,
+        "employee_code": f"EMP{emp.id:04d}",
+        "department": dept.name if dept else "--",
+        "date": ot.overtime_date.isoformat(),
+        "hours": float(ot.overtime_hours or 0),
+        "reason": ot.reason,
+        "status": ot.status,
+    } for ot, emp, dept in rows])
+
+
+@admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/final-review")
+def attendance_overtime_final_review(overtime_id: int):
+    actor = _current_user()
+    if _role_name(actor) != "Admin":
+        return jsonify({"error": "only admin can final approve overtime"}), 403
+    row = OvertimeRequest.query.get_or_404(overtime_id)
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get("action") or "").strip().lower()
+    note = (payload.get("note") or "").strip()
+    if action not in {"approve", "reject"}:
+        return jsonify({"error": "invalid action"}), 400
+    row.status = "approved" if action == "approve" else "rejected"
+    row.note = note
+    if action == "approve":
+        attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
+        if attendance:
+            attendance.overtime_hours = row.overtime_hours
+            attendance.attendance_type = "overtime"
+    db.session.add(HistoryLog(
+        employee_id=row.employee_id,
+        action="ADMIN_FINAL_OVERTIME_REVIEW",
+        entity_type="overtime_request",
+        entity_id=row.id,
+        description=f"{action} overtime | {note}",
+        performed_by=actor.id if actor else None,
+    ))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.get("/api/admin/attendance/export")
+def attendance_export_csv():
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Ma NV", "Ten NV", "Phong ban", "Ngay", "Gio vao", "Gio ra", "Tong gio", "Cong chuan", "OT", "Loai ca"])
+    rows = _attendance_base_query(month, year).all()
+    for att, emp, dept, _, _, _ in rows:
+        writer.writerow([
+            f"EMP{emp.id:04d}",
+            emp.full_name,
+            dept.name if dept else "",
+            att.date.isoformat() if att.date else "",
+            att.check_in.isoformat() if att.check_in else "",
+            att.check_out.isoformat() if att.check_out else "",
+            float(att.working_hours or 0),
+            float(att.regular_hours or 0),
+            float(att.overtime_hours or 0),
+            att.attendance_type or "",
+        ])
+    filename = f"attendance_{year}_{month:02d}.csv"
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 @admin_bp.get("/api/admin/attendance/audit-log")
 def attendance_audit_log():

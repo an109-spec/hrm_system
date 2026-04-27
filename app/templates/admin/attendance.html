@@ -1,7 +1,83 @@
 {% extends "admin/base_admin.html" %}
+{% block admin_styles %}
+<style>
+  .admin-toolbar{display:none}
+</style>
+{% endblock %}
 {% block admin_content %}
-<div class="filters"><input id="month" type="number" min="1" max="12"><input id="year" type="number" min="2000" max="2100"><button onclick="loadAttendanceSummary()">Lọc</button><button onclick="lockMonth()">Chốt công tháng</button><button onclick="reopenMonth()">Mở lại công</button></div>
-<div class="card"><h3>Tổng quan chấm công</h3><table><thead><tr><th>Phòng ban</th><th>Tổng NV</th><th>Tổng công</th><th>Đi trễ</th><th>Nghỉ</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
-<div class="card"><h3>Audit log</h3><ul id="attendanceAudit"></ul></div>
+<section class="attendance-admin-page">
+  <header class="attendance-head">
+    <div>
+      <h2>Quản lý chấm công toàn hệ thống</h2>
+      <p>Admin chỉ kiểm soát và xử lý dữ liệu attendance, không trực tiếp chấm công.</p>
+    </div>
+  </header>
+
+  <article class="card attendance-action-bar">
+    <div class="attendance-filters-grid">
+      <input id="attendanceSearch" type="text" placeholder="Tìm tên nhân viên, mã NV, phòng ban...">
+      <select id="attendanceDepartment"><option value="">Phòng ban</option></select>
+      <select id="attendanceStatus">
+        <option value="">Trạng thái chấm công</option>
+        <option value="normal">Bình thường</option>
+        <option value="late_early">Đi muộn / Về sớm</option>
+        <option value="ot_pending">Chờ duyệt OT</option>
+        <option value="abnormal">Bất thường / Vắng không phép</option>
+      </select>
+      <select id="attendanceMonth"></select>
+      <select id="attendanceYear"></select>
+      <select id="attendanceShiftType">
+        <option value="">Loại ca</option>
+        <option value="normal">Ca thường</option>
+        <option value="overtime">Ca tăng ca</option>
+        <option value="holiday">Ca ngày nghỉ</option>
+      </select>
+      <select id="attendanceOtStatus">
+        <option value="">Trạng thái OT</option>
+        <option value="pending_admin">Chờ Admin duyệt</option>
+        <option value="approved">Đã duyệt</option>
+        <option value="rejected">Từ chối</option>
+      </select>
+    </div>
+    <div class="attendance-action-buttons">
+      <button class="btn-ghost" id="btnAttendanceFilter">Lọc dữ liệu</button>
+      <button class="btn-ghost" id="btnExportAttendance">Xuất bảng công</button>
+      <button class="btn-ghost" id="btnApproveOt">Duyệt tăng ca</button>
+      <button class="btn-ghost" id="btnHandleAbnormal">Xử lý bất thường</button>
+      <button class="btn-primary" id="btnLockAttendanceMonth">CHỐT CÔNG THÁNG</button>
+    </div>
+  </article>
+
+  <section class="summary-grid attendance-summary-grid" id="attendanceSummaryCards"></section>
+
+  <article class="card table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mã nhân viên</th>
+          <th>Tên nhân viên</th>
+          <th>Phòng ban</th>
+          <th>Chức danh</th>
+          <th>Ngày làm việc</th>
+          <th>Giờ vào</th>
+          <th>Giờ ra</th>
+          <th>Tổng giờ làm</th>
+          <th>Công chuẩn</th>
+          <th>Tăng ca</th>
+          <th>Đi muộn / Về sớm</th>
+          <th>Trạng thái</th>
+          <th>Trạng thái chốt công</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="attendanceRows"></tbody>
+    </table>
+  </article>
+
+  <article class="card">
+    <h3>Audit log attendance</h3>
+    <ul id="attendanceAudit"></ul>
+  </article>
+</section>
 {% endblock %}
 {% block admin_scripts %}<script>window.ADMIN_PAGE='attendance';</script>{% endblock %}
