@@ -107,8 +107,7 @@
               <tr><th>Thiết bị</th><th>Thời gian đăng nhập</th><th>IP gần nhất</th></tr>
             </thead>
             <tbody>
-            {% for row in audit_logs %}
-            {% set raw_ip = (row.description.split('ip=')[-1] if row.description and 'ip=' in row.description else 'N/A') %}
+            {% for item in session_devices %}
               <tr>
                 <td>{{ item.device }}</td>
                 <td>{{ item.logged_in_at.strftime('%d/%m/%Y %H:%M') if item.logged_in_at else 'N/A' }}</td>
@@ -135,7 +134,8 @@
             </tr>
           </thead>
           <tbody>
-            {% for item in session_devices %}
+            {% for row in audit_logs %}
+            {% set raw_ip = (row.description.split('ip=')[-1] if row.description and 'ip=' in row.description else 'N/A') %}
             <tr>
               <td>{{ row.created_at.strftime('%d/%m/%Y %H:%M') if row.created_at else 'N/A' }}</td>
               <td>{{ row.action }}</td>
