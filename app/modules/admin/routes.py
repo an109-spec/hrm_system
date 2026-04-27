@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timezone, timedelta
 from io import StringIO
 import csv
 import os
@@ -789,7 +789,15 @@ def update_user_role(user_id: int):
 # -------------------------
 @admin_bp.get("/api/departments")
 def list_departments():
-    depts = Department.query.filter_by(is_deleted=False).all()
+    keyword = (request.args.get("q") or "").strip().lower()
+    q = Department.query.filter_by(is_deleted=False).outerjoin(Employee, Employee.id == Department.manager_id)
+    if keyword:
+        q = q.filter(
+            (func.lower(Department.name).like(f"%{keyword}%"))
+            | (func.cast(Department.id, db.String).like(f"%{keyword}%"))
+            | (func.lower(func.coalesce(Employee.full_name, "")).like(f"%{keyword}%"))
+        )
+    depts = q.order_by(Department.name.asc()).all()
     return jsonify([
         {
             "id": int(d.id),
@@ -804,6 +812,36 @@ def list_departments():
         for d in depts
     ])
 
+@admin_bp.get("/api/departments/stats")
+def department_stats():
+    rows = Department.query.filter_by(is_deleted=False).all()
+    total = len(rows)
+    active = len([d for d in rows if d.status])
+    return jsonify({
+        "total": total,
+        "active": active,
+        "inactive": total - active,
+    })
+
+
+@admin_bp.get("/api/departments/managers")
+def department_manager_candidates():
+    roles = ["manager", "admin", "hr"]
+    candidates = (
+        Employee.query.join(User, User.id == Employee.user_id)
+        .join(Role, Role.id == User.role_id)
+        .filter(
+            Employee.is_deleted.is_(False),
+            func.lower(Role.name).in_(roles)
+        )
+        .order_by(Employee.full_name.asc())
+        .all()
+    )
+    return jsonify([
+        {"id": int(emp.id), "name": emp.full_name, "role": emp.user.role.name if emp.user and emp.user.role else "N/A"}
+        for emp in candidates
+    ])
+
 
 @admin_bp.post("/api/departments")
 def create_department():
@@ -816,8 +854,14 @@ def create_department():
     manager_id = data.get("manager_id")
     if manager_id and not Employee.query.get(manager_id):
         return jsonify({"error": "manager not found"}), 400
-    dept = Department(name=name, manager_id=manager_id, description=data.get("description"), status=True)
+    dept = Department(
+        name=name,
+        manager_id=manager_id,
+        description=(data.get("description") or "").strip() or None,
+        status=bool(data.get("status", True)),
+    )
     db.session.add(dept)
+    db.session.add(HistoryLog(action="CREATE_DEPARTMENT", entity_type="department", entity_id=dept.id, description=f"Tạo phòng ban {name}", performed_by=session.get("user_id")))
     db.session.commit()
     return jsonify({"id": int(dept.id), "name": dept.name}), 201
 
@@ -826,13 +870,38 @@ def create_department():
 def get_department(dept_id: int):
     d = Department.query.get_or_404(dept_id)
     employees = Employee.query.filter_by(department_id=d.id, is_deleted=False).all()
+    male_count = len([e for e in employees if (e.gender or "").lower() == "male"])
+    female_count = len([e for e in employees if (e.gender or "").lower() == "female"])
+    on_leave_count = LeaveRequest.query.join(Employee, Employee.id == LeaveRequest.employee_id).filter(
+        Employee.department_id == d.id,
+        Employee.is_deleted.is_(False),
+        LeaveRequest.status.in_(["pending", "pending_hr", "pending_admin", "approved"]),
+        LeaveRequest.to_date >= date.today(),
+    ).count()
+    contract_expiring_count = Contract.query.join(Employee, Employee.id == Contract.employee_id).filter(
+        Employee.department_id == d.id,
+        Employee.is_deleted.is_(False),
+        Contract.end_date.isnot(None),
+        Contract.end_date >= date.today(),
+        Contract.end_date <= (date.today() + timedelta(days=45)),
+    ).count()
     return jsonify({
         "id": int(d.id),
         "name": d.name,
+        "department_code": f"DP-{d.id}",
         "description": d.description,
         "status": bool(d.status),
+        "created_at": d.created_at.isoformat() if d.created_at else None,
         "manager_id": int(d.manager_id) if d.manager_id else None,
         "manager_name": d.manager.full_name if d.manager else None,
+        "manager_phone": d.manager.phone if d.manager else None,
+        "manager_email": d.manager.user.email if d.manager and d.manager.user else None,
+        "manager_role": d.manager.user.role.name if d.manager and d.manager.user and d.manager.user.role else None,
+        "employee_count": len(employees),
+        "male_count": male_count,
+        "female_count": female_count,
+        "on_leave_count": on_leave_count,
+        "contract_expiring_count": contract_expiring_count,
         "employees": [{"id": int(e.id), "name": e.full_name} for e in employees],
     })
 
@@ -855,17 +924,54 @@ def update_department(dept_id: int):
             return jsonify({"error": "manager not found"}), 400
         d.manager_id = mid
     if "description" in data:
-        d.description = data.get("description")
+        d.description = (data.get("description") or "").strip() or None
     if "status" in data:
         d.status = bool(data.get("status"))
+    db.session.add(HistoryLog(action="UPDATE_DEPARTMENT", entity_type="department", entity_id=d.id, description=f"Cập nhật phòng ban {d.name}", performed_by=session.get("user_id")))
     db.session.commit()
     return jsonify({"success": True})
+
+def _department_impact_payload(department: Department) -> dict:
+    employee_count = Employee.query.filter_by(department_id=department.id, is_deleted=False).count()
+    pending_leave_count = LeaveRequest.query.join(Employee, Employee.id == LeaveRequest.employee_id).filter(
+        Employee.department_id == department.id,
+        Employee.is_deleted.is_(False),
+        LeaveRequest.status.in_(["pending", "pending_hr", "pending_admin", "supplement_requested"]),
+    ).count()
+    pending_salary_approval = Salary.query.join(Employee, Employee.id == Salary.employee_id).filter(
+        Employee.department_id == department.id,
+        Employee.is_deleted.is_(False),
+        Salary.status.in_(["pending", "submitted"]),
+    ).count()
+    has_manager = bool(department.manager_id)
+    safe_to_inactive = employee_count == 0 and pending_leave_count == 0 and pending_salary_approval == 0
+    return {
+        "department_id": int(department.id),
+        "employee_count": employee_count,
+        "pending_leave_count": pending_leave_count,
+        "pending_approval_count": pending_salary_approval,
+        "has_manager": has_manager,
+        "safe_to_inactive": safe_to_inactive,
+    }
+
+
+@admin_bp.get("/api/departments/<int:dept_id>/impact")
+def department_impact(dept_id: int):
+    d = Department.query.get_or_404(dept_id)
+    return jsonify(_department_impact_payload(d))
 
 
 @admin_bp.delete("/api/departments/<int:dept_id>")
 def disable_department(dept_id: int):
     d = Department.query.get_or_404(dept_id)
+    impact = _department_impact_payload(d)
+    if not impact.get("safe_to_inactive"):
+        return jsonify({
+            "error": "Department has unresolved dependencies",
+            "impact": impact,
+        }), 409
     d.status = False
+    db.session.add(HistoryLog(action="INACTIVE_DEPARTMENT", entity_type="department", entity_id=d.id, description=f"Ngưng hoạt động phòng ban {d.name}", performed_by=session.get("user_id")))
     db.session.commit()
     return jsonify({"success": True})
 

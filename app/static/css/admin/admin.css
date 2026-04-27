@@ -36,3 +36,16 @@ th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-si
 .detail-grid h4{margin:0 0 8px}
 .swal-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left}.detail-history{grid-column:1/-1}
 @media (max-width:1280px){.summary-grid,.notification-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.filter-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+
+.department-admin-page{display:flex;flex-direction:column;gap:14px}
+.department-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.department-toolbar input{flex:1;padding:10px;border:1px solid var(--border);border-radius:8px}
+.department-stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.department-status{font-weight:700}
+.department-status.active{color:var(--success)}
+.department-status.inactive{color:var(--danger)}
+.department-action-select{width:100%;padding:7px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.department-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.department-detail-grid h4{margin:0 0 8px}
+.department-detail-grid p{margin:6px 0}
+.impact-warning{margin-top:10px;padding:10px;border-radius:8px;background:#fff8e6;border:1px solid #fcd34d}

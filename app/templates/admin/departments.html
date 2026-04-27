@@ -1,5 +1,42 @@
 {% extends "admin/base_admin.html" %}
 {% block admin_content %}
-<div class="card"><h3>Phòng ban</h3><button onclick="createDepartmentPrompt()">+ Thêm phòng ban</button><table><thead><tr><th>Mã</th><th>Tên</th><th>Trưởng phòng</th><th>Số NV</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="departmentRows"></tbody></table></div>
+<section class="department-admin-page">
+  <header class="department-toolbar card">
+    <input id="search-department" type="text" placeholder="Tìm phòng ban...">
+    <button id="add-department-btn" class="btn-primary">+ Thêm phòng ban mới</button>
+  </header>
+
+  <section id="department-stats" class="department-stats-grid">
+    <article class="summary-card"><h4>Tổng số phòng ban</h4><p id="departmentTotal">0</p></article>
+    <article class="summary-card"><h4>Đang hoạt động 🟢</h4><p id="departmentActive">0</p></article>
+    <article class="summary-card"><h4>Ngưng hoạt động 🔴</h4><p id="departmentInactive">0</p></article>
+  </section>
+
+  <article class="card table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mã phòng ban</th>
+          <th>Tên phòng ban</th>
+          <th>Trưởng phòng</th>
+          <th>Số nhân viên</th>
+          <th>Trạng thái</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="departmentRows"></tbody>
+    </table>
+  </article>
+
+  <article id="department-detail-card" class="card" style="display:none;">
+    <h3>🏢 CHI TIẾT PHÒNG BAN</h3>
+    <div id="departmentDetailBody" class="department-detail-grid"></div>
+    <div class="employee-filter-actions">
+      <button id="closeDepartmentDetailBtn" class="btn-ghost">🔙 Quay lại</button>
+      <button id="editDepartmentFromDetailBtn" class="btn-primary">📝 Chỉnh sửa</button>
+      <button id="disableDepartmentFromDetailBtn" class="btn-danger">🗑️ Ngưng hoạt động</button>
+    </div>
+  </article>
+</section>
 {% endblock %}
 {% block admin_scripts %}<script>window.ADMIN_PAGE='departments';</script>{% endblock %}

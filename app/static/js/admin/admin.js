@@ -342,9 +342,220 @@ async function inactiveEmployee(id) {
   loadEmployees();
 }
 
-async function loadDepartments() { const rows = await api('/api/departments'); departmentRows.innerHTML = rows.map(r => `<tr><td>${r.department_code}</td><td>${r.name}</td><td>${r.manager_name || ''}</td><td>${r.employee_count}</td><td><span class="badge ${r.status ? 'b-success' : 'b-danger'}">${r.status ? 'active' : 'inactive'}</span></td><td><button onclick="toggleDepartment(${r.id},${r.status})">${r.status ? 'Disable' : 'Enable'}</button></td></tr>`).join(''); }
-async function toggleDepartment(id, status) { if (status) { await api(`/api/departments/${id}`, { method: 'DELETE' }); } else { await api(`/api/departments/${id}`, { method: 'PATCH', body: JSON.stringify({ status: true }) }); } loadDepartments(); }
-async function createDepartmentPrompt() { const { value: name } = await Swal.fire({ title: 'Tên phòng ban', input: 'text', showCancelButton: true }); if (!name) return; await api('/api/departments', { method: 'POST', body: JSON.stringify({ name }) }); await Swal.fire({ icon: 'success', title: 'Đã tạo phòng ban' }); loadDepartments(); }
+let currentDepartmentDetailId = null;
+
+function departmentActionCell(row) {
+  return `<select class="department-action-select" onchange="handleDepartmentAction(${row.id}, this.value); this.value='';">
+    <option value="">Chọn thao tác</option>
+    <option value="detail">Xem chi tiết</option>
+    <option value="edit">Chỉnh sửa</option>
+    <option value="${row.status ? 'inactive' : 'active'}">${row.status ? 'Ngưng hoạt động' : 'Kích hoạt lại'}</option>
+    <option value="transfer">Chuyển nhân sự</option>
+    <option value="change_manager">Đổi trưởng phòng</option>
+  </select>`;
+}
+
+function renderDepartmentRows(rows) {
+  const body = document.getElementById('departmentRows');
+  if (!body) return;
+  body.innerHTML = rows.length ? rows.map((r) => `
+    <tr>
+      <td>${esc(r.department_code)}</td>
+      <td>${esc(r.name)}</td>
+      <td>${esc(r.manager_name || '--')}</td>
+      <td>${r.employee_count || 0}</td>
+      <td><span class="department-status ${r.status ? 'active' : 'inactive'}">${r.status ? '🟢 Active' : '🔴 Inactive'}</span></td>
+      <td>${departmentActionCell(r)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6">Không có phòng ban phù hợp điều kiện tìm kiếm.</td></tr>';
+}
+
+async function loadDepartmentStats() {
+  const stats = await api('/api/departments/stats');
+  document.getElementById('departmentTotal').textContent = stats.total ?? 0;
+  document.getElementById('departmentActive').textContent = stats.active ?? 0;
+  document.getElementById('departmentInactive').textContent = stats.inactive ?? 0;
+}
+
+async function loadDepartments() {
+  const keyword = document.getElementById('search-department')?.value?.trim() || '';
+  const params = new URLSearchParams();
+  if (keyword) params.set('q', keyword);
+  const rows = await api(`/api/departments${params.toString() ? `?${params.toString()}` : ''}`);
+  renderDepartmentRows(rows);
+  await loadDepartmentStats();
+}
+
+async function loadDepartmentDetail(id) {
+  const detail = await api(`/api/departments/${id}`);
+  currentDepartmentDetailId = id;
+  const body = document.getElementById('departmentDetailBody');
+  const card = document.getElementById('department-detail-card');
+  if (!body || !card) return;
+  body.innerHTML = `
+    <div>
+      <h4>Cột 1 — Thông tin cơ bản</h4>
+      <p><strong>Tên phòng ban:</strong> ${esc(detail.name)}</p>
+      <p><strong>Mã phòng ban:</strong> ${esc(detail.department_code)}</p>
+      <p><strong>Trạng thái:</strong> ${detail.status ? '🟢 Active' : '🔴 Inactive'}</p>
+      <p><strong>Ngày thành lập:</strong> ${fmtDate(detail.created_at)}</p>
+      <p><strong>Mô tả:</strong> ${esc(detail.description || '--')}</p>
+    </div>
+    <div>
+      <h4>Cột 2 — Nhân sự chủ chốt</h4>
+      <p><strong>Trưởng phòng:</strong> ${esc(detail.manager_name || '--')}</p>
+      <p><strong>Số điện thoại:</strong> ${esc(detail.manager_phone || '--')}</p>
+      <p><strong>Email:</strong> ${esc(detail.manager_email || '--')}</p>
+      <p><strong>Chức vụ:</strong> ${esc(detail.manager_role || '--')}</p>
+    </div>
+    <div>
+      <h4>Cột 3 — Thống kê</h4>
+      <p><strong>Tổng nhân viên:</strong> ${detail.employee_count || 0}</p>
+      <p><strong>Tỷ lệ Nam / Nữ:</strong> ${(detail.male_count || 0)} / ${(detail.female_count || 0)}</p>
+      <p><strong>Nhân viên đang nghỉ phép:</strong> ${detail.on_leave_count || 0}</p>
+      <p><strong>Hợp đồng sắp hết hạn:</strong> ${detail.contract_expiring_count || 0}</p>
+    </div>`;
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fetchManagerOptions(selectedId = null) {
+  const rows = await api('/api/departments/managers');
+  return rows.map((m) => `<option value="${m.id}" ${Number(selectedId) === Number(m.id) ? 'selected' : ''}>${esc(m.name)} (${esc(m.role)})</option>`).join('');
+}
+
+async function openDepartmentForm(mode, departmentId = null) {
+  const isEdit = mode === 'edit';
+  const detail = isEdit ? await api(`/api/departments/${departmentId}`) : null;
+  const managerOptions = await fetchManagerOptions(detail?.manager_id);
+  const title = isEdit ? '📝 CHỈNH SỬA PHÒNG BAN' : '➕ THÊM PHÒNG BAN MỚI';
+  const { isConfirmed, dismiss, value } = await Swal.fire({
+    title,
+    width: 760,
+    showDenyButton: !isEdit,
+    denyButtonText: '📑 Tạo và tiếp tục thêm',
+    confirmButtonText: isEdit ? '💾 Lưu thay đổi' : '💾 Lưu',
+    cancelButtonText: '❌ Hủy bỏ',
+    showCancelButton: true,
+    html: `
+      <input id="dpName" class="swal2-input" placeholder="Tên phòng ban" value="${esc(detail?.name || '')}">
+      <textarea id="dpDesc" class="swal2-textarea" placeholder="Mô tả">${esc(detail?.description || '')}</textarea>
+      <select id="dpManager" class="swal2-input"><option value="">-- Chọn trưởng phòng --</option>${managerOptions}</select>
+      <div style="text-align:left;padding:6px 10px;">
+        <label><input type="radio" name="dpStatus" value="active" ${detail?.status !== false ? 'checked' : ''}> Active</label>
+        <label style="margin-left:14px;"><input type="radio" name="dpStatus" value="inactive" ${detail?.status === false ? 'checked' : ''}> Inactive</label>
+      </div>
+      ${isEdit ? `
+      <div class="impact-warning">
+        Việc thay đổi Trưởng phòng sẽ ảnh hưởng tới:
+        <ul>
+          <li>Leave Request Approval</li>
+          <li>Payroll Approval</li>
+          <li>Attendance Approval</li>
+          <li>Department Permission Flow</li>
+        </ul>
+      </div>` : `
+      <div style="text-align:left;padding:6px 10px;">
+        <label><input type="radio" name="dpInitialStatus" value="active" checked> Kích hoạt ngay</label>
+        <label style="margin-left:14px;"><input type="radio" name="dpInitialStatus" value="inactive"> Chờ kích hoạt</label>
+      </div>`}
+    `,
+    preConfirm: () => ({
+      name: document.getElementById('dpName').value.trim(),
+      description: document.getElementById('dpDesc').value.trim(),
+      manager_id: Number(document.getElementById('dpManager').value) || null,
+      status: (isEdit
+        ? document.querySelector('input[name="dpStatus"]:checked')?.value
+        : document.querySelector('input[name="dpInitialStatus"]:checked')?.value) !== 'inactive'
+    })
+  });
+  if (!isConfirmed && dismiss !== Swal.DismissReason.deny) return;
+  if (!value?.name) {
+    await Swal.fire({ icon: 'error', title: 'Tên phòng ban là bắt buộc' });
+    return;
+  }
+  if (isEdit) {
+    await api(`/api/departments/${departmentId}`, { method: 'PATCH', body: JSON.stringify(value) });
+    await Swal.fire({ icon: 'success', title: 'Đã lưu thay đổi phòng ban' });
+  } else {
+    await api('/api/departments', { method: 'POST', body: JSON.stringify(value) });
+    await Swal.fire({ icon: 'success', title: 'Đã tạo phòng ban mới' });
+  }
+  await loadDepartments();
+  if (isEdit && currentDepartmentDetailId === departmentId) await loadDepartmentDetail(departmentId);
+  if (dismiss === Swal.DismissReason.deny) await openDepartmentForm('create');
+}
+
+async function openDepartmentTransferGuide(id) {
+  const detail = await api(`/api/departments/${id}`);
+  await Swal.fire({
+    icon: 'info',
+    title: 'Chuyển nhân sự',
+    html: `Phòng ban <b>${esc(detail.name)}</b> đang còn <b>${detail.employee_count || 0}</b> nhân sự.<br>Vui lòng dùng chức năng <b>Admin → Quản lý nhân viên → Chuyển phòng ban</b> trước khi ngưng hoạt động.`,
+    confirmButtonText: 'Đã hiểu'
+  });
+}
+
+async function deactivateDepartmentWithChecks(id) {
+  const impact = await api(`/api/departments/${id}/impact`);
+  if ((impact.employee_count || 0) > 0) {
+    const ask = await Swal.fire({
+      icon: 'warning',
+      title: 'Phòng ban này vẫn còn nhân viên.',
+      text: 'Vui lòng chuyển nhân sự sang phòng ban khác trước khi ngưng hoạt động.',
+      showCancelButton: true,
+      confirmButtonText: 'Chuyển nhân sự ngay'
+    });
+    if (ask.isConfirmed) await openDepartmentTransferGuide(id);
+    return;
+  }
+  if ((impact.pending_leave_count || 0) > 0 || (impact.pending_approval_count || 0) > 0) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Không thể ngưng hoạt động',
+      html: `Đang có request/approval chờ xử lý.<br>Leave pending: <b>${impact.pending_leave_count || 0}</b><br>Approval pending: <b>${impact.pending_approval_count || 0}</b>`
+    });
+    return;
+  }
+  if (impact.has_manager) {
+    await Swal.fire({
+      icon: 'info',
+      title: 'Yêu cầu bàn giao quyền duyệt',
+      text: 'Phòng ban hiện có trưởng phòng. Hãy đổi trưởng phòng hoặc bàn giao quyền duyệt trước khi ngưng hoạt động.'
+    });
+  }
+  const confirm = await Swal.fire({
+    title: 'Xác nhận ngưng hoạt động phòng ban?',
+    text: 'Phòng ban sẽ không thể nhận thêm nhân sự mới',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Xác nhận'
+  });
+  if (!confirm.isConfirmed) return;
+  await api(`/api/departments/${id}`, { method: 'DELETE' });
+  await Swal.fire({ icon: 'success', title: 'Đã ngưng hoạt động phòng ban' });
+  await loadDepartments();
+}
+
+async function activateDepartment(id) {
+  const confirm = await Swal.fire({ title: 'Kích hoạt lại phòng ban?', icon: 'question', showCancelButton: true, confirmButtonText: 'Kích hoạt' });
+  if (!confirm.isConfirmed) return;
+  await api(`/api/departments/${id}`, { method: 'PATCH', body: JSON.stringify({ status: true }) });
+  await Swal.fire({ icon: 'success', title: 'Đã kích hoạt lại phòng ban' });
+  await loadDepartments();
+}
+
+async function handleDepartmentAction(id, action) {
+  if (!action) return;
+  if (action === 'detail') return loadDepartmentDetail(id);
+  if (action === 'edit') return openDepartmentForm('edit', id);
+  if (action === 'inactive') return deactivateDepartmentWithChecks(id);
+  if (action === 'active') return activateDepartment(id);
+  if (action === 'transfer') return openDepartmentTransferGuide(id);
+  if (action === 'change_manager') return openDepartmentForm('edit', id);
+}
+window.handleDepartmentAction = handleDepartmentAction;
+window.createDepartmentPrompt = () => openDepartmentForm('create');
 
 async function loadPositions() { const rows = await api('/api/positions'); positionRows.innerHTML = rows.map(r => `<tr><td>${r.id}</td><td>${r.job_title}</td><td>${r.salary_range}</td><td>${r.employee_count}</td><td>${r.status}</td><td><button onclick="togglePosition(${r.id},'${r.status}')">${r.status === 'inactive' ? 'Enable' : 'Disable'}</button></td></tr>`).join(''); }
 async function togglePosition(id, status) { await api(`/api/positions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: status === 'inactive' ? 'active' : 'inactive' }) }); loadPositions(); }
@@ -385,7 +596,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   if (window.ADMIN_PAGE === 'dashboard') await loadDashboard();
   if (window.ADMIN_PAGE === 'employees') await loadEmployees();
-  if (window.ADMIN_PAGE === 'departments') await loadDepartments();
+  if (window.ADMIN_PAGE === 'departments') {
+    await loadDepartments();
+    document.getElementById('add-department-btn')?.addEventListener('click', () => openDepartmentForm('create'));
+    document.getElementById('search-department')?.addEventListener('input', () => loadDepartments());
+    document.getElementById('closeDepartmentDetailBtn')?.addEventListener('click', () => {
+      const card = document.getElementById('department-detail-card');
+      if (card) card.style.display = 'none';
+    });
+    document.getElementById('editDepartmentFromDetailBtn')?.addEventListener('click', () => {
+      if (currentDepartmentDetailId) openDepartmentForm('edit', currentDepartmentDetailId);
+    });
+    document.getElementById('disableDepartmentFromDetailBtn')?.addEventListener('click', () => {
+      if (currentDepartmentDetailId) deactivateDepartmentWithChecks(currentDepartmentDetailId);
+    });
+  }
   if (window.ADMIN_PAGE === 'positions') await loadPositions();
   if (window.ADMIN_PAGE === 'attendance') await loadAttendanceSummary();
   if (window.ADMIN_PAGE === 'salary') await loadSalaryAggregate();
