@@ -20,6 +20,7 @@ from app.models import (
     LeaveRequest,
     LeaveType,
     Notification,
+    OvertimeRequest,
     Salary,
     User,
     Holiday,
@@ -707,6 +708,30 @@ def check_in_out():
         if not attendance:
             today_holiday = _get_holiday_for_date(today)
             if today_holiday:
+                approved_holiday_ot = OvertimeRequest.query.filter(
+                    OvertimeRequest.employee_id == employee.id,
+                    OvertimeRequest.overtime_date == today,
+                    OvertimeRequest.is_deleted.is_(False),
+                    OvertimeRequest.status.in_(["pending_admin", "approved"]),
+                ).first()
+                if approved_holiday_ot:
+                    attendance = Attendance(
+                        employee_id=employee.id,
+                        date=today,
+                        check_in=current_time,
+                        attendance_type="holiday",
+                    )
+                    db.session.add(attendance)
+                    db.session.commit()
+                    return jsonify({
+                        "toast": True,
+                        "type": "success",
+                        "action": "check_in",
+                        "message": (
+                            f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
+                            "Bạn đã có yêu cầu OT ngày lễ được duyệt."
+                        ),
+                    })
                 return jsonify({
                     "toast": False,
                     "type": "warning",

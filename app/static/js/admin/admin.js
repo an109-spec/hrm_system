@@ -1015,10 +1015,11 @@ async function openPendingOvertimePanel() {
     return;
   }
   const html = `<div style="text-align:left;max-height:320px;overflow:auto">${pending.map((r) => `
-    <div style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px">
+    <div id="ot-row-${r.id}" style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px">
       <b>${esc(r.employee_name)}</b> (${esc(r.employee_code)}) - ${esc(r.department)}<br>
       ${fmtDate(r.date)} | ${r.hours} giờ<br>${esc(r.reason || '')}
-      <div style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button></div>
+      <div id="ot-status-${r.id}" style="margin-top:8px">Trạng thái: Chờ duyệt</div>
+      <div id="ot-actions-${r.id}" style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button></div>
     </div>`).join('')}</div>`;
   await Swal.fire({ title: 'Duyệt tăng ca cuối cùng', html, width: 800, showConfirmButton: false, showCancelButton: true });
 }
@@ -1033,6 +1034,10 @@ async function finalReviewOt(id, action) {
   });
   if (!isConfirmed) return;
   await api(`/api/admin/attendance/overtime/${id}/final-review`, { method: 'POST', body: JSON.stringify({ action, note: note || '' }) });
+  const statusEl = document.getElementById(`ot-status-${id}`);
+  const actionsEl = document.getElementById(`ot-actions-${id}`);
+  if (statusEl) statusEl.textContent = `Trạng thái: ${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'}`;
+  if (actionsEl) actionsEl.innerHTML = `<span>${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'}</span>`;
   await Swal.fire({ icon: 'success', title: action === 'approve' ? 'Đã duyệt OT' : 'Đã từ chối OT' });
   if (action === 'reject') {
     await Swal.fire({ icon: 'warning', title: 'OT không được tính lương' });

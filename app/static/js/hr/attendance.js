@@ -135,16 +135,26 @@
   const loadOT = async () => {
     const p = new URLSearchParams({ month: $("#monthFilter").value, year: $("#yearFilter").value });
     const rows = await api(`/hr/api/attendance/overtime?${p}`);
-    const filtered = state.filters.overtimeOnlyPending ? rows.filter((x) => x.hr_status === "pending") : rows;
+    const isPendingHr = (status) => status === "pending_hr";
+    const hrStatusLabel = (status) => {
+      if (status === "pending_hr") return "Chờ HR duyệt";
+      if (status === "pending_admin") return "HR đã duyệt (chờ Admin)";
+      if (status === "approved") return "Đã duyệt";
+      if (status === "rejected") return "Đã từ chối";
+      return status || "--";
+    };
+    const filtered = state.filters.overtimeOnlyPending ? rows.filter((x) => isPendingHr(x.hr_status)) : rows;
     $("#otList").innerHTML = filtered.map((x) => `
       <li>
         <strong>${x.employee_name}</strong> (${x.employee_code})<br>
         Ngày OT: ${x.date} • Số giờ OT: ${x.overtime_hours}h<br>
         Lý do: ${x.reason}<br>
-        Quản lý duyệt: ${x.manager_approved ? 'Đã duyệt' : 'Chưa duyệt'} • Trạng thái: ${x.hr_status}
+        Quản lý duyệt: ${x.manager_approved ? 'Đã duyệt' : 'Chưa duyệt'} • Trạng thái: ${hrStatusLabel(x.hr_status)}
         <div class="actions">
-          <button class="btn btn-sm" data-action="approve-ot" data-id="${x.attendance_id}">Duyệt</button>
-          <button class="btn btn-sm" data-action="reject-ot" data-id="${x.attendance_id}">Từ chối</button>
+          ${isPendingHr(x.hr_status)
+            ? `<button class="btn btn-sm" data-action="approve-ot" data-id="${x.attendance_id}">Duyệt</button>
+               <button class="btn btn-sm" data-action="reject-ot" data-id="${x.attendance_id}">Từ chối</button>`
+            : `<span>Đã duyệt</span>`}
         </div>
       </li>
     `).join("") || "<li>Không có yêu cầu OT</li>";

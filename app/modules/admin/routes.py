@@ -31,6 +31,7 @@ from app.models import (
     SystemSetting,
     User,
 )
+from app.models.notification import Notification
 from app.modules.resignation_service import ResignationService
 from app.modules.payroll_policy import PayrollPolicyService
 from app.models.complaint import ComplaintMessage
@@ -1634,6 +1635,8 @@ def attendance_overtime_final_review(overtime_id: int):
     note = (payload.get("note") or "").strip()
     if action not in {"approve", "reject"}:
         return jsonify({"error": "invalid action"}), 400
+    if row.status != "pending_admin":
+        return jsonify({"error": "Yêu cầu OT này đã được xử lý trước đó"}), 409
     row.status = "approved" if action == "approve" else "rejected"
     row.note = note
     if action == "approve":
