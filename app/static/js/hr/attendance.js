@@ -9,8 +9,25 @@
   };
 
   const $ = (s) => document.querySelector(s);
-  const appDialogs = window.appDialogs || {};
-
+  const appDialogs = {
+    confirm: (options) => {
+      if (window.appDialogs?.confirm) return window.appDialogs.confirm(options);
+      return Promise.resolve({ confirmed: window.confirm(options?.text || options?.title || "Xác nhận thao tác?"), reason: "" });
+    },
+    success: (options) => {
+      if (window.appDialogs?.success) return window.appDialogs.success(options);
+      return showMessage(options?.text || options?.title || "Thành công", "success");
+    },
+    error: (options) => {
+      if (window.appDialogs?.error) return window.appDialogs.error(options);
+      return showMessage(options?.text || options?.title || "Có lỗi xảy ra", "error");
+    },
+    prompt: (options) => {
+      if (window.appDialogs?.prompt) return window.appDialogs.prompt(options);
+      const value = window.prompt(options?.label || options?.title || "Nhập dữ liệu", "");
+      return Promise.resolve({ confirmed: value !== null, value: value || "" });
+    },
+  };
   const showMessage = (message, type = "info") => {
     if (window.Swal) {
       return Swal.fire({ icon: type, text: message, confirmButtonText: "Đã hiểu" });
