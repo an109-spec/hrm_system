@@ -95,3 +95,10 @@ th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-si
   .payroll-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .payroll-panel-grid{grid-template-columns:1fr}
 }
+.salary-policy-page{display:flex;flex-direction:column;gap:14px}
+.policy-toolbar{display:flex;flex-wrap:wrap;gap:8px}
+.policy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.policy-grid label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+.policy-grid input{width:100%;padding:9px;border:1px solid var(--border);border-radius:8px}
+.policy-tax-card{grid-column:1/-1}
+@media (max-width:1280px){.policy-grid{grid-template-columns:1fr}}

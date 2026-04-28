@@ -1,0 +1,70 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<section class="salary-policy-page">
+  <header class="attendance-head">
+    <h2>Salary Policy Center</h2>
+    <p>Admin cấu hình toàn bộ quy tắc tính lương cho HRM. HR chỉ dùng rule để tính lương theo kỳ.</p>
+  </header>
+
+  <div class="card policy-toolbar">
+    <button id="btnPolicyUpdate" class="btn-primary">Cập nhật cấu hình</button>
+    <button id="btnPolicyHistory">Xem lịch sử thay đổi</button>
+    <button id="btnPolicyRestore">Khôi phục cấu hình</button>
+    <button id="btnPolicyLock">Khóa chỉnh sửa</button>
+  </div>
+
+  <div class="policy-grid">
+    <article class="card">
+      <h3>⏰ CẤU HÌNH PHẠT ĐI MUỘN</h3>
+      <label>Muộn dưới 15 phút (VNĐ/lần)</label><input id="lateUnder15" type="number" min="0">
+      <label>Muộn từ 15 → 30 phút (VNĐ/lần)</label><input id="late15to30" type="number" min="0">
+      <label><input id="lateOver60HalfDay" type="checkbox"> Muộn quá 60 phút: tính nghỉ nửa ngày công</label>
+    </article>
+
+    <article class="card">
+      <h3>🛡️ CẤU HÌNH BẢO HIỂM</h3>
+      <label>BHXH (%)</label><input id="insSocial" type="number" step="0.01" min="0">
+      <label>BHYT (%)</label><input id="insHealth" type="number" step="0.01" min="0">
+      <label>BHTN (%)</label><input id="insUnemployment" type="number" step="0.01" min="0">
+      <p><b>Tổng %:</b> <span id="insTotal">0</span>%</p>
+    </article>
+
+    <article class="card">
+      <h3>👨‍👩‍👧‍👦 CẤU HÌNH NGƯỜI PHỤ THUỘC</h3>
+      <label>Giảm trừ bản thân (VNĐ)</label><input id="dedPersonal" type="number" min="0">
+      <label>Giảm trừ mỗi người phụ thuộc (VNĐ)</label><input id="dedDependent" type="number" min="0">
+      <p class="muted">Backend lưu số lượng hợp lệ vào number_of_dependents theo từng nhân viên để payroll gọi trực tiếp.</p>
+    </article>
+
+    <article class="card policy-tax-card">
+      <h3>💰 CẤU HÌNH THUẾ TNCN</h3>
+      <p class="muted">B1: Thu nhập chịu thuế = Tổng lương - khoản miễn thuế (phụ cấp)</p>
+      <p class="muted">B2: Thu nhập tính thuế = Thu nhập chịu thuế - Bảo hiểm - Giảm trừ</p>
+      <table>
+        <thead><tr><th>Bậc</th><th>Từ</th><th>Đến</th><th>Thuế suất %</th><th>Số trừ nhanh</th></tr></thead>
+        <tbody id="taxBracketRows"></tbody>
+      </table>
+    </article>
+
+    <article class="card">
+      <h3>🔄 CẤU HÌNH TRẠNG THÁI PAYROLL</h3>
+      <ul>
+        <li>HR tính lương → Pending Approval (được sửa)</li>
+        <li>Admin duyệt → Approved (không sửa trực tiếp)</li>
+        <li>Admin chốt lương → Locked (khóa hoàn toàn)</li>
+        <li>Employee khiếu nại → Complaint (mở quy trình ngoại lệ)</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h3>🧪 Ví dụ tính thật</h3>
+      <p>Tổng lương: <b>40.000.000</b> | Người phụ thuộc: <b>2</b></p>
+      <div id="realExampleBox" class="muted"></div>
+    </article>
+  </div>
+</section>
+{% endblock %}
+{% block admin_scripts %}
+<script>window.ADMIN_PAGE='salary_policy';</script>
+<script src="{{ url_for('static', filename='js/admin/salary_policy.js') }}"></script>
+{% endblock %}

@@ -12,6 +12,7 @@
     <a href="/admin/positions" class="{{ 'active' if request.endpoint == 'admin.admin_positions_page' }}">Quản lý chức danh</a>
     <a href="/admin/attendance" class="{{ 'active' if request.endpoint == 'admin.admin_attendance_page' }}">Chấm công</a>
     <a href="/admin/salary" class="{{ 'active' if request.endpoint == 'admin.admin_salary_page' }}">Lương</a>
+    <a href="/admin/salary-config" class="{{ 'active' if request.endpoint == 'admin.admin_salary_config_page' }}">Cấu hình bảng lương</a>
     <a href="{{ url_for('admin.admin_profile_page') }}" class="{{ 'active' if request.endpoint == 'admin.admin_profile_page' }}">Thông tin cá nhân</a>
   </aside>
   <section class="admin-main">

@@ -56,7 +56,7 @@ from app.modules.hr.dto import (
     HRProfileUpdateDTO,
     DependentDTO,
 )
-
+from app.modules.payroll_policy import PayrollPolicyService
 
 class HRService:
     VALID_WORKING_STATUSES = {"active", "probation", "on_leave", "pending_resignation", "resigned", "inactive", "terminated", "retired"}
@@ -701,7 +701,7 @@ class HRService:
         db.session.commit()
         return employee.user
 
-    PAYROLL_STATUSES = {"draft", "pending_approval", "approved", "finalized", "complaint"}
+    PAYROLL_STATUSES = {"draft", "pending_approval", "approved", "finalized", "locked", "complaint"}
 
     @staticmethod
     def _month_range(month: int, year: int) -> tuple[date, date]:
@@ -804,12 +804,14 @@ class HRService:
             "pending_approval": "Chờ duyệt",
             "approved": "Đã duyệt",
             "finalized": "Đã chốt",
+            "locked": "Đã chốt",
             "complaint": "Khiếu nại",
         }
         return labels.get(status, status)
 
     @staticmethod
     def _compute_salary(employee: Employee, month: int, year: int) -> tuple[Salary, dict]:
+        policy = PayrollPolicyService.get_policy()
         contract = (
             Contract.query.filter_by(employee_id=employee.id, is_deleted=False)
             .order_by(Contract.start_date.desc(), Contract.id.desc())
@@ -848,11 +850,11 @@ class HRService:
         late_penalty = Decimal("0")
         if attendance_required and metrics["late_minutes"] > 0:
             if metrics["late_minutes"] < 15:
-                late_penalty = Decimal("50000")
+                late_penalty = Decimal(str(policy["late_penalty"]["under_15"]))
             elif metrics["late_minutes"] <= 30:
-                late_penalty = Decimal("150000")
-            else:
-                late_penalty = Decimal("300000")
+                late_penalty = Decimal(str(policy["late_penalty"]["from_15_to_30"]))
+            elif metrics["late_minutes"] > 60 and policy["late_penalty"]["over_60_half_day"]:
+                late_penalty = base_salary / standard_work_days / Decimal("2")
 
         early_penalty = Decimal("30000") if attendance_required and metrics["early_minutes"] > 0 else Decimal("0")
         unpaid_leave_penalty = (
@@ -873,11 +875,31 @@ class HRService:
             else base_salary
         )
         taxable_income = attendance_income + total_allowance + manual_allowance_total
-        social_insurance = taxable_income * Decimal("0.08")
-        health_insurance = taxable_income * Decimal("0.015")
-        unemployment_insurance = taxable_income * Decimal("0.01")
+        social_insurance = taxable_income * (Decimal(str(policy["insurance"]["social_percent"])) / Decimal("100"))
+        health_insurance = taxable_income * (Decimal(str(policy["insurance"]["health_percent"])) / Decimal("100"))
+        unemployment_insurance = taxable_income * (Decimal(str(policy["insurance"]["unemployment_percent"])) / Decimal("100"))
 
-        personal_income_tax = max((taxable_income - Decimal("11000000")) * Decimal("0.05"), Decimal("0"))
+        tax_free_allowances = policy["tax_free_allowances"]
+        tax_free_total = Decimal("0")
+        for k, v in (manual_allowances or {}).items():
+            cap = Decimal(str(tax_free_allowances.get(k, 0)))
+            amount = HRService._decimal(v)
+            tax_free_total += min(amount, cap) if cap > 0 else Decimal("0")
+        taxable_income_after_tax_free = max(Decimal("0"), taxable_income - tax_free_total)
+
+        dependent_count = PayrollPolicyService.dependent_count(employee.id)
+        personal_deduction = Decimal(str(policy["deduction"]["personal"]))
+        dependent_deduction = Decimal(str(policy["deduction"]["dependent_per_person"])) * Decimal(str(dependent_count))
+        tax_base = max(
+            Decimal("0"),
+            taxable_income_after_tax_free
+            - social_insurance
+            - health_insurance
+            - unemployment_insurance
+            - personal_deduction
+            - dependent_deduction,
+        )
+        personal_income_tax = PayrollPolicyService.tax_by_bracket(tax_base, policy["tax"]["brackets"])
 
         auto_penalty_total = late_penalty + early_penalty + unpaid_leave_penalty
         penalty_total = auto_penalty_total + manual_deduction_total
@@ -903,11 +925,10 @@ class HRService:
             "overtime_amount": float(overtime_amount),
             "late_penalty": float(late_penalty),
             "early_penalty": float(early_penalty),
-            "unpaid_leave_penalty": float(unpaid_leave_penalty),
-            "social_insurance": float(social_insurance),
-            "health_insurance": float(health_insurance),
-            "unemployment_insurance": float(unemployment_insurance),
-            "personal_income_tax": float(personal_income_tax),
+            "number_of_dependents": dependent_count,
+            "personal_deduction": float(personal_deduction),
+            "dependent_deduction": float(dependent_deduction),
+            "taxable_income_after_tax_free": float(taxable_income_after_tax_free),
             "manual_deduction": float(manual_deduction_total),
             "gross_total": float(gross_total),
             "net_salary": float(net_salary),
@@ -957,6 +978,7 @@ class HRService:
             {"value": "pending_approval", "label": "Chờ duyệt"},
             {"value": "approved", "label": "Đã duyệt"},
             {"value": "finalized", "label": "Đã chốt"},
+            {"value": "locked", "label": "Đã chốt"},
             {"value": "complaint", "label": "Khiếu nại"},
         ]
         return base_meta
@@ -1049,7 +1071,7 @@ class HRService:
         salary = Salary.query.get(salary_id)
         if not salary:
             raise ValueError("Không tìm thấy payroll")
-        if salary.status in {"approved", "finalized"}:
+        if salary.status in {"approved", "finalized", "locked"}:
             raise ValueError("Payroll đã được duyệt/chốt, không thể chỉnh sửa")
 
         payload = HRService._salary_note_payload(salary)
@@ -1083,7 +1105,7 @@ class HRService:
         salary = Salary.query.get(salary_id)
         if not salary:
             raise ValueError("Không tìm thấy payroll")
-        if salary.status in {"approved", "finalized"}:
+        if salary.status in {"approved", "finalized", "locked"}:
             raise ValueError("Payroll đã khóa chỉnh sửa")
 
         salary.status = "pending_approval"
@@ -1110,7 +1132,7 @@ class HRService:
         if action == "approve":
             salary.status = "approved"
         elif action == "finalize":
-            salary.status = "finalized"
+            salary.status = "locked"
         elif action == "reject":
             salary.status = "draft"
         else:

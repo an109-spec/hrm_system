@@ -32,6 +32,7 @@ from app.models import (
     User,
 )
 from app.modules.resignation_service import ResignationService
+from app.modules.payroll_policy import PayrollPolicyService
 from app.models.complaint import ComplaintMessage
 from . import admin_bp
 from . import service as admin_service
@@ -161,6 +162,13 @@ def admin_salary_page():
     if guard:
         return guard
     return render_template("admin/salary.html")
+
+@admin_bp.get("/admin/salary-config")
+def admin_salary_config_page():
+    guard = _guard_login()
+    if guard:
+        return guard
+    return render_template("admin/salary_config.html")
 
 def _current_employee() -> Employee | None:
     user = _current_user()
@@ -1705,32 +1713,15 @@ PAYROLL_STATUS_LABELS = {
 
 
 def _progressive_tax(taxable_income: Decimal) -> Decimal:
-    if taxable_income <= 0:
-        return Decimal("0")
-    brackets = [
-        (Decimal("5000000"), Decimal("0.05")),
-        (Decimal("10000000"), Decimal("0.10")),
-        (Decimal("18000000"), Decimal("0.15")),
-        (Decimal("32000000"), Decimal("0.20")),
-        (Decimal("52000000"), Decimal("0.25")),
-        (Decimal("80000000"), Decimal("0.30")),
-        (Decimal("999999999999"), Decimal("0.35")),
-    ]
-    previous = Decimal("0")
-    tax = Decimal("0")
-    remaining = taxable_income
-    for cap, rate in brackets:
-        if remaining <= 0:
-            break
-        slab = min(remaining, cap - previous)
-        if slab > 0:
-            tax += slab * rate
-            remaining -= slab
-        previous = cap
-    return tax.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    policy = PayrollPolicyService.get_policy()
+    return PayrollPolicyService.tax_by_bracket(taxable_income, policy["tax"]["brackets"])
 
 
 def _late_penalty(employee_id: int, month: int, year: int, basic_salary: Decimal, standard_days: int) -> Decimal:
+    policy = PayrollPolicyService.get_policy()
+    under_15 = Decimal(str(policy["late_penalty"]["under_15"]))
+    from_15_to_30 = Decimal(str(policy["late_penalty"]["from_15_to_30"]))
+    over_60_half_day = bool(policy["late_penalty"]["over_60_half_day"])
     records = Attendance.query.filter(
         Attendance.employee_id == employee_id,
         func.extract("month", Attendance.date) == month,
@@ -1746,19 +1737,20 @@ def _late_penalty(employee_id: int, month: int, year: int, basic_salary: Decimal
         if late_minutes < 1:
             continue
         if late_minutes < 15:
-            penalty += Decimal("20000")
+            penalty += under_15
         elif late_minutes <= 30:
-            penalty += Decimal("50000")
-        elif late_minutes > 60:
+            penalty += from_15_to_30
+        elif late_minutes > 60 and over_60_half_day:
             penalty += half_day_unit
     return penalty.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
 def _payroll_row(row: Salary):
+    policy = PayrollPolicyService.get_policy()
     employee = row.employee
     user = employee.user if employee else None
     status_raw = (row.status or "draft").lower()
-    dependent_count = Dependent.query.filter_by(employee_id=employee.id if employee else None, is_deleted=False, is_valid=True).count() if employee else 0
+    dependent_count = PayrollPolicyService.dependent_count(employee.id if employee else None)
     total_allowance = Decimal(str(row.total_allowance or 0))
     basic_salary = Decimal(str(row.basic_salary or 0))
     bonus = Decimal(str(row.bonus or 0))
@@ -1771,10 +1763,12 @@ def _payroll_row(row: Salary):
     overtime_pay = (overtime_pay * (basic_salary / Decimal(str(max(standard_days, 1)))) * Decimal("1.5")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     gross = basic_salary + total_allowance + bonus + overtime_pay
     taxable_income = max(Decimal("0"), gross - total_allowance)
-    insurance = (taxable_income * Decimal("0.105")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    dependent_deduction = (Decimal("11000000") + Decimal("4400000") * Decimal(str(dependent_count))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    personal_deduction = Decimal("11000000")
-    taxable_after_deduction = max(Decimal("0"), taxable_income - insurance - personal_deduction - Decimal("4400000") * Decimal(str(dependent_count)))
+    insurance_rate = Decimal(str(policy["insurance"]["total_percent"])) / Decimal("100")
+    insurance = (taxable_income * insurance_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    personal_deduction = Decimal(str(policy["deduction"]["personal"]))
+    per_dependent = Decimal(str(policy["deduction"]["dependent_per_person"]))
+    dependent_deduction = (personal_deduction + per_dependent * Decimal(str(dependent_count))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    taxable_after_deduction = max(Decimal("0"), taxable_income - insurance - personal_deduction - per_dependent * Decimal(str(dependent_count)))
     tax = _progressive_tax(taxable_after_deduction)
     total_deduction = (base_deduction + late_penalty + insurance + tax).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     net_salary = (gross - total_deduction).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
@@ -2030,6 +2024,77 @@ def salary_setting_get():
         result[k] = row.value if row else defaults[k]
     return jsonify(result)
 
+@admin_bp.get("/api/admin/salary-policy")
+def admin_salary_policy_get():
+    return jsonify(PayrollPolicyService.get_policy())
+
+
+@admin_bp.put("/api/admin/salary-policy")
+def admin_salary_policy_put():
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = PayrollPolicyService.update_policy(payload, actor_user_id=actor.id if actor else None)
+        return jsonify({"success": True, "policy": data})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
+
+
+@admin_bp.post("/api/admin/salary-policy/lock-edit")
+def admin_salary_policy_lock_edit():
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    locked = bool(payload.get("locked", True))
+    PayrollPolicyService.set_edit_lock(locked, actor_user_id=actor.id if actor else None)
+    return jsonify({"success": True, "locked": locked})
+
+
+@admin_bp.get("/api/admin/salary-policy/history")
+def admin_salary_policy_history():
+    rows = (
+        HistoryLog.query.filter_by(entity_type="salary_policy")
+        .order_by(HistoryLog.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return jsonify(
+        [
+            {
+                "id": row.id,
+                "action": row.action,
+                "description": row.description,
+                "time": row.created_at.isoformat() if row.created_at else None,
+                "by": row.performed_by,
+            }
+            for row in rows
+        ]
+    )
+
+
+@admin_bp.post("/api/admin/salary-policy/restore")
+def admin_salary_policy_restore():
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    history_id = int(payload.get("history_id") or 0)
+    row = HistoryLog.query.filter_by(id=history_id, entity_type="salary_policy").first()
+    if not row or row.action != "UPDATE_SALARY_POLICY":
+        return jsonify({"error": "Không tìm thấy bản cấu hình hợp lệ để khôi phục"}), 404
+    import ast
+    try:
+        raw_policy = ast.literal_eval(row.description or "{}")
+        data = PayrollPolicyService.update_policy(raw_policy, actor_user_id=actor.id if actor else None)
+        db.session.add(
+            HistoryLog(
+                action="RESTORE_SALARY_POLICY",
+                entity_type="salary_policy",
+                description=f"restore_from={history_id}",
+                performed_by=actor.id if actor else None,
+            )
+        )
+        db.session.commit()
+        return jsonify({"success": True, "policy": data})
+    except Exception:
+        return jsonify({"error": "Dữ liệu history không thể restore"}), 400
 
 @admin_bp.put("/api/admin/system-settings/salary")
 def salary_setting_put():
