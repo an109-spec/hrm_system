@@ -1,7 +1,71 @@
 {% extends "admin/base_admin.html" %}
 {% block admin_content %}
-<div class="filters"><input id="month" type="number" min="1" max="12"><input id="year" type="number" min="2000" max="2100"><select id="groupBy"><option value="department">department</option><option value="position">position</option><option value="role">role</option></select><button onclick="loadSalaryAggregate()">Lọc</button><button onclick="lockSalary()">🔒 Chốt lương</button><button onclick="unlockSalary()">🔓 Mở chốt</button></div>
-<div class="card"><h3 id="salaryStatus"></h3><table><thead><tr><th>Nhóm</th><th>Số NV</th><th>Tổng lương</th><th>TB lương</th></tr></thead><tbody id="salaryRows"></tbody></table></div>
-<div class="card"><h3>Audit lương</h3><ul id="salaryAudit"></ul></div>
+<section class="payroll-admin-page">
+  <header class="attendance-head">
+    <h2>Payroll Control Center</h2>
+    <p>Trung tâm kiểm soát payroll toàn hệ thống: duyệt, chốt, xử lý complaint và audit.</p>
+  </header>
+
+  <div class="card payroll-toolbar">
+    <div class="payroll-search-group">
+      <input id="payrollSearch" type="text" placeholder="Tìm nhân viên, mã NV, phòng ban...">
+      <button id="btnPayrollSearch" class="btn-primary">Tìm kiếm</button>
+    </div>
+    <div class="payroll-filter-grid">
+      <select id="payrollDepartment"><option value="">Phòng ban</option></select>
+      <select id="payrollStatus"><option value="">Trạng thái lương</option><option value="draft">Nháp</option><option value="pending_approval">Chờ duyệt</option><option value="approved">Đã duyệt</option><option value="locked">Đã chốt</option><option value="complaint">Khiếu nại</option></select>
+      <select id="payrollRole"><option value="">Role</option></select>
+      <select id="payrollComplaint"><option value="">Có khiếu nại / Không</option><option value="yes">Có khiếu nại</option><option value="no">Không khiếu nại</option></select>
+      <select id="payrollLocked"><option value="">Đã chốt / Chưa chốt</option><option value="yes">Đã chốt</option><option value="no">Chưa chốt</option></select>
+    </div>
+    <div class="attendance-action-buttons">
+      <button id="btnExportPayroll">Xuất bảng lương</button>
+      <button id="btnBulkApprovePayroll">Duyệt bảng lương</button>
+      <button id="btnOpenComplaints">Xử lý khiếu nại</button>
+      <button id="btnFinalizePayrollMonth" class="btn-primary">CHỐT LƯƠNG THÁNG</button>
+    </div>
+  </div>
+
+  <div id="payrollSummaryCards" class="summary-grid"></div>
+
+  <div class="card table-wrap">
+    <h3>Bảng lương toàn hệ thống</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Mã nhân viên</th><th>Tên nhân viên</th><th>Phòng ban</th><th>Chức danh</th>
+          <th>Lương cơ bản</th><th>Phụ cấp</th><th>Khấu trừ</th><th>OT</th>
+          <th>Thuế TNCN</th><th>Thực nhận</th><th>Trạng thái</th><th>Khiếu nại</th><th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="payrollRows"></tbody>
+    </table>
+  </div>
+
+  <div class="payroll-panel-grid">
+    <article class="card">
+      <h3>📄 Chi tiết bảng lương</h3>
+      <div id="payrollDetailPanel" class="muted">Chọn một dòng payroll để xem chi tiết đối soát.</div>
+    </article>
+    <article class="card">
+      <h3>✅ Duyệt bảng lương</h3>
+      <div class="attendance-action-buttons">
+        <button id="btnApprovePayroll">Phê duyệt</button>
+        <button id="btnRejectPayroll">Từ chối</button>
+        <button id="btnRequestRecalcPayroll">Yêu cầu HR tính lại</button>
+      </div>
+      <p class="muted">Từ chối/Yêu cầu tính lại bắt buộc nhập lý do (SweetAlert2).</p>
+    </article>
+    <article class="card">
+      <h3>📩 Khiếu nại lương</h3>
+      <div id="payrollComplaintPanel" class="muted">Chưa có complaint nào được chọn.</div>
+    </article>
+  </div>
+
+  <div class="card">
+    <h3>History Log</h3>
+    <ul id="payrollAuditLog"></ul>
+  </div>
+</section>
 {% endblock %}
 {% block admin_scripts %}<script>window.ADMIN_PAGE='salary';</script>{% endblock %}

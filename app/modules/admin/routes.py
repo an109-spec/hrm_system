@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timezone, timedelta
 from io import StringIO
 import csv
 import os
+from decimal import Decimal, ROUND_HALF_UP
 
 from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
 from sqlalchemy import cast, func, or_, String
@@ -15,6 +16,7 @@ from app.models import (
     AttendanceStatus,
     Complaint,
     Contract,
+    Dependent,
     Department,
     Employee,
     EmployeeAllowance,
@@ -29,6 +31,7 @@ from app.models import (
     User,
 )
 from app.modules.resignation_service import ResignationService
+from app.models.complaint import ComplaintMessage
 from . import admin_bp
 from . import service as admin_service
 
@@ -1625,106 +1628,332 @@ def attendance_audit_log():
     ])
 
 
-# -------------------------
-# Salary admin APIs
-# -------------------------
-@admin_bp.get("/api/admin/salaries/aggregate")
-def salary_aggregate():
+PAYROLL_STATUS_LABELS = {
+    "draft": "Nháp",
+    "pending": "Chờ duyệt",
+    "pending_approval": "Chờ duyệt",
+    "approved": "Đã duyệt",
+    "paid": "Đã duyệt",
+    "locked": "Đã chốt",
+    "finalized": "Đã chốt",
+    "complaint": "Khiếu nại",
+}
+
+
+def _progressive_tax(taxable_income: Decimal) -> Decimal:
+    if taxable_income <= 0:
+        return Decimal("0")
+    brackets = [
+        (Decimal("5000000"), Decimal("0.05")),
+        (Decimal("10000000"), Decimal("0.10")),
+        (Decimal("18000000"), Decimal("0.15")),
+        (Decimal("32000000"), Decimal("0.20")),
+        (Decimal("52000000"), Decimal("0.25")),
+        (Decimal("80000000"), Decimal("0.30")),
+        (Decimal("999999999999"), Decimal("0.35")),
+    ]
+    previous = Decimal("0")
+    tax = Decimal("0")
+    remaining = taxable_income
+    for cap, rate in brackets:
+        if remaining <= 0:
+            break
+        slab = min(remaining, cap - previous)
+        if slab > 0:
+            tax += slab * rate
+            remaining -= slab
+        previous = cap
+    return tax.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def _late_penalty(employee_id: int, month: int, year: int, basic_salary: Decimal, standard_days: int) -> Decimal:
+    records = Attendance.query.filter(
+        Attendance.employee_id == employee_id,
+        func.extract("month", Attendance.date) == month,
+        func.extract("year", Attendance.date) == year,
+        Attendance.is_deleted.is_(False),
+    ).all()
+    penalty = Decimal("0")
+    half_day_unit = (basic_salary / Decimal(str(max(standard_days, 1)))) / Decimal("2")
+    for att in records:
+        if not att.check_in:
+            continue
+        late_minutes = (att.check_in.hour * 60 + att.check_in.minute) - (8 * 60)
+        if late_minutes < 1:
+            continue
+        if late_minutes < 15:
+            penalty += Decimal("20000")
+        elif late_minutes <= 30:
+            penalty += Decimal("50000")
+        elif late_minutes > 60:
+            penalty += half_day_unit
+    return penalty.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def _payroll_row(row: Salary):
+    employee = row.employee
+    user = employee.user if employee else None
+    status_raw = (row.status or "draft").lower()
+    dependent_count = Dependent.query.filter_by(employee_id=employee.id if employee else None, is_deleted=False, is_valid=True).count() if employee else 0
+    total_allowance = Decimal(str(row.total_allowance or 0))
+    basic_salary = Decimal(str(row.basic_salary or 0))
+    bonus = Decimal(str(row.bonus or 0))
+    base_deduction = Decimal(str(row.penalty or 0))
+    standard_days = int(row.standard_work_days or 22)
+    late_penalty = _late_penalty(employee.id, row.month, row.year, basic_salary, standard_days) if employee else Decimal("0")
+    overtime_pay = (Decimal(str(row.total_work_days or 0)) - Decimal(str(standard_days)))
+    if overtime_pay < 0:
+        overtime_pay = Decimal("0")
+    overtime_pay = (overtime_pay * (basic_salary / Decimal(str(max(standard_days, 1)))) * Decimal("1.5")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    gross = basic_salary + total_allowance + bonus + overtime_pay
+    taxable_income = max(Decimal("0"), gross - total_allowance)
+    insurance = (taxable_income * Decimal("0.105")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    dependent_deduction = (Decimal("11000000") + Decimal("4400000") * Decimal(str(dependent_count))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    personal_deduction = Decimal("11000000")
+    taxable_after_deduction = max(Decimal("0"), taxable_income - insurance - personal_deduction - Decimal("4400000") * Decimal(str(dependent_count)))
+    tax = _progressive_tax(taxable_after_deduction)
+    total_deduction = (base_deduction + late_penalty + insurance + tax).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    net_salary = (gross - total_deduction).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    complaint = Complaint.query.filter_by(salary_id=row.id, is_deleted=False).order_by(Complaint.created_at.desc()).first()
+    display_status = "complaint" if complaint and complaint.status in {"pending", "in_progress"} else status_raw
+    return {
+        "id": row.id,
+        "employee_id": employee.id if employee else None,
+        "employee_code": f"EMP-{employee.id:05d}" if employee else "N/A",
+        "employee_name": employee.full_name if employee else "N/A",
+        "department": employee.department.name if employee and employee.department else "--",
+        "position": employee.position.job_title if employee and employee.position else "--",
+        "role": user.role.name if user and user.role else "Employee",
+        "month": row.month,
+        "year": row.year,
+        "basic_salary": float(basic_salary),
+        "allowance": float(total_allowance),
+        "deduction": float(base_deduction + late_penalty),
+        "late_penalty": float(late_penalty),
+        "ot": float(overtime_pay),
+        "insurance": float(insurance),
+        "tax": float(tax),
+        "dependent_deduction": float(dependent_deduction),
+        "number_of_dependents": int(dependent_count),
+        "net_salary": float(net_salary),
+        "status": display_status,
+        "status_label": PAYROLL_STATUS_LABELS.get(display_status, display_status),
+        "has_complaint": bool(complaint and complaint.status in {"pending", "in_progress"}),
+        "complaint_status": complaint.status if complaint else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "calculated_by": "HR System",
+    }
+
+
+def _payroll_filtered_query():
     month = request.args.get("month", type=int) or datetime.utcnow().month
     year = request.args.get("year", type=int) or datetime.utcnow().year
-    group_by = request.args.get("group_by", "department")
-
-    q = db.session.query(Salary).filter(Salary.month == month, Salary.year == year)
-    status = "locked" if q.filter(Salary.status == "approved").count() > 0 else "pending"
-
-    data = []
-    if group_by == "department":
-        rows = db.session.query(
-            Department.id, Department.name, func.count(Employee.id), func.sum(Salary.net_salary), func.avg(Salary.net_salary)
-        ).join(Employee, Employee.department_id == Department.id).join(Salary, Salary.employee_id == Employee.id).filter(
-            Salary.month == month, Salary.year == year
-        ).group_by(Department.id, Department.name).all()
-        data = [{"group_id": int(r[0]), "group_name": r[1], "employee_count": int(r[2]), "total_salary": _to_float(r[3]), "avg_salary": _to_float(r[4])} for r in rows]
-    elif group_by == "position":
-        rows = db.session.query(
-            Position.id, Position.job_title, func.count(Employee.id), func.sum(Salary.net_salary), func.avg(Salary.net_salary)
-        ).join(Employee, Employee.position_id == Position.id).join(Salary, Salary.employee_id == Employee.id).filter(
-            Salary.month == month, Salary.year == year
-        ).group_by(Position.id, Position.job_title).all()
-        data = [{"group_id": int(r[0]), "group_name": r[1], "employee_count": int(r[2]), "total_salary": _to_float(r[3]), "avg_salary": _to_float(r[4])} for r in rows]
-    else:
-        rows = db.session.query(
-            Role.id, Role.name, func.count(Employee.id), func.sum(Salary.net_salary), func.avg(Salary.net_salary)
-        ).join(User, User.role_id == Role.id).join(Employee, Employee.user_id == User.id).join(Salary, Salary.employee_id == Employee.id).filter(
-            Salary.month == month, Salary.year == year
-        ).group_by(Role.id, Role.name).all()
-        data = [{"group_id": int(r[0]), "group_name": r[1], "employee_count": int(r[2]), "total_salary": _to_float(r[3]), "avg_salary": _to_float(r[4])} for r in rows]
-
-    return jsonify({"status": status, "data": data})
-
-
-@admin_bp.post("/api/admin/salaries/lock")
-def salary_lock():
-    data = request.get_json(silent=True) or {}
-    month = int(data.get("month"))
-    year = int(data.get("year"))
-    rows = Salary.query.filter_by(month=month, year=year).all()
-    if not rows:
-        return jsonify({"error": "No salary data"}), 400
-    for row in rows:
-        row.status = "approved"
-    actor = _current_user()
-    db.session.add(HistoryLog(action="LOCK_SALARY", entity_type="salary", description=f"{month}/{year}", performed_by=actor.id if actor else None))
-    db.session.commit()
-    return jsonify({"success": True})
-
-
-@admin_bp.post("/api/admin/salaries/unlock")
-def salary_unlock():
-    data = request.get_json(silent=True) or {}
-    month = int(data.get("month"))
-    year = int(data.get("year"))
-    rows = Salary.query.filter_by(month=month, year=year).all()
-    for row in rows:
-        row.status = "pending"
-    actor = _current_user()
-    db.session.add(HistoryLog(action="UNLOCK_SALARY", entity_type="salary", description=f"{month}/{year}", performed_by=actor.id if actor else None))
-    db.session.commit()
-    return jsonify({"success": True})
-
-
-@admin_bp.get("/api/admin/salaries/export")
-def salary_export():
-    month = request.args.get("month", type=int) or datetime.utcnow().month
-    year = request.args.get("year", type=int) or datetime.utcnow().year
-    group_by = request.args.get("group_by", "department")
-
-    payload = salary_aggregate().json
-    buffer = StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["group_id", "group_name", "employee_count", "total_salary", "avg_salary"])
-    for row in payload.get("data", []):
-        writer.writerow([row["group_id"], row["group_name"], row["employee_count"], row["total_salary"], row["avg_salary"]])
-
-    return Response(
-        buffer.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=salary_{group_by}_{month}_{year}.csv"},
+    query = Salary.query.join(Employee, Salary.employee_id == Employee.id).outerjoin(User, Employee.user_id == User.id).filter(
+        Salary.month == month,
+        Salary.year == year,
+        Salary.is_deleted.is_(False),
     )
+    keyword = (request.args.get("keyword") or "").strip()
+    department_id = request.args.get("department_id", type=int)
+    status = (request.args.get("status") or "").strip().lower()
+    role = (request.args.get("role") or "").strip()
+    has_complaint = (request.args.get("has_complaint") or "").strip().lower()
+    locked = (request.args.get("locked") or "").strip().lower()
+    if keyword:
+        query = query.outerjoin(Department, Employee.department_id == Department.id).outerjoin(Position, Employee.position_id == Position.id).filter(or_(
+            Employee.full_name.ilike(f"%{keyword}%"),
+            func.cast(Employee.id, String).ilike(f"%{keyword.replace('EMP-', '')}%"),
+            Department.name.ilike(f"%{keyword}%"),
+            Position.job_title.ilike(f"%{keyword}%"),
+        ))
+    if department_id:
+        query = query.filter(Employee.department_id == department_id)
+    if status:
+        if status == "pending_approval":
+            query = query.filter(Salary.status.in_(["pending", "pending_approval"]))
+        elif status == "locked":
+            query = query.filter(Salary.status.in_(["locked", "finalized"]))
+        elif status == "approved":
+            query = query.filter(Salary.status.in_(["approved", "paid"]))
+        else:
+            query = query.filter(Salary.status == status)
+    if role:
+        query = query.join(Role, User.role_id == Role.id).filter(Role.name == role)
+    if locked in {"yes", "true", "1"}:
+        query = query.filter(Salary.status.in_(["locked", "finalized"]))
+    if locked in {"no", "false", "0"}:
+        query = query.filter(~Salary.status.in_(["locked", "finalized"]))
+    if has_complaint in {"yes", "true", "1"}:
+        query = query.filter(Salary.id.in_(db.session.query(Complaint.salary_id).filter(Complaint.status.in_(["pending", "in_progress"]), Complaint.is_deleted.is_(False))))
+    if has_complaint in {"no", "false", "0"}:
+        query = query.filter(~Salary.id.in_(db.session.query(Complaint.salary_id).filter(Complaint.status.in_(["pending", "in_progress"]), Complaint.is_deleted.is_(False))))
+    return query, month, year
 
 
-@admin_bp.get("/api/admin/salaries/audit")
-def salary_audit():
-    rows = HistoryLog.query.filter_by(entity_type="salary").order_by(HistoryLog.created_at.desc()).limit(50).all()
+@admin_bp.get("/api/admin/payroll/overview")
+def payroll_overview():
+    query, month, year = _payroll_filtered_query()
+    rows = [_payroll_row(r) for r in query.order_by(Salary.updated_at.desc()).all()]
+    summary = {
+        "total_payroll": len(rows),
+        "pending": sum(1 for r in rows if r["status"] in {"pending", "pending_approval"}),
+        "approved": sum(1 for r in rows if r["status"] in {"approved", "paid"}),
+        "locked": sum(1 for r in rows if r["status"] in {"locked", "finalized"}),
+        "complaint": sum(1 for r in rows if r["has_complaint"]),
+        "abnormal": sum(1 for r in rows if r["deduction"] > (r["basic_salary"] * 0.2)),
+        "total_net": float(sum(Decimal(str(r["net_salary"])) for r in rows)),
+        "month": month,
+        "year": year,
+    }
+    return jsonify({"summary": summary, "items": rows})
+
+
+@admin_bp.get("/api/admin/payroll/<int:salary_id>/detail")
+def payroll_detail_admin(salary_id: int):
+    row = Salary.query.filter_by(id=salary_id, is_deleted=False).first_or_404()
+    payload = _payroll_row(row)
+    payload["payroll_period"] = f"{row.month:02d}/{row.year}"
+    return jsonify(payload)
+
+@admin_bp.post("/api/admin/payroll/<int:salary_id>/approval")
+def payroll_approval_action(salary_id: int):
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get("action") or "").strip()
+    reason = (payload.get("reason") or "").strip()
+    salary = Salary.query.filter_by(id=salary_id, is_deleted=False).first_or_404()
+    if salary.status in {"locked", "finalized"}:
+        return jsonify({"error": "Payroll đã chốt, không thể duyệt lại"}), 409
+    if action in {"reject", "recalculate"} and not reason:
+        return jsonify({"error": "Bắt buộc nhập lý do"}), 400
+    if action == "approve":
+        salary.status = "approved"
+        log_action = "APPROVE_PAYROLL"
+    elif action == "reject":
+        salary.status = "draft"
+        salary.note = reason
+        log_action = "REJECT_PAYROLL"
+    elif action == "recalculate":
+        salary.status = "pending_approval"
+        salary.note = reason
+        log_action = "REQUEST_RECALCULATE_PAYROLL"
+    else:
+        return jsonify({"error": "Action không hợp lệ"}), 400
+    db.session.add(HistoryLog(action=log_action, entity_type="salary", entity_id=salary.id, description=reason or f"salary_id={salary.id}", performed_by=actor.id if actor else None))
+    db.session.commit()
+    return jsonify({"success": True, "status": salary.status})
+
+@admin_bp.post("/api/admin/payroll/finalize-month")
+def payroll_finalize_month():
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    month = int(payload.get("month") or 0)
+    year = int(payload.get("year") or 0)
+    rows = Salary.query.filter_by(month=month, year=year, is_deleted=False).all()
+    if not rows:
+        return jsonify({"error": "Không có bảng lương kỳ này"}), 404
+    for row in rows:
+        row.status = "locked"
+    db.session.add(HistoryLog(action="FINALIZE_PAYROLL_MONTH", entity_type="salary", description=f"{month:02d}/{year}", performed_by=actor.id if actor else None))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.post("/api/admin/payroll/reopen-month")
+def payroll_reopen_month():
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    month = int(payload.get("month") or 0)
+    year = int(payload.get("year") or 0)
+    reason = (payload.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "Lý do mở lại payroll là bắt buộc"}), 400
+    rows = Salary.query.filter_by(month=month, year=year, is_deleted=False).all()
+    for row in rows:
+        if row.status in {"locked", "finalized"}:
+            row.status = "pending_approval"
+    db.session.add(HistoryLog(action="REOPEN_PAYROLL_MONTH", entity_type="salary", description=f"{month:02d}/{year} | {reason}", performed_by=actor.id if actor else None))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.get("/api/admin/payroll/complaints")
+def payroll_complaints():
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    rows = Complaint.query.join(Salary, Complaint.salary_id == Salary.id).join(Employee, Complaint.employee_id == Employee.id).filter(
+        Salary.month == month,
+        Salary.year == year,
+        Complaint.salary_id.isnot(None),
+        Complaint.is_deleted.is_(False),
+    ).order_by(Complaint.created_at.desc()).limit(100).all()
     return jsonify([
         {
-            "time": r.created_at.isoformat() if r.created_at else None,
-            "action": r.action,
-            "description": r.description,
-            "by": int(r.performed_by) if r.performed_by else None,
+            "id": c.id,
+            "salary_id": c.salary_id,
+            "employee_name": c.employee.full_name if c.employee else "--",
+            "title": c.title,
+            "content": c.description,
+            "status": c.status,
+            "hr_replied": bool(c.admin_reply),
+            "history": [{"message": m.message, "sender_id": m.sender_id, "time": m.created_at.isoformat() if m.created_at else None} for m in ComplaintMessage.query.filter_by(complaint_id=c.id, is_deleted=False).order_by(ComplaintMessage.created_at.asc()).all()],
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
         }
-        for r in rows
+        for c in rows
     ])
+@admin_bp.post("/api/admin/payroll/complaints/<int:complaint_id>/handle")
+def payroll_complaint_handle(complaint_id: int):
+    actor = _current_user()
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get("action") or "").strip()
+    message = (payload.get("message") or "").strip()
+    complaint = Complaint.query.filter_by(id=complaint_id, is_deleted=False).first_or_404()
+    if action == "reply":
+        complaint.admin_reply = message or "Admin đã phản hồi."
+        complaint.status = "in_progress"
+    elif action == "transfer_hr":
+        complaint.admin_reply = message or "Chuyển HR xử lý."
+        complaint.status = "in_progress"
+    elif action == "resolve":
+        complaint.admin_reply = message or "Đánh dấu đã giải quyết."
+        complaint.status = "resolved"
+        complaint.resolved_at = datetime.utcnow()
+    elif action == "reopen_payroll":
+        complaint.admin_reply = message or "Mở lại payroll do complaint hợp lệ."
+        complaint.status = "in_progress"
+        if complaint.salary_id:
+            salary = Salary.query.get(complaint.salary_id)
+            if salary and salary.status in {"locked", "finalized"}:
+                salary.status = "pending_approval"
+    else:
+        return jsonify({"error": "Action không hợp lệ"}), 400
+    db.session.add(HistoryLog(action="HANDLE_PAYROLL_COMPLAINT", entity_type="salary", entity_id=complaint.salary_id, description=f"complaint={complaint.id}|{action}|{message}", performed_by=actor.id if actor else None))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.get("/api/admin/payroll/audit")
+def payroll_audit():
+    rows = HistoryLog.query.filter_by(entity_type="salary").order_by(HistoryLog.created_at.desc()).limit(200).all()
+    return jsonify([{
+        "id": r.id,
+        "time": r.created_at.isoformat() if r.created_at else None,
+        "action": r.action,
+        "description": r.description,
+        "by": r.performed_by,
+    } for r in rows])
+
+
+@admin_bp.get("/api/admin/payroll/export")
+def payroll_export():
+    query, month, year = _payroll_filtered_query()
+    rows = [_payroll_row(r) for r in query.order_by(Salary.id.asc()).all()]
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["employee_code", "employee_name", "department", "position", "basic_salary", "allowance", "deduction", "ot", "tax", "net_salary", "status", "has_complaint"])
+    for row in rows:
+        writer.writerow([row["employee_code"], row["employee_name"], row["department"], row["position"], row["basic_salary"], row["allowance"], row["deduction"], row["ot"], row["tax"], row["net_salary"], row["status_label"], "yes" if row["has_complaint"] else "no"])
+    return Response(buffer.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=payroll_{year}_{month:02d}.csv"})
 
 
 @admin_bp.get("/api/admin/system-settings/salary")

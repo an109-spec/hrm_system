@@ -1001,9 +1001,164 @@ async function finalReviewOt(id, action) {
 window.handleAttendanceAction = handleAttendanceAction;
 window.finalReviewOt = finalReviewOt;
 
-async function loadSalaryAggregate() { setDefaults(); const g = document.getElementById('groupBy').value; const m = month.value, y = year.value; const res = await api(`/api/admin/salaries/aggregate?month=${m}&year=${y}&group_by=${g}`); salaryStatus.textContent = `Trạng thái: ${res.status}`; salaryRows.innerHTML = res.data.map(r => `<tr><td>${r.group_name}</td><td>${r.employee_count}</td><td>${r.total_salary}</td><td>${r.avg_salary}</td></tr>`).join(''); const logs = await api('/api/admin/salaries/audit'); salaryAudit.innerHTML = logs.map(l => `<li>${l.time || ''} | ${l.action} | ${l.description || ''}</li>`).join(''); }
-async function lockSalary() { setDefaults(); await api('/api/admin/salaries/lock', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value }) }); loadSalaryAggregate(); }
-async function unlockSalary() { setDefaults(); await api('/api/admin/salaries/unlock', { method: 'POST', body: JSON.stringify({ month: +month.value, year: +year.value }) }); loadSalaryAggregate(); }
+let selectedPayrollId = null;
+let selectedComplaintId = null;
+
+function payrollFilterPayload() {
+  return new URLSearchParams({
+    month: String(document.getElementById('month')?.value || now.getMonth() + 1),
+    year: String(document.getElementById('year')?.value || now.getFullYear()),
+    keyword: document.getElementById('payrollSearch')?.value?.trim() || '',
+    department_id: document.getElementById('payrollDepartment')?.value || '',
+    status: document.getElementById('payrollStatus')?.value || '',
+    role: document.getElementById('payrollRole')?.value || '',
+    has_complaint: document.getElementById('payrollComplaint')?.value || '',
+    locked: document.getElementById('payrollLocked')?.value || '',
+  });
+}
+
+function payrollStatusBadge(status, label) {
+  const css = status === 'draft' ? 'badge-payroll-draft'
+    : status === 'pending' || status === 'pending_approval' ? 'badge-payroll-pending'
+    : status === 'approved' || status === 'paid' ? 'badge-payroll-approved'
+    : status === 'locked' || status === 'finalized' ? 'badge-payroll-locked'
+    : 'badge-payroll-complaint';
+  return `<span class="badge ${css}">${esc(label || status)}</span>`;
+}
+
+function renderPayrollSummary(summary) {
+  const wrap = document.getElementById('payrollSummaryCards'); if (!wrap) return;
+  const cards = [
+    ['Tổng payroll tháng này', summary.total_payroll],
+    ['Đang chờ duyệt', summary.pending],
+    ['Đã duyệt', summary.approved],
+    ['Đã chốt', summary.locked],
+    ['Khiếu nại đang xử lý', summary.complaint],
+    ['Payroll bất thường', summary.abnormal],
+  ];
+  wrap.innerHTML = cards.map(([title, value]) => `<article class="summary-card"><h4>${title}</h4><p>${value || 0}</p></article>`).join('');
+}
+
+function renderPayrollRows(rows) {
+  const tbody = document.getElementById('payrollRows'); if (!tbody) return;
+  tbody.innerHTML = rows.length ? rows.map((r) => `
+    <tr>
+      <td>${esc(r.employee_code)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.department)}</td><td>${esc(r.position)}</td>
+      <td>${formatCurrency(r.basic_salary)}</td><td>${formatCurrency(r.allowance)}</td><td>${formatCurrency(r.deduction)}</td>
+      <td>${formatCurrency(r.ot)}</td><td>${formatCurrency(r.tax)}</td><td>${formatCurrency(r.net_salary)}</td>
+      <td>${payrollStatusBadge(r.status, r.status_label)}</td>
+      <td>${r.has_complaint ? '<span class="badge badge-payroll-complaint">Có</span>' : '<span class="muted">Không</span>'}</td>
+      <td class="table-actions">
+        <button onclick="selectPayroll(${r.id})">Chi tiết</button>
+        <button onclick="approvePayrollById(${r.id})">Duyệt</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="13">Không có dữ liệu payroll</td></tr>';
+}
+
+async function loadPayrollOverview() {
+  const params = payrollFilterPayload();
+  const payload = await api(`/api/admin/payroll/overview?${params.toString()}`);
+  renderPayrollSummary(payload.summary || {});
+  renderPayrollRows(payload.items || []);
+  const logs = await api('/api/admin/payroll/audit');
+  document.getElementById('payrollAuditLog').innerHTML = (logs || []).slice(0, 30).map((l) => `<li>${fmtDate(l.time)} ${esc(l.action)} | ${esc(l.description || '')}</li>`).join('') || '<li>Chưa có log.</li>';
+}
+
+async function selectPayroll(id) {
+  selectedPayrollId = Number(id);
+  const d = await api(`/api/admin/payroll/${id}/detail`);
+  document.getElementById('payrollDetailPanel').innerHTML = `
+    <p><b>Kỳ lương:</b> ${esc(d.payroll_period)}</p>
+    <p><b>Lương cơ bản:</b> ${formatCurrency(d.basic_salary)}</p>
+    <p><b>Allowance:</b> ${formatCurrency(d.allowance)}</p>
+    <p><b>Insurance:</b> ${formatCurrency(d.insurance)}</p>
+    <p><b>OT:</b> ${formatCurrency(d.ot)}</p>
+    <p><b>Late penalty:</b> ${formatCurrency(d.late_penalty)}</p>
+    <p><b>Thuế TNCN:</b> ${formatCurrency(d.tax)}</p>
+    <p><b>Dependent deduction:</b> ${formatCurrency(d.dependent_deduction)} (${d.number_of_dependents} người phụ thuộc)</p>
+    <p><b>Net salary:</b> ${formatCurrency(d.net_salary)}</p>
+    <p><b>Người tính lương:</b> ${esc(d.calculated_by)}</p>
+    <p><b>Cập nhật:</b> ${fmtDate(d.updated_at)}</p>`;
+}
+
+async function payrollApproval(action, id = selectedPayrollId) {
+  if (!id) return Swal.fire({ icon: 'info', title: 'Chọn payroll trước khi thao tác' });
+  let reason = '';
+  if (action !== 'approve') {
+    const ask = await Swal.fire({ title: action === 'reject' ? 'Lý do từ chối bắt buộc' : 'Lý do yêu cầu HR tính lại', input: 'textarea', inputValidator: (v) => (!v ? 'Bắt buộc nhập lý do' : undefined), showCancelButton: true });
+    if (!ask.isConfirmed) return;
+    reason = ask.value || '';
+  } else {
+    const c = await Swal.fire({ title: 'Xác nhận phê duyệt payroll?', icon: 'question', showCancelButton: true });
+    if (!c.isConfirmed) return;
+  }
+  await api(`/api/admin/payroll/${id}/approval`, { method: 'POST', body: JSON.stringify({ action, reason }) });
+  await Swal.fire({ icon: 'success', title: 'Thao tác thành công' });
+  await loadPayrollOverview();
+  await selectPayroll(id);
+}
+
+async function approvePayrollById(id) { return payrollApproval('approve', id); }
+
+async function finalizePayrollMonth() {
+  const m = Number(document.getElementById('month')?.value || now.getMonth() + 1);
+  const y = Number(document.getElementById('year')?.value || now.getFullYear());
+  const c = await Swal.fire({
+    title: `Xác nhận chốt lương tháng ${String(m).padStart(2, '0')}/${y}?`,
+    html: 'Sau khi chốt:<br>- không thể sửa payroll<br>- không thể sửa allowance<br>- không thể sửa deduction<br>- không thể sửa attendance ảnh hưởng lương<br>- phiếu lương được phép phát hành',
+    showCancelButton: true, confirmButtonText: 'Chốt lương', cancelButtonText: 'Hủy', icon: 'warning',
+  });
+  if (!c.isConfirmed) return;
+  await api('/api/admin/payroll/finalize-month', { method: 'POST', body: JSON.stringify({ month: m, year: y }) });
+  await Swal.fire({ icon: 'success', title: 'Đã chốt lương tháng' });
+  await loadPayrollOverview();
+}
+
+async function reopenPayrollMonth() {
+  const { isConfirmed, value } = await Swal.fire({ title: 'Lý do mở lại payroll', input: 'textarea', inputValidator: (v) => (!v ? 'Bắt buộc nhập lý do mở lại payroll' : undefined), showCancelButton: true });
+  if (!isConfirmed) return;
+  const m = Number(document.getElementById('month')?.value || now.getMonth() + 1);
+  const y = Number(document.getElementById('year')?.value || now.getFullYear());
+  await api('/api/admin/payroll/reopen-month', { method: 'POST', body: JSON.stringify({ month: m, year: y, reason: value }) });
+  await Swal.fire({ icon: 'success', title: 'Đã mở lại payroll' });
+  await loadPayrollOverview();
+}
+
+async function openPayrollComplaints() {
+  const m = Number(document.getElementById('month')?.value || now.getMonth() + 1);
+  const y = Number(document.getElementById('year')?.value || now.getFullYear());
+  const rows = await api(`/api/admin/payroll/complaints?month=${m}&year=${y}`);
+  const panel = document.getElementById('payrollComplaintPanel');
+  if (!rows.length) { panel.innerHTML = 'Không có complaint payroll kỳ này.'; return; }
+  selectedComplaintId = rows[0].id;
+  panel.innerHTML = rows.map((r) => `
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:8px">
+      <b>${esc(r.employee_name)}</b> - ${esc(r.title)}<br>
+      ${esc(r.content)}<br>
+      Trạng thái: ${esc(r.status)} | HR phản hồi: ${r.hr_replied ? 'Đã có' : 'Chưa'}
+      <div class="table-actions" style="margin-top:8px">
+        <button onclick="handlePayrollComplaint(${r.id}, 'reply')">Phản hồi</button>
+        <button onclick="handlePayrollComplaint(${r.id}, 'transfer_hr')">Chuyển HR xử lý</button>
+        <button onclick="handlePayrollComplaint(${r.id}, 'resolve')">Đánh dấu đã giải quyết</button>
+        <button onclick="handlePayrollComplaint(${r.id}, 'reopen_payroll')">Mở lại payroll</button>
+      </div>
+    </div>`).join('');
+}
+
+async function handlePayrollComplaint(id, action) {
+  const ask = await Swal.fire({ title: 'Nhập nội dung xử lý', input: 'textarea', showCancelButton: true, inputPlaceholder: 'Nội dung phản hồi / lý do thao tác' });
+  if (!ask.isConfirmed) return;
+  await api(`/api/admin/payroll/complaints/${id}/handle`, { method: 'POST', body: JSON.stringify({ action, message: ask.value || '' }) });
+  await Swal.fire({ icon: 'success', title: 'Đã cập nhật complaint' });
+  await openPayrollComplaints();
+  await loadPayrollOverview();
+}
+
+window.selectPayroll = selectPayroll;
+window.approvePayrollById = approvePayrollById;
+window.handlePayrollComplaint = handlePayrollComplaint;
+
 
 document.addEventListener('DOMContentLoaded', async () => {
   setDefaults();
@@ -1100,7 +1255,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     await loadAttendanceSummary();
   }
-  if (window.ADMIN_PAGE === 'salary') await loadSalaryAggregate();
+  if (window.ADMIN_PAGE === 'salary') {
+    const deps = await api('/api/departments').catch(() => []);
+    const depSelect = document.getElementById('payrollDepartment');
+    if (depSelect) depSelect.innerHTML = '<option value="">Phòng ban</option>' + deps.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    const roleRows = (await api('/api/admin/employees/meta').catch(() => ({ roles: [] }))).roles || [];
+    const roleSelect = document.getElementById('payrollRole');
+    if (roleSelect) roleSelect.innerHTML = '<option value="">Role</option>' + roleRows.map((r) => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join('');
+    document.getElementById('btnPayrollSearch')?.addEventListener('click', () => loadPayrollOverview());
+    ['payrollDepartment', 'payrollStatus', 'payrollRole', 'payrollComplaint', 'payrollLocked', 'month', 'year'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => loadPayrollOverview());
+    });
+    document.getElementById('payrollSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadPayrollOverview(); });
+    document.getElementById('btnApprovePayroll')?.addEventListener('click', () => payrollApproval('approve'));
+    document.getElementById('btnRejectPayroll')?.addEventListener('click', () => payrollApproval('reject'));
+    document.getElementById('btnRequestRecalcPayroll')?.addEventListener('click', () => payrollApproval('recalculate'));
+    document.getElementById('btnFinalizePayrollMonth')?.addEventListener('click', () => finalizePayrollMonth());
+    document.getElementById('btnBulkApprovePayroll')?.addEventListener('click', async () => {
+      const rows = await api(`/api/admin/payroll/overview?${payrollFilterPayload().toString()}`);
+      const pending = (rows.items || []).filter((r) => ['pending', 'pending_approval'].includes(r.status));
+      for (const row of pending) {
+        await api(`/api/admin/payroll/${row.id}/approval`, { method: 'POST', body: JSON.stringify({ action: 'approve' }) });
+      }
+      await Swal.fire({ icon: 'success', title: `Đã duyệt ${pending.length} payroll chờ duyệt` });
+      await loadPayrollOverview();
+    });
+    document.getElementById('btnOpenComplaints')?.addEventListener('click', () => openPayrollComplaints());
+    document.getElementById('btnExportPayroll')?.addEventListener('click', () => {
+      window.location.href = `/api/admin/payroll/export?${payrollFilterPayload().toString()}`;
+    });
+    document.getElementById('btnTopFilter')?.addEventListener('click', (e) => { e.preventDefault(); loadPayrollOverview(); });
+    document.getElementById('btnFinalizePayrollMonth')?.insertAdjacentHTML('afterend', '<button id="btnReopenPayrollMonth">Mở lại payroll</button>');
+    document.getElementById('btnReopenPayrollMonth')?.addEventListener('click', () => reopenPayrollMonth());
+    await loadPayrollOverview();
+    await openPayrollComplaints();
+  }
 });
 
 

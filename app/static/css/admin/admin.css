@@ -77,3 +77,21 @@ th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;font-si
 .badge-ot{background:#f97316;color:#fff}
 .badge-abnormal{background:var(--danger);color:#fff}
 .attendance-action-select{width:100%;padding:7px;border:1px solid var(--border);border-radius:8px;background:#fff}
+
+.payroll-admin-page{display:flex;flex-direction:column;gap:14px}
+.payroll-toolbar{display:flex;flex-direction:column;gap:10px}
+.payroll-search-group{display:flex;gap:8px}
+.payroll-search-group input{flex:1;padding:10px;border:1px solid var(--border);border-radius:8px}
+.payroll-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.payroll-filter-grid select{padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.payroll-panel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.badge-payroll-draft{background:#9ca3af}
+.badge-payroll-pending{background:#eab308}
+.badge-payroll-approved{background:#16a34a}
+.badge-payroll-locked{background:#2563eb}
+.badge-payroll-complaint{background:#dc2626}
+
+@media (max-width:1280px){
+  .payroll-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .payroll-panel-grid{grid-template-columns:1fr}
+}
