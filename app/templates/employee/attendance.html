@@ -781,6 +781,7 @@ async function submitAttendanceFromQR(decodedText) {
     console.log("TIME SENT:", state.now)
     console.log("FE TIME:", state.now.toString());
 console.log("SEND TIME:", state.now.toISOString().slice(0,19));
+    const isWeekend = [0, 6].includes(state.now.getDay());
     const payload = {
       qr_text: decodedText,
       simulated_now: toLocalISO(state.now),
