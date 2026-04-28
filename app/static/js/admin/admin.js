@@ -803,7 +803,7 @@ function attendanceFilterPayload() {
     status: document.getElementById('attendanceStatus')?.value || '',
     month: document.getElementById('attendanceMonth')?.value || (now.getMonth() + 1),
     year: document.getElementById('attendanceYear')?.value || now.getFullYear(),
-    shift_type: document.getElementById('attendanceShiftType')?.value || '',
+    lock_status: document.getElementById('attendanceLockStatus')?.value || '',
     ot_status: document.getElementById('attendanceOtStatus')?.value || ''
   };
 }
@@ -818,14 +818,14 @@ function attendanceStatusBadge(status) {
 function attendanceRowActions(row) {
   const disabled = row.lock_status === 'locked' ? 'disabled' : '';
   return `
-    <select class="attendance-action-select" onchange="handleAttendanceAction('${row.attendance_id}', this.value)" ${disabled}>
+    <select class="attendance-action-select" onchange="handleAttendanceAction('${row.employee_id}', this.value)" ${disabled}>
       <option value="">Chọn hành động</option>
       <option value="detail">Xem chi tiết</option>
-      <option value="edit">Chỉnh sửa công thủ công</option>
+      <option value="edit">Điều chỉnh công bất thường</option>
       <option value="approve_ot">Duyệt OT</option>
       <option value="abnormal">Đánh dấu bất thường</option>
       <option value="reopen">Mở lại công</option>
-      <option value="lock_employee">Khóa công nhân viên</option>
+      <option value="lock_employee">Khóa dữ liệu nhân viên</option>
     </select>
   `;
 }
@@ -850,22 +850,20 @@ function fillAttendanceRows(rows) {
   if (!body) return;
   body.innerHTML = rows.length ? rows.map((r) => `
     <tr>
-      <td>${esc(r.employee_code)}</td>
-      <td>${esc(r.employee_name)}</td>
+      <td>${esc(r.employee_name)}<br><small>${esc(r.employee_code)}</small></td>
       <td>${esc(r.department)}</td>
-      <td>${esc(r.position)}</td>
-      <td>${fmtDate(r.work_date)}</td>
-      <td>${r.check_in ? new Date(r.check_in).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
-      <td>${r.check_out ? new Date(r.check_out).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
-      <td>${r.working_hours}</td>
-      <td>${r.regular_hours}</td>
-      <td>${r.overtime_hours}</td>
-      <td>${esc(r.late_early_text || '--')}</td>
-      <td>${attendanceStatusBadge(r.status)}</td>
+      <td>${r.working_days || 0}</td>
+      <td>${Number(r.total_hours || 0).toFixed(2)}</td>
+      <td>${Number(r.overtime_hours || 0).toFixed(2)}</td>
+      <td>${r.late_count || 0}</td>
+      <td>${r.early_count || 0}</td>
+      <td>${r.leave_days || 0}</td>
+      <td>${r.unpaid_leave_days || 0}</td>
+      <td>${attendanceStatusBadge(r.attendance_status)}</td>
       <td>${r.lock_status === 'locked' ? '<span class="badge badge-lock">Đã chốt công</span>' : '<span class="badge b-warning">Chưa chốt</span>'}</td>
       <td>${attendanceRowActions(r)}</td>
     </tr>
-  `).join('') : '<tr><td colspan="14">Không có dữ liệu attendance phù hợp.</td></tr>';
+  `).join('') : '<tr><td colspan="11">Không có dữ liệu attendance phù hợp.</td></tr>';
 }
 
 async function loadAttendanceSummary() {
@@ -920,14 +918,53 @@ async function reopenMonth() {
   await loadAttendanceSummary();
 }
 
-async function handleAttendanceAction(attendanceId, action) {
+async function openAttendanceDetailPanel(employeeId) {
+  const f = attendanceFilterPayload();
+  const details = await api(`/api/admin/attendance/records/${employeeId}/details?month=${f.month}&year=${f.year}`);
+  const panel = document.getElementById('attendanceDetailPanel');
+  const content = document.getElementById('attendanceDetailContent');
+  if (!panel || !content) return;
+  content.innerHTML = details.length ? `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ngày</th><th>Giờ vào</th><th>Giờ ra</th><th>Giờ công</th><th>Giờ OT</th><th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${details.map((d) => `
+            <tr>
+              <td>${fmtDate(d.work_date)}</td>
+              <td>${d.check_in ? new Date(d.check_in).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+              <td>${d.check_out ? new Date(d.check_out).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+              <td>${Number(d.working_hours || 0).toFixed(2)}</td>
+              <td>${Number(d.overtime_hours || 0).toFixed(2)}</td>
+              <td>${esc(d.status_label || '--')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '<p>Không có dữ liệu chi tiết trong kỳ công này.</p>';
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function handleAttendanceAction(employeeId, action) {
   if (!action) return;
   const record = await api(`/api/admin/attendance/records?month=${attendanceFilterPayload().month}&year=${attendanceFilterPayload().year}`)
-    .then((rows) => rows.find((x) => Number(x.attendance_id) === Number(attendanceId)));
+    .then((rows) => rows.find((x) => Number(x.employee_id) === Number(employeeId)));
   if (!record) return;
   if (action === 'detail') {
-    await Swal.fire({ title: `${record.employee_name} - ${fmtDate(record.work_date)}`, html: `<p>Giờ vào: ${record.check_in || '--'}</p><p>Giờ ra: ${record.check_out || '--'}</p><p>Trạng thái: ${record.status_label}</p>`, icon: 'info' });
+    await openAttendanceDetailPanel(employeeId);
   } else if (action === 'edit') {
+    const details = await api(`/api/admin/attendance/records/${employeeId}/details?month=${attendanceFilterPayload().month}&year=${attendanceFilterPayload().year}`);
+    if (!details.length) {
+      await Swal.fire({ icon: 'info', title: 'Không có bản ghi để điều chỉnh' });
+      return;
+    }
+    const latest = details[0];
     const { isConfirmed, value } = await Swal.fire({
       title: 'Chỉnh sửa công thủ công',
       html: `
@@ -948,19 +985,23 @@ async function handleAttendanceAction(attendanceId, action) {
       })
     });
     if (!isConfirmed) return;
-    await api(`/api/admin/attendance/${attendanceId}/manual-update`, { method: 'POST', body: JSON.stringify(value) });
+    await api(`/api/admin/attendance/${latest.attendance_id}/manual-update`, { method: 'POST', body: JSON.stringify(value) });
     await Swal.fire({ icon: 'success', title: 'Đã cập nhật chấm công' });
   } else if (action === 'approve_ot') {
     await openPendingOvertimePanel();
   } else if (action === 'abnormal') {
     const { isConfirmed, value } = await Swal.fire({ title: 'Đánh dấu bất thường', input: 'text', inputLabel: 'Lý do xử lý bất thường', showCancelButton: true, confirmButtonText: 'Xác nhận' });
     if (!isConfirmed) return;
-    await api(`/api/admin/attendance/${attendanceId}/mark-abnormal`, { method: 'POST', body: JSON.stringify({ note: value || '' }) });
+    const details = await api(`/api/admin/attendance/records/${employeeId}/details?month=${attendanceFilterPayload().month}&year=${attendanceFilterPayload().year}`);
+    if (!details.length) return;
+    await api(`/api/admin/attendance/${details[0].attendance_id}/mark-abnormal`, { method: 'POST', body: JSON.stringify({ note: value || '' }) });
     await Swal.fire({ icon: 'success', title: 'Đã đánh dấu bất thường' });
   } else if (action === 'reopen') {
     await reopenMonth();
   } else if (action === 'lock_employee') {
-    await api(`/api/admin/attendance/${attendanceId}/manual-update`, { method: 'POST', body: JSON.stringify({ attendance_type: 'locked', note: 'Admin khóa công nhân viên' }) });
+    const details = await api(`/api/admin/attendance/records/${employeeId}/details?month=${attendanceFilterPayload().month}&year=${attendanceFilterPayload().year}`);
+    if (!details.length) return;
+    await api(`/api/admin/attendance/${details[0].attendance_id}/manual-update`, { method: 'POST', body: JSON.stringify({ attendance_type: 'locked', note: 'Admin khóa công nhân viên' }) });
     await Swal.fire({ icon: 'success', title: 'Đã khóa công nhân viên' });
   }
   await loadAttendanceSummary();
@@ -1238,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       depSelect.innerHTML = '<option value="">Phòng ban</option>' + deps.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
     }
     document.getElementById('btnAttendanceFilter')?.addEventListener('click', () => loadAttendanceSummary());
-    ['attendanceMonth', 'attendanceYear', 'attendanceDepartment', 'attendanceStatus', 'attendanceShiftType', 'attendanceOtStatus'].forEach((id) => {
+    ['attendanceMonth', 'attendanceYear', 'attendanceDepartment', 'attendanceStatus', 'attendanceLockStatus', 'attendanceOtStatus'].forEach((id) => {
       document.getElementById(id)?.addEventListener('change', () => loadAttendanceSummary());
     });
     document.getElementById('attendanceSearch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAttendanceSummary(); });
@@ -1249,7 +1290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('btnApproveOt')?.addEventListener('click', () => openPendingOvertimePanel());
     document.getElementById('btnHandleAbnormal')?.addEventListener('click', async () => {
-      const { isConfirmed, value } = await Swal.fire({ title: 'Xử lý bất thường', input: 'text', inputLabel: 'Nhập mã attendance ID cần xử lý', showCancelButton: true });
+      const { isConfirmed, value } = await Swal.fire({ title: 'Xử lý bất thường', input: 'text', inputLabel: 'Nhập mã nhân viên cần xử lý', showCancelButton: true });
       if (!isConfirmed || !value) return;
       await handleAttendanceAction(value, 'abnormal');
     });

@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timezone, timedelta
 from io import StringIO
 import csv
 import os
+from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
@@ -1323,7 +1324,7 @@ def attendance_records():
     department_id = request.args.get("department_id", type=int)
     keyword = (request.args.get("keyword") or "").strip().lower()
     status_filter = (request.args.get("status") or "").strip().lower()
-    shift_type = (request.args.get("shift_type") or "").strip().lower()
+    lock_status = (request.args.get("lock_status") or "").strip().lower()
     ot_status = (request.args.get("ot_status") or "").strip().lower()
 
     query = _attendance_base_query(month, year)
@@ -1337,11 +1338,29 @@ def attendance_records():
                 func.lower(func.coalesce(Department.name, "")).like(f"%{keyword}%"),
             )
         )
-    if shift_type:
-        query = query.filter(func.lower(func.coalesce(Attendance.attendance_type, "")) == shift_type)
 
     rows = query.order_by(Attendance.date.desc(), Employee.full_name.asc()).limit(500).all()
-    data = []
+    grouped = defaultdict(lambda: {
+        "attendance_ids": [],
+        "employee_id": None,
+        "employee_code": "",
+        "employee_name": "",
+        "department": "--",
+        "position": "--",
+        "working_days": 0,
+        "total_hours": 0.0,
+        "regular_hours": 0.0,
+        "overtime_hours": 0.0,
+        "late_count": 0,
+        "early_count": 0,
+        "leave_days": 0,
+        "unpaid_leave_days": 0,
+        "abnormal_count": 0,
+        "ot_pending_count": 0,
+        "attendance_status": "normal",
+        "lock_status": "open",
+    })
+
     for att, emp, dept, pos, _, status in rows:
         row_ot = OvertimeRequest.query.filter_by(employee_id=emp.id, overtime_date=att.date).order_by(OvertimeRequest.id.desc()).first()
         if ot_status and (row_ot.status if row_ot else "") != ot_status:
@@ -1355,8 +1374,18 @@ def attendance_records():
             logical_status = "ot_pending"
         elif attendance_type in {"abnormal", "abnormal_rejected", "absent"} or status_name == "ABSENT":
             logical_status = "abnormal"
-        if status_filter and logical_status != status_filter:
-            continue
+        key = emp.id
+        bucket = grouped[key]
+        bucket["attendance_ids"].append(att.id)
+        bucket["employee_id"] = emp.id
+        bucket["employee_code"] = f"EMP{emp.id:04d}"
+        bucket["employee_name"] = emp.full_name
+        bucket["department"] = dept.name if dept else "--"
+        bucket["position"] = pos.job_title if pos else "--"
+        bucket["working_days"] += 1
+        bucket["total_hours"] += float(att.working_hours or 0)
+        bucket["regular_hours"] += float(att.regular_hours or 0)
+        bucket["overtime_hours"] += float(att.overtime_hours or 0)
 
         late_minutes = 0
         early_minutes = 0
@@ -1364,28 +1393,62 @@ def attendance_records():
             late_minutes = att.check_in.hour * 60 + att.check_in.minute - 8 * 60
         if att.check_out and att.check_out.hour < 17:
             early_minutes = 17 * 60 - (att.check_out.hour * 60 + att.check_out.minute)
+        if late_minutes > 0:
+            bucket["late_count"] += 1
+        if early_minutes > 0:
+            bucket["early_count"] += 1
+        if code == "LEAVE" or attendance_type == "leave_approved":
+            bucket["leave_days"] += 1
+        if code == "ABSENT" or attendance_type in {"absent", "absent_unexcused", "abnormal_rejected"}:
+            bucket["unpaid_leave_days"] += 1
+        if logical_status == "abnormal":
+            bucket["abnormal_count"] += 1
+        if row_ot and row_ot.status == "pending_admin":
+            bucket["ot_pending_count"] += 1
+        if _is_month_locked(att.date.month, att.date.year):
+            bucket["lock_status"] = "locked"
 
-        data.append({
+    data = []
+    for bucket in grouped.values():
+        if bucket["abnormal_count"] > 0:
+            bucket["attendance_status"] = "abnormal"
+        elif bucket["ot_pending_count"] > 0:
+            bucket["attendance_status"] = "ot_pending"
+        elif bucket["late_count"] > 0 or bucket["early_count"] > 0:
+            bucket["attendance_status"] = "late_early"
+        if status_filter and bucket["attendance_status"] != status_filter:
+            continue
+        if lock_status and bucket["lock_status"] != lock_status:
+            continue
+        data.append(bucket)
+
+    data.sort(key=lambda x: (x["department"], x["employee_name"]))
+    return jsonify(data)
+@admin_bp.get("/api/admin/attendance/records/<int:employee_id>/details")
+def attendance_employee_details(employee_id: int):
+    month = request.args.get("month", type=int) or datetime.utcnow().month
+    year = request.args.get("year", type=int) or datetime.utcnow().year
+    rows = (
+        _attendance_base_query(month, year)
+        .filter(Employee.id == employee_id)
+        .order_by(Attendance.date.desc())
+        .all()
+    )
+    return jsonify([
+        {
             "attendance_id": att.id,
-            "employee_id": emp.id,
-            "employee_code": f"EMP{emp.id:04d}",
-            "employee_name": emp.full_name,
-            "department": dept.name if dept else "--",
-            "position": pos.job_title if pos else "--",
             "work_date": att.date.isoformat(),
             "check_in": att.check_in.isoformat() if att.check_in else None,
             "check_out": att.check_out.isoformat() if att.check_out else None,
             "working_hours": float(att.working_hours or 0),
             "regular_hours": float(att.regular_hours or 0),
             "overtime_hours": float(att.overtime_hours or 0),
-            "late_early_text": f"Late {late_minutes}p / Early {early_minutes}p" if (late_minutes or early_minutes) else "--",
-            "status": logical_status,
-            "status_label": status_name or attendance_type or "PRESENT",
-            "ot_status": row_ot.status if row_ot else None,
+            "attendance_type": att.attendance_type,
+            "status_label": (status.status_name if status else att.attendance_type or "PRESENT"),
             "lock_status": "locked" if _is_month_locked(att.date.month, att.date.year) else "open",
-        })
-
-    return jsonify(data)
+        }
+        for att, _, _, _, _, status in rows
+    ])
 @admin_bp.get("/api/admin/attendance/config")
 def attendance_config_get():
     getv = lambda k, d: (SystemSetting.query.filter_by(key=k).first() or SystemSetting(key=k, value=str(d))).value

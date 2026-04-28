@@ -18,7 +18,7 @@
       <input id="attendanceSearch" type="text" placeholder="Tìm tên nhân viên, mã NV, phòng ban...">
       <select id="attendanceDepartment"><option value="">Phòng ban</option></select>
       <select id="attendanceStatus">
-        <option value="">Trạng thái chấm công</option>
+        <option value="">Trạng thái công</option>
         <option value="normal">Bình thường</option>
         <option value="late_early">Đi muộn / Về sớm</option>
         <option value="ot_pending">Chờ duyệt OT</option>
@@ -26,11 +26,10 @@
       </select>
       <select id="attendanceMonth"></select>
       <select id="attendanceYear"></select>
-      <select id="attendanceShiftType">
-        <option value="">Loại ca</option>
-        <option value="normal">Ca thường</option>
-        <option value="overtime">Ca tăng ca</option>
-        <option value="holiday">Ca ngày nghỉ</option>
+      <select id="attendanceLockStatus">
+        <option value="">Trạng thái chốt công</option>
+        <option value="locked">Đã chốt công</option>
+        <option value="open">Chưa chốt công</option>
       </select>
       <select id="attendanceOtStatus">
         <option value="">Trạng thái OT</option>
@@ -54,18 +53,16 @@
     <table>
       <thead>
         <tr>
-          <th>Mã nhân viên</th>
-          <th>Tên nhân viên</th>
+          <th>Nhân viên</th>
           <th>Phòng ban</th>
-          <th>Chức danh</th>
-          <th>Ngày làm việc</th>
-          <th>Giờ vào</th>
-          <th>Giờ ra</th>
-          <th>Tổng giờ làm</th>
-          <th>Công chuẩn</th>
-          <th>Tăng ca</th>
-          <th>Đi muộn / Về sớm</th>
-          <th>Trạng thái</th>
+          <th>Tổng ngày công tháng</th>
+          <th>Tổng giờ công</th>
+          <th>Tổng OT</th>
+          <th>Tổng số lần đi muộn</th>
+          <th>Tổng số lần về sớm</th>
+          <th>Nghỉ phép</th>
+          <th>Nghỉ không lương</th>
+          <th>Trạng thái công</th>
           <th>Trạng thái chốt công</th>
           <th>Hành động</th>
         </tr>
@@ -73,7 +70,10 @@
       <tbody id="attendanceRows"></tbody>
     </table>
   </article>
-
+  <article class="card" id="attendanceDetailPanel" style="display:none">
+    <h3>Chi tiết attendance nhân viên</h3>
+    <div id="attendanceDetailContent"></div>
+  </article>
   <article class="card">
     <h3>Audit log attendance</h3>
     <ul id="attendanceAudit"></ul>
