@@ -1366,6 +1366,7 @@ def attendance_records():
         if ot_status and (row_ot.status if row_ot else "") != ot_status:
             continue
         status_name = (status.status_name if status else "").upper()
+        code = status_name
         attendance_type = (att.attendance_type or "").lower()
         logical_status = "normal"
         if attendance_type in {"late", "early", "late_early"} or status_name == "LATE":
