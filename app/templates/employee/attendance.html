@@ -169,27 +169,6 @@
   border: 2px solid var(--primary);
   box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
 }
-.toast-box {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 999999;
-}
-
-.toast-item {
-  background: #111827;
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  opacity: 1;
-  transition: opacity .3s;
-}
-
-.toast-item.success { background: #16a34a; }
-.toast-item.error { background: #dc2626; }
-.toast-item.warning { background: #f59e0b; }
 
 /* ===== STATUS BADGE ===== */
 .status {
@@ -331,9 +310,6 @@
 
 </div>
 
-<!-- TOAST CONTAINER (BẮT BUỘC) -->
-<div class="toast-box" id="toastBox"></div>
-
 <section class="emp-card">
   <h3>Lịch sử gần đây</h3>
 
@@ -390,16 +366,6 @@
     </tbody>
   </table>
 </section>
-<section class="emp-card">
-  <h3>Gửi yêu cầu tăng ca</h3>
-  <form id="otRequestForm" class="emp-form-grid">
-    <label>Ngày OT <input type="date" name="overtime_date" required></label>
-    <label>Số giờ OT <input type="number" name="overtime_hours" min="0.5" step="0.5" required></label>
-    <label>Lý do OT <input type="text" name="reason" required></label>
-    <label>Ghi chú <textarea name="note" rows="2"></textarea></label>
-    <button type="submit" class="btn btn-warning">Gửi yêu cầu OT</button>
-  </form>
-</section>
 
 <div class="scanner-modal" id="scannerModal">
   <div class="scanner-panel" id="scannerPanel">
@@ -415,7 +381,6 @@
     </div>
   </div>
 </div>
-<div class="toast-box" id="toastBox"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -552,21 +517,38 @@ function maybeNotifyOvertimeWindow() {
   const isWeekend = [0, 6].includes(state.now.getDay());
   const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
-  if (!isWeekend && isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
+  if (isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
     state.notices.otInvite = true;
-    const accepted = confirm("Đã đến 17:00. Bạn có muốn tăng ca không?");
-    if (accepted) {
-      state.isOvertime = true;
-      state.overtimeDeclined = false;
-      state.isPreOvertimeRest = true;
-      const overtimeStart = new Date(state.now);
-      overtimeStart.setHours(19, 0, 0, 0);
-      state.overtimeStartAt = toLocalISO(overtimeStart);
-      toast("Đã đăng ký tăng ca. Trạng thái hiện tại: nghỉ ngơi trước tăng ca.", "warning");
+    Swal.fire({
+      icon: "question",
+      title: "Đã hết ca làm việc",
+      text: "Bạn có muốn check-out ngay hoặc gửi yêu cầu OT?",
+      showCancelButton: true,
+      confirmButtonText: "Gửi yêu cầu OT",
+      cancelButtonText: "Check-out",
+      reverseButtons: true,
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        const confirmSend = await Swal.fire({
+          icon: "question",
+          title: "Xác nhận gửi yêu cầu tăng ca?",
+          html: "Ngày OT: hôm nay<br>Thời gian bắt đầu OT: 19:00<br>Hình thức: tăng ca sau giờ hành chính",
+          showCancelButton: true,
+          confirmButtonText: "Xác nhận gửi",
+          cancelButtonText: "Hủy",
+        });
+        if (!confirmSend.isConfirmed) return;
+        await submitAutomaticOvertimeRequest("after_shift");
+        state.pendingCheckoutWithoutOT = true;
+        state.overtimeDeclined = true;
+        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Vui lòng quét QR để check-out ca chính." });
+      } else if (result.dismiss === Swal.DismissReason.cancel) {
+        state.pendingCheckoutWithoutOT = true;
+        state.overtimeDeclined = true;
+        await Swal.fire({ icon: "info", title: "Vui lòng check-out", text: "Hãy quét QR để check-out ngay." });
+      }
       renderState();
-    } else {
-      state.overtimeDeclined = true;
-    }
+    });
   }
 
   if (
@@ -579,12 +561,12 @@ function maybeNotifyOvertimeWindow() {
     state.notices.otStart = true;
     state.overtimeStarted = true;
     state.isPreOvertimeRest = false;
-    alert("Đã đến giờ tăng ca. Vui lòng check_in để tăng ca.");
+    Swal.fire({ icon: "info", title: "Đã đến giờ tăng ca", text: "Vui lòng check-in tăng ca khi đã được duyệt." });
   }
 
   if (state.isOvertime && isWorkingSession && hour >= 22 && !state.notices.otEnd) {
     state.notices.otEnd = true;
-    alert("Đã hết thời gian tăng ca, vui lòng check_out để kết thúc giờ làm.");
+    Swal.fire({ icon: "warning", title: "Đã hết thời gian tăng ca", text: "Vui lòng check-out để kết thúc giờ làm." });
   }
 }
 /* ===================== FIX QUAN TRỌNG ===================== */ 
@@ -644,16 +626,15 @@ function calcWorkedDuration(now) {
 
 /* ===================== TOAST ===================== */
 function toast(msg, type="success") {
-  const item = document.createElement('div');
-  item.className = 'toast-item ' + type;
-  item.textContent = msg;
-
-  document.getElementById('toastBox').appendChild(item);
-
-  setTimeout(() => {
-    item.style.opacity = '0';
-    setTimeout(() => item.remove(), 300);
-  }, 6000);
+  const icon = type === "error" ? "error" : type === "warning" ? "warning" : "success";
+  Swal.fire({
+    toast: true,
+    position: "top-end",
+    timer: 2200,
+    showConfirmButton: false,
+    icon,
+    title: msg
+  });
 }
 
 function renderState() {
@@ -803,11 +784,10 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     const payload = {
       qr_text: decodedText,
       simulated_now: toLocalISO(state.now),
-      overtime_confirmed: state.isOvertime,
+      overtime_confirmed: false,
       overtime_start: state.overtimeStartAt || toLocalISO(state.now),
       overtime_rejected: state.pendingCheckoutWithoutOT || state.overtimeDeclined
     };
-    const isWeekend = [0, 6].includes(state.now.getDay());
     if (!state.hasAttendance && isWeekend) {
       const acceptedHolidayOT = confirm("Hôm nay là ngày nghỉ, bạn muốn tăng ca chứ?");
       if (!acceptedHolidayOT) {
@@ -830,35 +810,20 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       await Swal.fire({ icon: "error", title: "Chấm công thất bại", text: data.message || "Lỗi hệ thống" });
       return;
     }
-    if (data.action === "confirm_overtime") {
-      const confirmed = confirm(data.message || "Bạn có muốn đăng ký tăng ca không?");
-
-      if (confirmed) {
-        state.isOvertime = true;
-        state.overtimeDeclined = false;
-        state.overtimeStartAt = state.overtimeStartAt || toLocalISO(state.now);
-      } else {
-        state.pendingCheckoutWithoutOT = true;
-        state.overtimeDeclined = true;
-        toast("Bạn đã chọn không tăng ca. Hệ thống sẽ check-out luôn.", "warning");
-      }
-      const confirmRes = await fetch("/employee/attendance/check", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          ...payload,
-          overtime_confirmed: confirmed,
-          overtime_rejected: !confirmed,
-          overtime_start: state.overtimeStartAt || toLocalISO(state.now)
-        })
+    if (data.action === "holiday_ot_prompt") {
+      const decision = await Swal.fire({
+        icon: "question",
+        title: `Hôm nay là ngày nghỉ lễ: ${data.holiday_name || ""}`,
+        text: "Bạn được nghỉ theo lịch công ty. Bạn có muốn đăng ký làm việc ngày nghỉ (OT ngày lễ) không?",
+        showCancelButton: true,
+        confirmButtonText: "Có, đăng ký tăng ca",
+        cancelButtonText: "Không",
       });
 
-      const confirmData = await confirmRes.json();
-      if (!confirmRes.ok) {
-        await Swal.fire({ icon: "error", title: "Xử lý tăng ca thất bại", text: confirmData.message || "Lỗi hệ thống" });
-        return;
+      if (decision.isConfirmed) {
+        await submitAutomaticOvertimeRequest("holiday");
       }
-      Object.assign(data, confirmData);
+      return;
     }
     state.pendingCheckoutWithoutOT = false;
   switch (data.action) {
@@ -919,12 +884,30 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     }, 800);
 
   } catch (err) {
-    toast(err.message, "error");
+    await Swal.fire({ icon: "error", title: "Lỗi", text: err.message || "Không thể chấm công" });
   } finally {
     isSubmittingAttendance = false;
   }
 }
-
+async function submitAutomaticOvertimeRequest(requestType) {
+  const payload = {
+    request_type: requestType,
+    overtime_date: dateKeyOf(state.now),
+    overtime_hours: 3,
+    reason: requestType === "holiday" ? "Đăng ký làm việc ngày nghỉ lễ" : "Đăng ký tăng ca sau giờ hành chính",
+    note: requestType === "holiday" ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in." : "Yêu cầu OT sau giờ làm từ popup 17:00."
+  };
+  const res = await fetch("/employee/attendance/overtime-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Không thể gửi yêu cầu OT");
+  }
+  await Swal.fire({ icon: "success", title: data.message || "Đã gửi yêu cầu OT", text: "Trạng thái: PENDING_APPROVAL" });
+}
 /* ===================== SIM EDITOR ===================== */
 function initSimEditor() {
   document.querySelectorAll('.time-part').forEach(el => {
@@ -1040,28 +1023,5 @@ async function deleteRecord(dateIso) {
     toast(err.message, "error");
   }
 }
-document.getElementById("otRequestForm")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const payload = Object.fromEntries(new FormData(e.target).entries());
-  const confirmSend = await Swal.fire({
-    icon: "question",
-    title: "Gửi yêu cầu tăng ca?",
-    showCancelButton: true,
-    confirmButtonText: "Gửi",
-  });
-  if (!confirmSend.isConfirmed) return;
-  const res = await fetch("/employee/attendance/overtime-request", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    await Swal.fire({ icon: "error", title: data.error || "Không thể gửi yêu cầu OT" });
-    return;
-  }
-  await Swal.fire({ icon: "success", title: data.message || "Đã gửi yêu cầu OT" });
-  e.target.reset();
-});
 </script>
 {% endblock %}

@@ -1696,7 +1696,7 @@ class HRService:
             OvertimeRequest.overtime_date <= end,
             Employee.is_deleted.is_(False),
             OvertimeRequest.is_deleted.is_(False),
-            OvertimeRequest.status.in_(["pending_hr", "approved", "rejected"]),
+            OvertimeRequest.status.in_(["pending_hr", "pending_admin", "approved", "rejected"]),
         ).order_by(OvertimeRequest.overtime_date.desc()).all()
 
         rows = []
@@ -1729,7 +1729,7 @@ class HRService:
             raise ValueError("Yêu cầu OT chưa được quản lý duyệt hoặc đã xử lý")
 
         if action == "approve":
-            record.status = "approved"
+            record.status = "pending_admin"
         else:
             record.status = "rejected"
             record.rejection_reason = data.note or "HR từ chối"
@@ -1748,7 +1748,24 @@ class HRService:
                 performed_by=actor_user_id,
             )
         )
-        HRService._sync_payroll_for_attendance(record.employee_id, record.date, actor_user_id)
+        employee = Employee.query.get(record.employee_id)
+        if employee and employee.user_id:
+            if action == "approve":
+                content = (
+                    "Yêu cầu tăng ca của bạn đã được HR kiểm tra và chuyển Admin duyệt cuối. "
+                    "Ca OT dự kiến bắt đầu lúc: 19:00. Vui lòng chờ thông báo tiếp theo."
+                )
+            else:
+                content = f"Yêu cầu tăng ca của bạn đã bị từ chối. Lý do: {record.rejection_reason or 'Không có'}"
+            db.session.add(
+                Notification(
+                    user_id=employee.user_id,
+                    title="Kết quả xử lý yêu cầu tăng ca",
+                    content=content,
+                    type="overtime",
+                    link="/employee/notifications",
+                )
+            )
         db.session.commit()
         return {"attendance_id": record.id, "action": action, "status": record.status}
 

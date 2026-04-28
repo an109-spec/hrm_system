@@ -1640,7 +1640,26 @@ def attendance_overtime_final_review(overtime_id: int):
         attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
         if attendance:
             attendance.overtime_hours = row.overtime_hours
-            attendance.attendance_type = "overtime"
+            attendance.attendance_type = "holiday" if attendance.attendance_type == "holiday" else "overtime"
+    employee = Employee.query.get(row.employee_id)
+    if employee and employee.user_id:
+        if action == "approve":
+            content = (
+                "Yêu cầu tăng ca của bạn đã được duyệt.\n\n"
+                "Ca OT bắt đầu lúc: 19:00.\n"
+                "Vui lòng quay lại hệ thống để check-in tăng ca."
+            )
+        else:
+            content = f"Yêu cầu tăng ca của bạn đã bị từ chối.\n\nLý do: {note or 'Không có'}"
+        db.session.add(
+            Notification(
+                user_id=employee.user_id,
+                title="Kết quả duyệt tăng ca",
+                content=content,
+                type="overtime",
+                link="/employee/notifications",
+            )
+        )
     db.session.add(HistoryLog(
         employee_id=row.employee_id,
         action="ADMIN_FINAL_OVERTIME_REVIEW",

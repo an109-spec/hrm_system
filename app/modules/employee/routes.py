@@ -205,7 +205,7 @@ class EmployeeDashboardService:
 
 def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     total_seconds = Decimal((checkout - checkin).total_seconds())
-    total_hours = (total_seconds / Decimal("3600")).quantize(Decimal("0.01"))
+    total_hours = (total_seconds / Decimal("3600")).quantize(Decimal("0.0001"))
 
     if total_hours <= 0:
         return Decimal("0")
@@ -216,7 +216,7 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     overlap_end = min(checkout, lunch_end)
     if overlap_end > overlap_start:
         overlap_seconds = Decimal((overlap_end - overlap_start).total_seconds())
-        total_hours -= (overlap_seconds / Decimal("3600")).quantize(Decimal("0.01"))
+        total_hours -= (overlap_seconds / Decimal("3600")).quantize(Decimal("0.0001"))
     return max(total_hours, Decimal("0"))
 
     return current_time
@@ -705,7 +705,19 @@ def check_in_out():
         # CHECK-IN FLOW
         # =========================
         if not attendance:
-            attendance_type = "holiday" if OvertimeService.is_weekend(today) else "normal"
+            today_holiday = _get_holiday_for_date(today)
+            if today_holiday:
+                return jsonify({
+                    "toast": False,
+                    "type": "warning",
+                    "action": "holiday_ot_prompt",
+                    "holiday_name": today_holiday.name,
+                    "message": (
+                        f"Hôm nay là ngày nghỉ lễ: {today_holiday.name}. "
+                        "Bạn có muốn đăng ký làm việc ngày nghỉ (OT ngày lễ) không?"
+                    ),
+                })
+            attendance_type = "normal"
             attendance = Attendance(
                 employee_id=employee.id,
                 date=today,
@@ -753,18 +765,6 @@ def check_in_out():
                     "type": "error",
                     "message": "Thời gian check-out không hợp lệ"
                 }), 400
-            overtime_confirmed = bool(payload.get("overtime_confirmed"))
-            overtime_rejected = bool(payload.get("overtime_rejected"))
-            should_suggest_ot = OvertimeService.should_suggest_overtime(current_time, today)
-
-            if should_suggest_ot and not overtime_confirmed and not overtime_rejected:
-                return jsonify({
-                    "toast": False,
-                    "type": "warning",
-                    "action": "confirm_overtime",
-                    "message": "Hiện tại đã ngoài giờ làm việc / ngày nghỉ. Bạn có muốn đăng ký tăng ca không?",
-                    "attendance_state": "holiday" if OvertimeService.is_weekend(today) else "overtime",
-                })
             attendance.check_out = current_time
 
             # =========================
@@ -793,14 +793,18 @@ def check_in_out():
                 except ValueError:
                     overtime_start_dt = current_time
 
-            overtime_hours = Decimal("0.00")
-            if overtime_confirmed:
-                overtime_hours = OvertimeService.calculate_overtime(overtime_start_dt, attendance.check_out)
+            overtime_confirmed = bool(payload.get("overtime_confirmed"))
+            overtime_hours = (
+                OvertimeService.calculate_overtime(overtime_start_dt, attendance.check_out)
+                if overtime_confirmed else Decimal("0.00")
+            )
 
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
-            attendance.working_hours = regular_hours + overtime_hours
-            if OvertimeService.is_weekend(today):
+            worked_hours = regular_hours + overtime_hours
+            holiday_multiplier = Decimal("3.00") if _get_holiday_for_date(today) else Decimal("1.00")
+            attendance.working_hours = worked_hours
+            if holiday_multiplier > 1:
                 attendance.attendance_type = "holiday"
             elif overtime_hours > 0:
                 attendance.attendance_type = "overtime"
@@ -823,6 +827,8 @@ def check_in_out():
             msg += f" • Ca chính: {regular_hours}h"
             if overtime_hours > 0:
                 msg += f" • Tăng ca: {overtime_hours}h"
+            if holiday_multiplier > 1:
+                msg += " • Ngày lễ x3 công chuẩn payroll"
 
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
@@ -844,6 +850,7 @@ def check_in_out():
                 "worked_hours": str(worked_hours),
                 "regular_hours": str(regular_hours),
                 "overtime_hours": str(overtime_hours),
+                "holiday_multiplier": str(holiday_multiplier),
                 "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
                 "check_out": attendance.check_out.isoformat() if attendance.check_out else None,
                 "status_key": status_key,

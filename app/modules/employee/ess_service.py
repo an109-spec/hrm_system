@@ -9,7 +9,7 @@ import uuid
 from werkzeug.utils import secure_filename
 
 from app.extensions.db import db
-from app.models import Attendance, Complaint, Dependent, Employee, HistoryLog, Notification, OvertimeRequest, Salary, User
+from app.models import Attendance, Complaint, Dependent, Employee, HistoryLog, Notification, OvertimeRequest, Role, Salary, User
 from app.models.file_upload import FileUpload
 
 
@@ -136,27 +136,45 @@ class EmployeeESSService:
     @staticmethod
     def submit_overtime(user_id: int | None, payload: dict, actor_user_id: int | None = None) -> dict:
         employee = EmployeeESSService._employee_by_user(user_id)
-        ot_date = date.fromisoformat(payload.get("overtime_date"))
-        hours = Decimal(str(payload.get("overtime_hours") or "0"))
+        request_type = (payload.get("request_type") or "manual").strip().lower()
+        ot_date_raw = payload.get("overtime_date")
+        ot_date = date.fromisoformat(ot_date_raw) if ot_date_raw else date.today()
+        hours_raw = payload.get("overtime_hours")
+        hours = Decimal(str(hours_raw if hours_raw not in (None, "") else "3"))
         if hours <= 0:
             raise ValueError("Số giờ OT phải lớn hơn 0")
         reason = (payload.get("reason") or "").strip()
         if not reason:
-            raise ValueError("Lý do OT là bắt buộc")
+            if request_type == "holiday":
+                reason = "Đăng ký làm việc ngày nghỉ lễ"
+            elif request_type == "after_shift":
+                reason = "Đăng ký tăng ca sau giờ hành chính"
+            else:
+                raise ValueError("Lý do OT là bắt buộc")
         request_ot = OvertimeRequest(
             employee_id=employee.id,
             overtime_date=ot_date,
             overtime_hours=hours,
             reason=reason,
             note=(payload.get("note") or "").strip() or None,
-            status="pending_manager",
+            status="pending_hr",
         )
         db.session.add(request_ot)
-        if employee.manager and employee.manager.user_id:
-            db.session.add(Notification(user_id=employee.manager.user_id, title="Yêu cầu tăng ca mới", content=f"{employee.full_name} gửi OT {ot_date.isoformat()} ({hours}h)", type="overtime", link="/manager/department-attendance"))
-        db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h", performed_by=actor_user_id))
+        role_ids = [r.id for r in Role.query.filter(db.func.lower(Role.name).in_(["hr", "admin"])).all()]
+        hr_admin_users = User.query.filter(User.role_id.in_(role_ids), User.is_active.is_(True)).all() if role_ids else []
+        for receiver in hr_admin_users:
+            db.session.add(
+                Notification(
+                    user_id=receiver.id,
+                    title="Yêu cầu tăng ca mới",
+                    content=f"{employee.full_name} gửi yêu cầu OT ngày {ot_date.strftime('%d/%m/%Y')} ({hours} giờ).",
+                    type="overtime",
+                    link="/hr/attendance",
+                )
+            )
+        db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h ({request_type})", performed_by=actor_user_id))
         db.session.commit()
-        return {"message": "Đã gửi yêu cầu tăng ca thành công"}
+        return {"message": "Đã gửi yêu cầu tăng ca thành công", "status": "PENDING_APPROVAL"}
 
     @staticmethod
     def notification_detail(user_id: int, noti_id: int) -> dict:
