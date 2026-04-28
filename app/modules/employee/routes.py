@@ -624,6 +624,15 @@ def attendance():
         _, record.regular_hours, record.overtime_hours = _attendance_metrics(record)
     today_holiday = _get_holiday_for_date(now.date())
     holiday_lookup = _get_holiday_lookup()
+    today_ot_request = (
+        OvertimeRequest.query.filter_by(
+            employee_id=employee.id,
+            overtime_date=now.date(),
+            is_deleted=False,
+        ).order_by(OvertimeRequest.id.desc()).first()
+        if employee
+        else None
+    )
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -632,6 +641,7 @@ def attendance():
         now=now,
         today_holiday=today_holiday,
         holiday_lookup=holiday_lookup,
+        today_ot_request=today_ot_request,
     )
 
 

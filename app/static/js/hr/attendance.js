@@ -144,17 +144,21 @@
       return status || "--";
     };
     const filtered = state.filters.overtimeOnlyPending ? rows.filter((x) => isPendingHr(x.hr_status)) : rows;
+    const fmtDateTime = (value) => value ? new Date(value).toLocaleString("vi-VN", { hour12: false }) : "--";
+    const fmtHM = (value) => value ? new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--";
     $("#otList").innerHTML = filtered.map((x) => `
       <li>
         <strong>${x.employee_name}</strong> (${x.employee_code})<br>
-        Ngày OT: ${x.date} • Số giờ OT: ${x.overtime_hours}h<br>
+        Phòng ban: ${x.department || "--"}<br>
+        Ngày OT: ${x.date} • Gửi lúc: ${fmtDateTime(x.created_at)}<br>
+        OT dự kiến: ${fmtHM(x.start_ot_time)} → ${fmtHM(x.end_ot_time)} • Số giờ OT: ${Number(x.overtime_hours || 0).toFixed(2)}h<br>
         Lý do: ${x.reason}<br>
         Quản lý duyệt: ${x.manager_approved ? 'Đã duyệt' : 'Chưa duyệt'} • Trạng thái: ${hrStatusLabel(x.hr_status)}
         <div class="actions">
           ${isPendingHr(x.hr_status)
             ? `<button class="btn btn-sm" data-action="approve-ot" data-id="${x.attendance_id}">Duyệt</button>
                <button class="btn btn-sm" data-action="reject-ot" data-id="${x.attendance_id}">Từ chối</button>`
-            : `<span>Đã duyệt</span>`}
+            : `<span>${x.hr_status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>`}
         </div>
       </li>
     `).join("") || "<li>Không có yêu cầu OT</li>";

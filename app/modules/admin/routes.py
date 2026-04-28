@@ -1618,7 +1618,12 @@ def attendance_pending_overtime():
         "employee_code": f"EMP{emp.id:04d}",
         "department": dept.name if dept else "--",
         "date": ot.overtime_date.isoformat(),
-        "hours": float(ot.overtime_hours or 0),
+        "hours": float(ot.approved_hours or ot.requested_hours or ot.overtime_hours or 0),
+        "requested_hours": float(ot.requested_hours or ot.overtime_hours or 0),
+        "approved_hours": float(ot.approved_hours or 0) if ot.approved_hours is not None else None,
+        "created_at": ot.created_at.isoformat() if ot.created_at else None,
+        "start_ot_time": ot.start_ot_time.isoformat() if ot.start_ot_time else None,
+        "end_ot_time": ot.end_ot_time.isoformat() if ot.end_ot_time else None,
         "reason": ot.reason,
         "status": ot.status,
     } for ot, emp, dept in rows])
@@ -1639,10 +1644,14 @@ def attendance_overtime_final_review(overtime_id: int):
         return jsonify({"error": "Yêu cầu OT này đã được xử lý trước đó"}), 409
     row.status = "approved" if action == "approve" else "rejected"
     row.note = note
+    admin_employee = Employee.query.filter_by(user_id=actor.id if actor else None, is_deleted=False).first()
+    row.approved_by = admin_employee.id if admin_employee else None
+    row.approved_at = datetime.utcnow()
+    row.approved_hours = row.requested_hours or row.overtime_hours if action == "approve" else Decimal("0.00")
     if action == "approve":
         attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
         if attendance:
-            attendance.overtime_hours = row.overtime_hours
+            attendance.overtime_hours = row.approved_hours or row.requested_hours or row.overtime_hours
             attendance.attendance_type = "holiday" if attendance.attendance_type == "holiday" else "overtime"
     employee = Employee.query.get(row.employee_id)
     if employee and employee.user_id:

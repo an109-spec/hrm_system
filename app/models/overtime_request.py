@@ -8,6 +8,10 @@ class OvertimeRequest(BaseModel):
     employee_id = db.Column(db.Integer, db.ForeignKey("employees.id"), nullable=False, index=True)
     overtime_date = db.Column(db.Date, nullable=False, index=True)
     overtime_hours = db.Column(db.Numeric(5, 2), nullable=False)
+    requested_hours = db.Column(db.Numeric(5, 2), nullable=True)
+    approved_hours = db.Column(db.Numeric(5, 2), nullable=True)
+    start_ot_time = db.Column(db.DateTime(timezone=True), nullable=True)
+    end_ot_time = db.Column(db.DateTime(timezone=True), nullable=True)
     reason = db.Column(db.Text, nullable=False)
     note = db.Column(db.Text, nullable=True)
 
@@ -24,7 +28,8 @@ class OvertimeRequest(BaseModel):
     hr_decision_by = db.Column(db.Integer, db.ForeignKey("employees.id"), nullable=True)
     hr_decision_at = db.Column(db.DateTime(timezone=True), nullable=True)
     hr_note = db.Column(db.Text, nullable=True)
-
+    approved_by = db.Column(db.Integer, db.ForeignKey("employees.id"), nullable=True)
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
     employee = relationship("Employee", foreign_keys=[employee_id])
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import os
 import re
@@ -139,8 +139,31 @@ class EmployeeESSService:
         request_type = (payload.get("request_type") or "manual").strip().lower()
         ot_date_raw = payload.get("overtime_date")
         ot_date = date.fromisoformat(ot_date_raw) if ot_date_raw else date.today()
-        hours_raw = payload.get("overtime_hours")
-        hours = Decimal(str(hours_raw if hours_raw not in (None, "") else "3"))
+        existing_request = OvertimeRequest.query.filter_by(
+            employee_id=employee.id,
+            overtime_date=ot_date,
+            is_deleted=False,
+        ).first()
+        if existing_request:
+            raise ValueError("Bạn đã gửi yêu cầu OT cho ngày này, không thể gửi lại")
+
+        start_raw = (payload.get("start_ot_time") or "").strip()
+        end_raw = (payload.get("end_ot_time") or "").strip()
+        if start_raw and end_raw:
+            start_time = datetime.strptime(start_raw, "%H:%M").time()
+            end_time = datetime.strptime(end_raw, "%H:%M").time()
+            start_ot_time = datetime.combine(ot_date, start_time)
+            end_ot_time = datetime.combine(ot_date, end_time)
+            if end_ot_time <= start_ot_time:
+                raise ValueError("Khung giờ OT không hợp lệ")
+            hours = Decimal(str((end_ot_time - start_ot_time).total_seconds() / 3600)).quantize(Decimal("0.01"))
+        else:
+            hours_raw = payload.get("overtime_hours")
+            hours = Decimal(str(hours_raw if hours_raw not in (None, "") else "0"))
+            if hours <= 0:
+                raise ValueError("Vui lòng cung cấp khung giờ OT hợp lệ")
+            start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
+            end_ot_time = start_ot_time + timedelta(hours=float(hours))
         if hours <= 0:
             raise ValueError("Số giờ OT phải lớn hơn 0")
         reason = (payload.get("reason") or "").strip()
@@ -155,6 +178,9 @@ class EmployeeESSService:
             employee_id=employee.id,
             overtime_date=ot_date,
             overtime_hours=hours,
+            requested_hours=hours,
+            start_ot_time=start_ot_time,
+            end_ot_time=end_ot_time,
             reason=reason,
             note=(payload.get("note") or "").strip() or None,
             status="pending_hr",
@@ -174,7 +200,19 @@ class EmployeeESSService:
             )
         db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h ({request_type})", performed_by=actor_user_id))
         db.session.commit()
-        return {"message": "Đã gửi yêu cầu tăng ca thành công", "status": "PENDING_APPROVAL"}
+        return {
+            "message": "Đã gửi yêu cầu tăng ca thành công",
+            "status": "PENDING_APPROVAL",
+            "request": {
+                "id": request_ot.id,
+                "status": request_ot.status,
+                "requested_hours": float(request_ot.requested_hours or request_ot.overtime_hours or 0),
+                "overtime_hours": float(request_ot.overtime_hours or 0),
+                "start_ot_time": request_ot.start_ot_time.isoformat() if request_ot.start_ot_time else None,
+                "end_ot_time": request_ot.end_ot_time.isoformat() if request_ot.end_ot_time else None,
+                "created_at": request_ot.created_at.isoformat() if request_ot.created_at else None,
+            },
+        }
 
     @staticmethod
     def notification_detail(user_id: int, noti_id: int) -> dict:

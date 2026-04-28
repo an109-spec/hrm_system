@@ -1708,8 +1708,14 @@ class HRService:
                     "employee_id": record.employee_id,
                     "employee_name": record.employee.full_name if record.employee else "--",
                     "employee_code": f"EMP{record.employee_id:05d}",
+                    "department": record.employee.department.name if record.employee and record.employee.department else "--",
                     "date": record.overtime_date.isoformat(),
-                    "overtime_hours": float(record.overtime_hours or 0),
+                    "overtime_hours": float(record.approved_hours or record.requested_hours or record.overtime_hours or 0),
+                    "requested_hours": float(record.requested_hours or record.overtime_hours or 0),
+                    "approved_hours": float(record.approved_hours or 0) if record.approved_hours is not None else None,
+                    "created_at": record.created_at.isoformat() if record.created_at else None,
+                    "start_ot_time": record.start_ot_time.isoformat() if record.start_ot_time else None,
+                    "end_ot_time": record.end_ot_time.isoformat() if record.end_ot_time else None,
                     "reason": record.reason or "",
                     "manager_approved": record.status != "pending_manager",
                     "hr_status": hr_status,
@@ -1730,6 +1736,7 @@ class HRService:
 
         if action == "approve":
             record.status = "pending_admin"
+            record.approved_hours = record.requested_hours or record.overtime_hours
         else:
             record.status = "rejected"
             record.rejection_reason = data.note or "HR từ chối"
@@ -1737,7 +1744,8 @@ class HRService:
         record.hr_decision_by = hr_employee.id if hr_employee else None
         record.hr_decision_at = datetime.utcnow()
         record.hr_note = data.note
-
+        if action == "reject":
+            record.approved_hours = Decimal("0.00")
         db.session.add(
             HistoryLog(
                 employee_id=record.employee_id,

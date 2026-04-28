@@ -224,6 +224,11 @@
   data-worked-hours="{{ (today.working_hours or 0)|float if today else 0 }}"
   data-regular-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
+  data-today-ot-status="{{ today_ot_request.status if today_ot_request else '' }}"
+  data-today-ot-created-at="{{ today_ot_request.created_at.isoformat() if today_ot_request and today_ot_request.created_at else '' }}"
+  data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
+  data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
+  data-today-ot-end="{{ today_ot_request.end_ot_time.isoformat() if today_ot_request and today_ot_request.end_ot_time else '' }}"
   data-server-now="{{ now.isoformat() }}"
 >
 
@@ -307,7 +312,7 @@
   <p id="workHoursText" class="attendance-note">
     Công hôm nay: 0 giờ 00 phút
   </p>
-
+  <div id="otRequestStatusBox" class="attendance-note" style="display:none;margin-top:10px;"></div>
 </div>
 
 <section class="emp-card">
@@ -462,7 +467,14 @@ const state = {
     otStart: false,
     otEnd: false
   },
-  pendingCheckoutWithoutOT: false
+  pendingCheckoutWithoutOT: false,
+  todayOtRequest: {
+    status: root.dataset.todayOtStatus || "",
+    createdAt: root.dataset.todayOtCreatedAt ? new Date(root.dataset.todayOtCreatedAt) : null,
+    requestedHours: Number(root.dataset.todayOtHours || 0),
+    startAt: root.dataset.todayOtStart ? new Date(root.dataset.todayOtStart) : null,
+    endAt: root.dataset.todayOtEnd ? new Date(root.dataset.todayOtEnd) : null,
+  }
 };
 
 const dateKeyOf = (d) => {
@@ -517,35 +529,57 @@ function maybeNotifyOvertimeWindow() {
   const isWeekend = [0, 6].includes(state.now.getDay());
   const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
-  if (isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
+  const hasOtRequest = Boolean(state.todayOtRequest.status);
+  if (isWorkingSession && !hasOtRequest && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
     state.notices.otInvite = true;
     Swal.fire({
       icon: "question",
       title: "Đã hết ca làm việc",
-      text: "Bạn có muốn check-out ngay hoặc gửi yêu cầu OT?",
+      html: "Bạn có muốn đăng ký tăng ca hôm nay không?",
       showCancelButton: true,
-      confirmButtonText: "Gửi yêu cầu OT",
-      cancelButtonText: "Check-out",
+      confirmButtonText: "Đăng ký OT",
+      cancelButtonText: "Không",
       reverseButtons: true,
     }).then(async (result) => {
       if (result.isConfirmed) {
-        const confirmSend = await Swal.fire({
+        const { value: formValues, isConfirmed } = await Swal.fire({
           icon: "question",
-          title: "Xác nhận gửi yêu cầu tăng ca?",
-          html: "Ngày OT: hôm nay<br>Thời gian bắt đầu OT: 19:00<br>Hình thức: tăng ca sau giờ hành chính",
+          title: "Đăng ký OT hôm nay",
+          html: `
+            <label style="display:block;text-align:left">Giờ bắt đầu OT</label>
+            <input id="otStartInput" type="time" class="swal2-input" value="19:00">
+            <label style="display:block;text-align:left">Giờ kết thúc OT</label>
+            <input id="otEndInput" type="time" class="swal2-input" value="22:00">
+            <label style="display:block;text-align:left">Lý do OT</label>
+            <input id="otReasonInput" type="text" class="swal2-input" placeholder="Ví dụ: xử lý deploy production">
+          `,
           showCancelButton: true,
-          confirmButtonText: "Xác nhận gửi",
+          confirmButtonText: "Gửi đăng ký",
           cancelButtonText: "Hủy",
+          preConfirm: () => {
+            const start = document.getElementById("otStartInput")?.value;
+            const end = document.getElementById("otEndInput")?.value;
+            const reason = (document.getElementById("otReasonInput")?.value || "").trim();
+            if (!start || !end) {
+              Swal.showValidationMessage("Vui lòng chọn đầy đủ khung giờ OT");
+              return null;
+            }
+            if (end <= start) {
+              Swal.showValidationMessage("Giờ kết thúc phải lớn hơn giờ bắt đầu");
+              return null;
+            }
+            if (!reason) {
+              Swal.showValidationMessage("Lý do OT là bắt buộc");
+              return null;
+            }
+            return { start, end, reason };
+          },
         });
-        if (!confirmSend.isConfirmed) return;
-        await submitAutomaticOvertimeRequest("after_shift");
-        state.pendingCheckoutWithoutOT = true;
-        state.overtimeDeclined = true;
-        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Vui lòng quét QR để check-out ca chính." });
+        if (!isConfirmed || !formValues) return;
+        await submitAutomaticOvertimeRequest("after_shift", formValues);
+        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Yêu cầu đã được chuyển đến HR/Admin." });
       } else if (result.dismiss === Swal.DismissReason.cancel) {
-        state.pendingCheckoutWithoutOT = true;
-        state.overtimeDeclined = true;
-        await Swal.fire({ icon: "info", title: "Vui lòng check-out", text: "Hãy quét QR để check-out ngay." });
+        await Swal.fire({ icon: "info", title: "Không đăng ký OT", text: "Bạn có thể check-out khi sẵn sàng." });
       }
       renderState();
     });
@@ -625,16 +659,9 @@ function calcWorkedDuration(now) {
 }
 
 /* ===================== TOAST ===================== */
-function toast(msg, type="success") {
+async function notifySwal(msg, type="success") {
   const icon = type === "error" ? "error" : type === "warning" ? "warning" : "success";
-  Swal.fire({
-    toast: true,
-    position: "top-end",
-    timer: 2200,
-    showConfirmButton: false,
-    icon,
-    title: msg
-  });
+  await Swal.fire({ icon, title: msg, timer: 1400, showConfirmButton: false });
 }
 
 function renderState() {
@@ -643,7 +670,7 @@ function renderState() {
   const statusText = document.getElementById('statusText');
   const lateWarning = document.getElementById('lateWarning');
   const identityText = document.getElementById('identityText');
-
+  const otRequestStatusBox = document.getElementById('otRequestStatusBox');
   const inLunch = isLunchBreak(state.now);
 
   // ✅ FIX CỐT LÕI: detect khác ngày
@@ -681,6 +708,31 @@ function renderState() {
 
     identityText.style.display = 'none';
     lateWarning.style.display = 'none';
+  }
+  if (otRequestStatusBox) {
+    const req = state.todayOtRequest;
+    if (!req.status) {
+      otRequestStatusBox.style.display = "none";
+    } else {
+      const createdAt = req.createdAt
+        ? req.createdAt.toLocaleString("vi-VN", { hour12: false })
+        : "--";
+      const statusLabel = req.status === "pending_hr" || req.status === "pending_admin"
+        ? "⏳ Yêu cầu OT đang chờ duyệt"
+        : req.status === "approved"
+          ? "✅ Yêu cầu OT đã duyệt"
+          : "❌ Yêu cầu OT đã bị từ chối";
+      const windowLabel = req.startAt && req.endAt
+        ? `${fmtHm(req.startAt)} → ${fmtHm(req.endAt)}`
+        : "--";
+      otRequestStatusBox.style.display = "";
+      otRequestStatusBox.innerHTML = `
+        <div><strong>${statusLabel}</strong></div>
+        <div>Ngày gửi: ${createdAt}</div>
+        <div>Khung giờ OT dự kiến: ${windowLabel}</div>
+        <div>Số giờ dự kiến: ${Number(req.requestedHours || 0).toFixed(2)} giờ</div>
+      `;
+    }
   }
 
   // =========================
@@ -790,9 +842,16 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       overtime_rejected: state.pendingCheckoutWithoutOT || state.overtimeDeclined
     };
     if (!state.hasAttendance && isWeekend) {
-      const acceptedHolidayOT = confirm("Hôm nay là ngày nghỉ, bạn muốn tăng ca chứ?");
-      if (!acceptedHolidayOT) {
-        toast("Đã hủy chấm công ngày nghỉ", "warning");
+      const acceptedHolidayOT = await Swal.fire({
+        icon: "question",
+        title: "Đăng ký OT ngày nghỉ",
+        text: "Hôm nay là ngày nghỉ, bạn có muốn tăng ca không?",
+        showCancelButton: true,
+        confirmButtonText: "Có",
+        cancelButtonText: "Không",
+      });
+      if (!acceptedHolidayOT.isConfirmed) {
+        await notifySwal("Đã hủy chấm công ngày nghỉ", "warning");
         return;
       }
       state.isOvertime = true;
@@ -864,7 +923,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       overtimeHours: state.overtimeHours
     });
     persistSharedSimTime(state.now);
-    toast(data.message, data.type || "success");
+    await notifySwal(data.message, data.type || "success");
     const successTitle = data.action === "check_out"
       ? "Check-out thành công"
       : data.action === "check_in"
@@ -890,12 +949,13 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     isSubmittingAttendance = false;
   }
 }
-async function submitAutomaticOvertimeRequest(requestType) {
+async function submitAutomaticOvertimeRequest(requestType, options = {}) {
   const payload = {
     request_type: requestType,
     overtime_date: dateKeyOf(state.now),
-    overtime_hours: 3,
-    reason: requestType === "holiday" ? "Đăng ký làm việc ngày nghỉ lễ" : "Đăng ký tăng ca sau giờ hành chính",
+    start_ot_time: options.start || "19:00",
+    end_ot_time: options.end || "22:00",
+    reason: options.reason || (requestType === "holiday" ? "Đăng ký làm việc ngày nghỉ lễ" : "Đăng ký tăng ca sau giờ hành chính"),
     note: requestType === "holiday" ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in." : "Yêu cầu OT sau giờ làm từ popup 17:00."
   };
   const res = await fetch("/employee/attendance/overtime-request", {
@@ -907,6 +967,11 @@ async function submitAutomaticOvertimeRequest(requestType) {
   if (!res.ok) {
     throw new Error(data.error || "Không thể gửi yêu cầu OT");
   }
+  state.todayOtRequest.status = data.request?.status || "pending_hr";
+  state.todayOtRequest.createdAt = new Date();
+  state.todayOtRequest.requestedHours = Number(data.request?.requested_hours || data.request?.overtime_hours || 0);
+  state.todayOtRequest.startAt = data.request?.start_ot_time ? new Date(data.request.start_ot_time) : null;
+  state.todayOtRequest.endAt = data.request?.end_ot_time ? new Date(data.request.end_ot_time) : null;
   await Swal.fire({ icon: "success", title: data.message || "Đã gửi yêu cầu OT", text: "Trạng thái: PENDING_APPROVAL" });
 }
 /* ===================== SIM EDITOR ===================== */
@@ -974,7 +1039,7 @@ const scanner = HRMQRScanner.createQRScanner({
   },
 
   onError: (err) => {
-    toast(err.message || "Lỗi camera", "error");
+    Swal.fire({ icon: "error", title: err.message || "Lỗi camera" });
   }
 });
 

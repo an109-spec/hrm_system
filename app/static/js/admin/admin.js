@@ -1017,7 +1017,10 @@ async function openPendingOvertimePanel() {
   const html = `<div style="text-align:left;max-height:320px;overflow:auto">${pending.map((r) => `
     <div id="ot-row-${r.id}" style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px">
       <b>${esc(r.employee_name)}</b> (${esc(r.employee_code)}) - ${esc(r.department)}<br>
-      ${fmtDate(r.date)} | ${r.hours} giờ<br>${esc(r.reason || '')}
+      Ngày OT: ${fmtDate(r.date)} • Gửi lúc: ${r.created_at ? new Date(r.created_at).toLocaleString('vi-VN', { hour12: false }) : '--'}<br>
+      OT dự kiến: ${r.start_ot_time ? new Date(r.start_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'} → ${r.end_ot_time ? new Date(r.end_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}<br>
+      Số giờ OT: ${Number(r.hours || 0).toFixed(2)} giờ<br>
+      Lý do: ${esc(r.reason || '')}
       <div id="ot-status-${r.id}" style="margin-top:8px">Trạng thái: Chờ duyệt</div>
       <div id="ot-actions-${r.id}" style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button></div>
     </div>`).join('')}</div>`;
