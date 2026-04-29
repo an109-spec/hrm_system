@@ -14,7 +14,8 @@ class OvertimeRequest(BaseModel):
     end_ot_time = db.Column(db.DateTime(timezone=True), nullable=True)
     reason = db.Column(db.Text, nullable=False)
     note = db.Column(db.Text, nullable=True)
-
+    is_holiday_ot = db.Column(db.Boolean, nullable=False, default=False, server_default=db.text("false"))
+    holiday_multiplier = db.Column(db.Numeric(4, 2), nullable=False, default=1, server_default="1.00")
     status = db.Column(
         db.String(30),
         nullable=False,

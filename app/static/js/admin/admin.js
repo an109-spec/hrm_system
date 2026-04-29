@@ -1014,10 +1014,15 @@ async function openPendingOvertimePanel() {
     await Swal.fire({ icon: 'info', title: 'Không có yêu cầu OT chờ Admin duyệt' });
     return;
   }
+  const fmtDateTime = (value) => {
+    if (!value) return '--';
+    const d = new Date(value);
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} - ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
   const html = `<div style="text-align:left;max-height:320px;overflow:auto">${pending.map((r) => `
     <div id="ot-row-${r.id}" style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px">
       <b>${esc(r.employee_name)}</b> (${esc(r.employee_code)}) - ${esc(r.department)}<br>
-      Ngày OT: ${fmtDate(r.date)} • Gửi lúc: ${r.created_at ? new Date(r.created_at).toLocaleString('vi-VN', { hour12: false }) : '--'}<br>
+      Ngày OT: ${fmtDate(r.date)} • Gửi lúc: ${fmtDateTime(r.created_at)}<br>
       OT dự kiến: ${r.start_ot_time ? new Date(r.start_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'} → ${r.end_ot_time ? new Date(r.end_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}<br>
       Số giờ OT: ${Number(r.hours || 0).toFixed(2)} giờ<br>
       Lý do: ${esc(r.reason || '')}

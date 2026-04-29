@@ -26,7 +26,6 @@ from app.models import (
     Holiday,
     ResignationRequest,
 )
-from app.modules.attendance.overtime_service import OvertimeService
 from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 from app.utils.time import parse_simulated_time
@@ -34,6 +33,10 @@ from .ess_service import EmployeeESSService
 from .payroll_service import EmployeePayrollService
 from . import employee_bp
 from app.modules.resignation_service import ResignationService
+WORKDAY_CHECKIN_START = time(7, 0, 0)
+WORKDAY_CHECKIN_NORMAL_END = time(8, 0, 0)
+WORKDAY_START = time(8, 0, 0)
+WORKDAY_END = time(17, 0, 0)
 VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "01-01": "Tết Dương lịch",
     "04-30": "Ngày Giải phóng miền Nam",
@@ -231,11 +234,7 @@ def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, De
 
     if record.check_in and record.check_out and regular_hours <= 0:
         today = record.date
-        policy_start = (
-            datetime.combine(today, time(9, 0))
-            if record.check_in.time() > AttendanceService.LATE_THRESHOLD
-            else datetime.combine(today, time(8, 0))
-        )
+        policy_start = datetime.combine(today, WORKDAY_START)
         effective_start = max(record.check_in.replace(tzinfo=None), policy_start)
         regular_hours = _compute_working_hours(
             effective_start,
@@ -257,6 +256,16 @@ def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
     if hours > 0:
         return f"{hours} giờ"
     return f"{minutes} phút"
+def _late_penalty_message(late_minutes: int) -> str:
+    if late_minutes <= 0:
+        return ""
+    if late_minutes < 15:
+        return " • Mức phạt: 20.000đ"
+    if late_minutes <= 30:
+        return " • Mức phạt: 50.000đ"
+    if late_minutes > 60:
+        return " • Quy đổi: nửa ngày công"
+    return ""
 
 def _status_badge(status: str) -> tuple[str, str]:
     mapping = {
@@ -709,8 +718,9 @@ def check_in_out():
             date=today
         ).first()
 
-        shift_start = datetime.combine(today, AttendanceService.REGULAR_START)
-        late_threshold = datetime.combine(today, AttendanceService.LATE_THRESHOLD)
+        shift_start = datetime.combine(today, WORKDAY_START)
+        normal_checkin_end = datetime.combine(today, WORKDAY_CHECKIN_NORMAL_END)
+        checkin_window_start = datetime.combine(today, WORKDAY_CHECKIN_START)
 
         # =========================
         # CHECK-IN FLOW
@@ -722,7 +732,7 @@ def check_in_out():
                     OvertimeRequest.employee_id == employee.id,
                     OvertimeRequest.overtime_date == today,
                     OvertimeRequest.is_deleted.is_(False),
-                    OvertimeRequest.status.in_(["pending_admin", "approved"]),
+                    OvertimeRequest.status == "approved",
                 ).first()
                 if approved_holiday_ot:
                     attendance = Attendance(
@@ -764,21 +774,17 @@ def check_in_out():
             db.session.commit()
 
             late_minutes = 0
-            early_minutes = 0
-            if current_time < shift_start:
-                early_minutes = int(
-                    (shift_start - current_time).total_seconds() // 60
-                )
-            if current_time > late_threshold:
-                late_minutes = int(
-                    (current_time - late_threshold).total_seconds() // 60
-                )
+            if current_time > normal_checkin_end:
+                late_minutes = int((current_time - normal_checkin_end).total_seconds() // 60)
 
             msg = f"Check-in lúc {current_time.strftime('%H:%M:%S')}"
-            if early_minutes > 0:
-                msg += f" • Bạn đến sớm {early_minutes} phút, chúc bạn 1 ngày làm việc hiệu quả"
-            elif late_minutes > 0:
-                msg += f" • Muộn {_format_minutes_as_hours_minutes(late_minutes)}"
+            if checkin_window_start <= current_time < normal_checkin_end:
+                msg += " • Trạng thái vào ca: Bình thường"
+            elif current_time >= normal_checkin_end:
+                msg += f" • Trạng thái vào ca: Đi muộn {_format_minutes_as_hours_minutes(late_minutes)}"
+                msg += _late_penalty_message(late_minutes)
+            else:
+                msg += " • Trạng thái vào ca: Đến sớm"
 
             return jsonify({
                 "toast": True,
@@ -805,11 +811,7 @@ def check_in_out():
             # =========================
             # EFFECTIVE START (late rule)
             # =========================
-            policy_start = (
-                datetime.combine(today, time(9, 0))
-                if check_in_time > late_threshold
-                else datetime.combine(today, time(8, 0))
-            )
+            policy_start = datetime.combine(today, WORKDAY_START)
             effective_start = max(check_in_time, policy_start)
             # =========================
             # WORK HOURS CALC
@@ -818,26 +820,11 @@ def check_in_out():
                 effective_start,
                 min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
-            overtime_start_raw = payload.get("overtime_start")
-            overtime_start_dt = current_time
-            if overtime_start_raw:
-                try:
-                    overtime_start_dt = datetime.fromisoformat(str(overtime_start_raw).replace("Z", "+00:00"))
-                    if overtime_start_dt.tzinfo is not None:
-                        overtime_start_dt = overtime_start_dt.replace(tzinfo=None)
-                except ValueError:
-                    overtime_start_dt = current_time
-
-            overtime_confirmed = bool(payload.get("overtime_confirmed"))
-            overtime_hours = (
-                OvertimeService.calculate_overtime(overtime_start_dt, attendance.check_out)
-                if overtime_confirmed else Decimal("0.00")
-            )
-
+            overtime_hours = Decimal("0.00")
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
             worked_hours = regular_hours + overtime_hours
-            holiday_multiplier = Decimal("3.00") if _get_holiday_for_date(today) else Decimal("1.00")
+            holiday_multiplier = Decimal("1.00")
             attendance.working_hours = worked_hours
             if holiday_multiplier > 1:
                 attendance.attendance_type = "holiday"
@@ -850,7 +837,7 @@ def check_in_out():
             # =========================
             # EARLY LEAVE CHECK
             # =========================
-            end_of_day = datetime.combine(today, AttendanceService.REGULAR_END)
+            end_of_day = datetime.combine(today, WORKDAY_END)
             early_minutes = 0
 
             if current_time < end_of_day:
@@ -860,10 +847,6 @@ def check_in_out():
 
             msg = f"Check-out lúc {current_time.strftime('%H:%M:%S')}"
             msg += f" • Ca chính: {regular_hours}h"
-            if overtime_hours > 0:
-                msg += f" • Tăng ca: {overtime_hours}h"
-            if holiday_multiplier > 1:
-                msg += " • Ngày lễ x3 công chuẩn payroll"
 
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
@@ -871,7 +854,7 @@ def check_in_out():
             status_key = "checked_out"
             if overtime_hours > 0:
                 status_key = "overtime"
-            elif check_in_time > late_threshold:
+            elif check_in_time > normal_checkin_end:
                 status_key = "late"
             elif early_minutes > 0:
                 status_key = "early_leave"

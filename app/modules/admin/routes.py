@@ -1648,6 +1648,8 @@ def attendance_overtime_final_review(overtime_id: int):
     row.approved_by = admin_employee.id if admin_employee else None
     row.approved_at = datetime.utcnow()
     row.approved_hours = row.requested_hours or row.overtime_hours if action == "approve" else Decimal("0.00")
+    row.is_holiday_ot = bool(row.is_holiday_ot)
+    row.holiday_multiplier = Decimal("3.00") if row.is_holiday_ot else Decimal("1.00")
     if action == "approve":
         attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
         if attendance:
@@ -1656,13 +1658,18 @@ def attendance_overtime_final_review(overtime_id: int):
     employee = Employee.query.get(row.employee_id)
     if employee and employee.user_id:
         if action == "approve":
+            start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "--:--"
             content = (
-                "Yêu cầu tăng ca của bạn đã được duyệt.\n\n"
-                "Ca OT bắt đầu lúc: 19:00.\n"
-                "Vui lòng quay lại hệ thống để check-in tăng ca."
+                "Yêu cầu tăng ca đã được duyệt.\n"
+                f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
+                f"Vui lòng check-in lúc {start_text} để bắt đầu OT."
             )
         else:
-            content = f"Yêu cầu tăng ca của bạn đã bị từ chối.\n\nLý do: {note or 'Không có'}"
+            content = (
+                "Yêu cầu tăng ca đã bị từ chối.\n"
+                f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
+                f"Lý do: {note or 'Không có'}"
+            )
         db.session.add(
             Notification(
                 user_id=employee.user_id,

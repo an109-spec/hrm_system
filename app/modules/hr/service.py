@@ -751,6 +751,7 @@ class HRService:
 
         total_work_days = Decimal("0")
         overtime_hours = Decimal("0")
+        weighted_overtime_hours = Decimal("0")
         late_minutes = Decimal("0")
         early_minutes = Decimal("0")
 
@@ -758,15 +759,17 @@ class HRService:
             multiplier = Decimal(str(item.status.multiplier if item.status else 1))
             if item.check_in or item.check_out:
                 total_work_days += multiplier
-            overtime_hours += HRService._decimal(item.overtime_hours)
+            item_ot_hours = HRService._decimal(item.overtime_hours)
+            overtime_hours += item_ot_hours
+            weighted_overtime_hours += item_ot_hours * (Decimal("3") if item.attendance_type == "holiday" and item_ot_hours > 0 else Decimal("1"))
 
             if item.check_in:
-                late_ref = item.check_in.replace(hour=8, minute=30, second=0, microsecond=0)
+                late_ref = item.check_in.replace(hour=8, minute=0, second=0, microsecond=0)
                 if item.check_in > late_ref:
                     late_minutes += Decimal(str((item.check_in - late_ref).total_seconds() / 60))
 
             if item.check_out:
-                early_ref = item.check_out.replace(hour=17, minute=30, second=0, microsecond=0)
+                early_ref = item.check_out.replace(hour=17, minute=0, second=0, microsecond=0)
                 if item.check_out < early_ref:
                     early_minutes += Decimal(str((early_ref - item.check_out).total_seconds() / 60))
 
@@ -791,6 +794,7 @@ class HRService:
         return {
             "total_work_days": total_work_days,
             "overtime_hours": overtime_hours,
+            "weighted_overtime_hours": weighted_overtime_hours,
             "late_minutes": late_minutes,
             "early_minutes": early_minutes,
             "leave_days": leave_days,
@@ -834,6 +838,7 @@ class HRService:
             else {
                 "total_work_days": standard_work_days,
                 "overtime_hours": Decimal("0"),
+                "weighted_overtime_hours": Decimal("0"),
                 "late_minutes": Decimal("0"),
                 "early_minutes": Decimal("0"),
                 "leave_days": 0,
@@ -842,7 +847,7 @@ class HRService:
         )
         total_allowance = HRService._sum_allowance(employee.id)
         overtime_amount = (
-            (base_salary / standard_work_days / Decimal("8")) * metrics["overtime_hours"]
+            (base_salary / standard_work_days / Decimal("8")) * metrics.get("weighted_overtime_hours", metrics["overtime_hours"])
             if attendance_required
             else Decimal("0")
         )
@@ -1759,12 +1764,20 @@ class HRService:
         employee = Employee.query.get(record.employee_id)
         if employee and employee.user_id:
             if action == "approve":
+                ot_start = record.start_ot_time.strftime("%H:%M") if record.start_ot_time else "--:--"
+                ot_end = record.end_ot_time.strftime("%H:%M") if record.end_ot_time else "--:--"
                 content = (
-                    "Yêu cầu tăng ca của bạn đã được HR kiểm tra và chuyển Admin duyệt cuối. "
-                    "Ca OT dự kiến bắt đầu lúc: 19:00. Vui lòng chờ thông báo tiếp theo."
+                    "HR đã kiểm tra yêu cầu OT lúc "
+                    f"{datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}. "
+                    f"Khung giờ dự kiến: {ot_start} → {ot_end}. "
+                    "Yêu cầu đã chuyển Admin duyệt cuối."
                 )
             else:
-                content = f"Yêu cầu tăng ca của bạn đã bị từ chối. Lý do: {record.rejection_reason or 'Không có'}"
+                content = (
+                    "HR từ chối yêu cầu OT lúc "
+                    f"{datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}. "
+                    f"Lý do: {record.rejection_reason or 'Không có'}"
+                )
             db.session.add(
                 Notification(
                     user_id=employee.user_id,

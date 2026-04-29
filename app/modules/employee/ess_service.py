@@ -174,6 +174,8 @@ class EmployeeESSService:
                 reason = "Đăng ký tăng ca sau giờ hành chính"
             else:
                 raise ValueError("Lý do OT là bắt buộc")
+        is_holiday_ot = request_type == "holiday"
+        holiday_multiplier = Decimal("3.00") if is_holiday_ot else Decimal("1.00")
         request_ot = OvertimeRequest(
             employee_id=employee.id,
             overtime_date=ot_date,
@@ -184,6 +186,8 @@ class EmployeeESSService:
             reason=reason,
             note=(payload.get("note") or "").strip() or None,
             status="pending_hr",
+            is_holiday_ot=is_holiday_ot,
+            holiday_multiplier=holiday_multiplier,
         )
         db.session.add(request_ot)
         role_ids = [r.id for r in Role.query.filter(db.func.lower(Role.name).in_(["hr", "admin"])).all()]
@@ -193,7 +197,11 @@ class EmployeeESSService:
                 Notification(
                     user_id=receiver.id,
                     title="Yêu cầu tăng ca mới",
-                    content=f"{employee.full_name} gửi yêu cầu OT ngày {ot_date.strftime('%d/%m/%Y')} ({hours} giờ).",
+                    content=(
+                        f"{employee.full_name} (EMP{employee.id:04d}) gửi OT ngày {ot_date.strftime('%d/%m/%Y')} "
+                        f"lúc {datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y - %H:%M')} "
+                        f"({hours} giờ, {start_ot_time.strftime('%H:%M')} → {end_ot_time.strftime('%H:%M')})."
+                    ),
                     type="overtime",
                     link="/hr/attendance",
                 )

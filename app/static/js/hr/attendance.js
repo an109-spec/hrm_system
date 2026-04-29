@@ -144,7 +144,11 @@
       return status || "--";
     };
     const filtered = state.filters.overtimeOnlyPending ? rows.filter((x) => isPendingHr(x.hr_status)) : rows;
-    const fmtDateTime = (value) => value ? new Date(value).toLocaleString("vi-VN", { hour12: false }) : "--";
+    const fmtDateTime = (value) => {
+      if (!value) return "--";
+      const d = new Date(value);
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} - ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
     const fmtHM = (value) => value ? new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--";
     $("#otList").innerHTML = filtered.map((x) => `
       <li>
