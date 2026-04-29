@@ -111,6 +111,9 @@ def _is_attendance_required(employee: Employee | None) -> bool:
     if not employee:
         return False
     return employee.is_attendance_required is not False
+def _is_dev_or_test_env() -> bool:
+    return (os.getenv("FLASK_ENV", "development") or "development").lower() in {"development", "testing"}
+
 
 
 def _get_holiday_for_date(target_date: date) -> Holiday | None:
@@ -642,6 +645,9 @@ def attendance():
         if employee
         else None
     )
+    user = _current_user()
+    role_name = (user.role.name.lower() if user and user.role else "")
+    can_reset_ot_request = role_name == "admin" or _is_dev_or_test_env()
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -651,6 +657,7 @@ def attendance():
         today_holiday=today_holiday,
         holiday_lookup=holiday_lookup,
         today_ot_request=today_ot_request,
+        can_reset_ot_request=can_reset_ot_request,
     )
 
 
@@ -1427,7 +1434,75 @@ def submit_overtime_request_api():
         return jsonify(EmployeeESSService.submit_overtime(session.get("user_id"), payload, actor_user_id=session.get("user_id")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+@employee_bp.route("/attendance/overtime-request/reset", methods=["DELETE"])
+def reset_overtime_request_api():
+    guard = _ensure_login()
+    if guard:
+        return guard
 
+    user = _current_user()
+    employee = _current_employee()
+    if not user or not employee:
+        return jsonify({"error": "Không tìm thấy người dùng hoặc nhân viên"}), 404
+
+    role_name = (user.role.name.lower() if user.role else "")
+    if role_name != "admin" and not _is_dev_or_test_env():
+        return jsonify({"error": "Chỉ ADMIN hoặc môi trường DEV/TEST mới được reset OT Request"}), 403
+
+    ot_request = (
+        OvertimeRequest.query.filter_by(
+            employee_id=employee.id,
+            overtime_date=date.today(),
+            is_deleted=False,
+        )
+        .order_by(OvertimeRequest.id.desc())
+        .first()
+    )
+    if not ot_request:
+        return jsonify({"error": "Không có OT Request hiện tại để reset"}), 404
+
+    ot_date = ot_request.overtime_date
+    ot_id = ot_request.id
+    allowed_statuses = {"pending_hr", "pending_admin", "approved", "rejected"}
+    if ot_request.status not in allowed_statuses:
+        return jsonify({"error": "OT Request hiện tại không thuộc trạng thái cho phép reset trong DEV/TEST"}), 400
+
+    notifications = Notification.query.filter(
+        Notification.is_deleted.is_(False),
+        Notification.type == "overtime",
+        db.or_(
+            Notification.link.like("/employee/attendance%"),
+            Notification.link.like("/hr/attendance%"),
+            Notification.link.like("/admin/attendance%"),
+        ),
+        db.or_(
+            Notification.content.ilike(f"%EMP{employee.id:04d}%"),
+            Notification.content.ilike(f"%#{ot_id}%"),
+            Notification.content.ilike(f"%{ot_date.strftime('%d/%m/%Y')}%"),
+        ),
+    ).all()
+    for item in notifications:
+        item.is_deleted = True
+
+    attendance = Attendance.query.filter_by(employee_id=employee.id, date=ot_date).first()
+    if attendance:
+        attendance.overtime_hours = Decimal("0.00")
+        if attendance.attendance_type == "overtime":
+            attendance.attendance_type = "normal"
+
+    ot_request.is_deleted = True
+    db.session.add(
+        HistoryLog(
+            employee_id=employee.id,
+            action="OVERTIME_RESET_TEST_MODE",
+            entity_type="overtime_request",
+            entity_id=ot_id,
+            description=f"Reset OT request DEV/TEST ({ot_request.status}) ngày {ot_date.isoformat()}",
+            performed_by=user.id,
+        )
+    )
+    db.session.commit()
+    return jsonify({"message": "Đã reset OT Request để test lại", "status": "RESET_OK"})
 
 @employee_bp.route("/search")
 def search():

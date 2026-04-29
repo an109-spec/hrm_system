@@ -229,6 +229,7 @@
   data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
   data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
   data-today-ot-end="{{ today_ot_request.end_ot_time.isoformat() if today_ot_request and today_ot_request.end_ot_time else '' }}"
+  data-can-reset-ot-request="{{ 1 if can_reset_ot_request else 0 }}"
   data-server-now="{{ now.isoformat() }}"
 >
 
@@ -694,6 +695,7 @@ function renderState() {
         <div>Ngày gửi: ${createdAt}</div>
         <div>Khung giờ OT dự kiến: ${windowLabel}</div>
         <div>Số giờ dự kiến: ${Number(req.requestedHours || 0).toFixed(2)} giờ</div>
+        ${root.dataset.canResetOtRequest === "1" ? `<div style="margin-top:8px;"><button class="btn btn-danger btn-sm" type="button" onclick="resetOtRequestForTest()">Reset OT Request</button></div>` : ""}
       `;
     }
   }
@@ -1030,6 +1032,27 @@ async function deleteRecord(dateIso) {
 
   } catch (err) {
     await Swal.fire({ icon: "error", title: err.message || "Không thể xóa bản ghi" });
+  }
+}
+
+async function resetOtRequestForTest() {
+  const confirmReset = await Swal.fire({
+    title: "Xóa yêu cầu OT để test?",
+    text: "Thao tác này sẽ xóa request hiện tại để bạn có thể gửi lại từ đầu.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Xóa",
+    cancelButtonText: "Hủy"
+  });
+  if (!confirmReset.isConfirmed) return;
+  try {
+    const res = await fetch("/employee/attendance/overtime-request/reset", { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Không thể reset OT Request");
+    await Swal.fire({ icon: "success", title: data.message || "Đã reset OT Request" });
+    location.reload();
+  } catch (err) {
+    await Swal.fire({ icon: "error", title: err.message || "Không thể reset OT Request" });
   }
 }
 </script>
