@@ -1331,7 +1331,11 @@ def reset_overtime_from_notification(noti_id: int):
         .first()
     )
     if not row:
-        return jsonify({"error": "Không tìm thấy OT request liên quan"}), 404
+        return jsonify({
+            "ok": True,
+            "already_deleted": True,
+            "message": "OT request liên quan đã được xóa trước đó",
+        })
     return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=user.id, source="employee"))
 
 
