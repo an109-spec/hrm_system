@@ -1695,7 +1695,7 @@ def attendance_overtime_final_review(overtime_id: int):
 @admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/reset")
 def attendance_overtime_reset(overtime_id: int):
     actor = _current_user()
-    if _role_name(actor) != "Admin":
+    if (_role_name(actor) or "").lower() != "admin":
         return jsonify({"error": "only admin can reset overtime"}), 403
     row = OvertimeRequest.query.get_or_404(overtime_id)
     return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=actor.id if actor else None, source="admin"))
