@@ -1033,15 +1033,17 @@ async function openPendingOvertimePanel() {
   await Swal.fire({ title: 'Duyệt tăng ca cuối cùng', html, width: 800, showConfirmButton: false, showCancelButton: true });
 }
 function renderOtStatus(status) {
+  const fieldSource = "overtime.status";
   if (status === 'approved') return '✅ Trạng thái: Đã duyệt';
   if (status === 'rejected') return '❌ Trạng thái: Đã từ chối';
-  return '⏳ Trạng thái: Chờ duyệt';
+  return `⏳ Trạng thái: Chờ duyệt <br><small style="color:#6b7280">[DEBUG] UI đọc field: ${fieldSource} = ${esc(status || '--')}</small>`;
 }
 
 function renderOtActions(id, status) {
+  const fieldSource = "overtime.status";
   if (status === 'approved') return '<span class="badge badge-success">Đã duyệt</span>';
   if (status === 'rejected') return '<span class="badge badge-danger">Đã từ chối</span>';
-  return `<button onclick="finalReviewOt(${id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${id}, 'reject')">Từ chối</button> <button onclick="resetOtRequest(${id})">Xóa</button>`;
+  return `<div><small style="color:#6b7280">[DEBUG] Nút dựa trên ${fieldSource} = ${esc(status || '--')}</small></div><button onclick="finalReviewOt(${id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${id}, 'reject')">Từ chối</button> <button onclick="resetOtRequest(${id})">Xóa</button>`;
 }
 
 async function finalReviewOt(id, action) {

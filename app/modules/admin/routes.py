@@ -1643,6 +1643,11 @@ def attendance_overtime_final_review(overtime_id: int):
         return jsonify({"error": "invalid action"}), 400
     if row.status != "pending_admin":
         return jsonify({"error": "Yêu cầu OT này đã được xử lý trước đó"}), 409
+    print("==== BEFORE APPROVE ====")
+    print("request.id =", row.id)
+    print("request.status =", row.status)
+    print("request.hr_status =", getattr(row, "hr_status", None))
+    print("request.admin_status =", getattr(row, "admin_status", None))
     row.status = "approved" if action == "approve" else "rejected"
     row.note = note
     admin_employee = Employee.query.filter_by(user_id=actor.id if actor else None, is_deleted=False).first()
@@ -1652,6 +1657,10 @@ def attendance_overtime_final_review(overtime_id: int):
     row.rejection_reason = note if action == "reject" else None
     row.is_holiday_ot = bool(row.is_holiday_ot)
     row.holiday_multiplier = Decimal("3.00") if row.is_holiday_ot else Decimal("1.00")
+    print("==== AFTER UPDATE BEFORE COMMIT ====")
+    print("request.status =", row.status)
+    print("request.hr_status =", getattr(row, "hr_status", None))
+    print("request.admin_status =", getattr(row, "admin_status", None))
     if action == "approve":
         attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
         if attendance:
@@ -1690,6 +1699,11 @@ def attendance_overtime_final_review(overtime_id: int):
         performed_by=actor.id if actor else None,
     ))
     db.session.commit()
+    db.session.refresh(row)
+    print("==== AFTER COMMIT ====")
+    print("request.status =", row.status)
+    print("request.hr_status =", getattr(row, "hr_status", None))
+    print("request.admin_status =", getattr(row, "admin_status", None))
     return jsonify({"success": True})
 
 @admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/reset")
