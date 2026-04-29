@@ -1027,7 +1027,7 @@ async function openPendingOvertimePanel() {
       Số giờ OT: ${Number(r.hours || 0).toFixed(2)} giờ<br>
       Lý do: ${esc(r.reason || '')}
       <div id="ot-status-${r.id}" style="margin-top:8px">Trạng thái: Chờ duyệt</div>
-      <div id="ot-actions-${r.id}" style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button></div>
+      <div id="ot-actions-${r.id}" style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button> <button onclick="resetOtRequest(${r.id})">Xóa</button></div>
     </div>`).join('')}</div>`;
   await Swal.fire({ title: 'Duyệt tăng ca cuối cùng', html, width: 800, showConfirmButton: false, showCancelButton: true });
 }
@@ -1054,7 +1054,24 @@ async function finalReviewOt(id, action) {
 }
 window.handleAttendanceAction = handleAttendanceAction;
 window.finalReviewOt = finalReviewOt;
+window.resetOtRequest = resetOtRequest;
 
+async function resetOtRequest(id) {
+  const confirm = await Swal.fire({
+    title: "Xóa yêu cầu tăng ca?",
+    text: "Toàn bộ request, notification và trạng thái duyệt sẽ bị reset để test lại từ đầu.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Xóa",
+    cancelButtonText: "Hủy"
+  });
+  if (!confirm.isConfirmed) return;
+  await api(`/api/admin/attendance/overtime/${id}/reset`, { method: 'POST' });
+  const rowEl = document.getElementById(`ot-row-${id}`);
+  if (rowEl) rowEl.remove();
+  await Swal.fire({ icon: 'success', title: 'Đã xóa OT request để test lại' });
+  await loadAttendanceSummary();
+}
 let selectedPayrollId = null;
 let selectedComplaintId = null;
 

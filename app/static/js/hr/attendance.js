@@ -161,8 +161,9 @@
         <div class="actions">
           ${isPendingHr(x.hr_status)
             ? `<button class="btn btn-sm" data-action="approve-ot" data-id="${x.attendance_id}">Duyệt</button>
-               <button class="btn btn-sm" data-action="reject-ot" data-id="${x.attendance_id}">Từ chối</button>`
-            : `<span>${x.hr_status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span>`}
+               <button class="btn btn-sm" data-action="reject-ot" data-id="${x.attendance_id}">Từ chối</button>
+               <button class="btn btn-sm btn-danger" data-action="reset-ot" data-id="${x.attendance_id}">Xóa</button>`
+            : `<span>${x.hr_status === "rejected" ? "Đã từ chối" : "Đã duyệt"}</span> <button class="btn btn-sm btn-danger" data-action="reset-ot" data-id="${x.attendance_id}">Xóa</button>`}
         </div>
       </li>
     `).join("") || "<li>Không có yêu cầu OT</li>";
@@ -270,6 +271,19 @@
         await reviewOvertime(btn.dataset.id, "approve");
       } else if (action === "reject-ot") {
         await reviewOvertime(btn.dataset.id, "reject");
+      } else if (action === "reset-ot") {
+        const confirm = await Swal.fire({
+          title: "Xóa yêu cầu tăng ca?",
+          text: "Toàn bộ request, notification và trạng thái duyệt sẽ bị reset để test lại từ đầu.",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Xóa",
+          cancelButtonText: "Hủy"
+        });
+        if (!confirm.isConfirmed) return;
+        await api(`/hr/api/attendance/overtime/${btn.dataset.id}/reset`, { method: "POST" });
+        await Swal.fire({ icon: "success", title: "Đã xóa OT request để test lại" });
+        await loadMain();
       } else if (action === "confirm-abnormal") {
         await resolveAbnormal(btn.dataset.id, "confirm_valid");
       } else if (action === "manual-abnormal") {

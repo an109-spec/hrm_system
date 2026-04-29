@@ -33,6 +33,7 @@ from .ess_service import EmployeeESSService
 from .payroll_service import EmployeePayrollService
 from . import employee_bp
 from app.modules.resignation_service import ResignationService
+from app.modules.overtime_reset_service import reset_overtime_request_flow
 WORKDAY_CHECKIN_START = time(7, 0, 0)
 WORKDAY_CHECKIN_NORMAL_END = time(8, 0, 0)
 WORKDAY_START = time(8, 0, 0)
@@ -1301,6 +1302,27 @@ def notification_detail_api(noti_id: int):
         return jsonify(EmployeeESSService.notification_detail(user.id, noti_id))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
+@employee_bp.route("/notifications/<int:noti_id>/overtime-reset", methods=["POST"])
+def reset_overtime_from_notification(noti_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+    user = _current_user()
+    employee = _current_employee()
+    if not user or not employee:
+        return jsonify({"error": "Unauthorized"}), 401
+    noti = Notification.query.filter_by(id=noti_id, user_id=user.id).first()
+    if not noti:
+        return jsonify({"error": "Notification not found"}), 404
+    row = (
+        OvertimeRequest.query.filter_by(employee_id=employee.id)
+        .filter(OvertimeRequest.created_at <= (noti.created_at or noti.updated_at))
+        .order_by(OvertimeRequest.created_at.desc())
+        .first()
+    )
+    if not row:
+        return jsonify({"error": "Không tìm thấy OT request liên quan"}), 404
+    return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=user.id, source="employee"))
 
 
 @employee_bp.route("/complaints/<int:complaint_id>/close", methods=["POST"])

@@ -68,6 +68,7 @@
   <div class="mt-8">
     <a id="detailLink" href="#" class="btn btn-primary btn-sm" style="display:none;">Xem chi tiết</a>
     <button class="btn btn-sm" onclick="downloadDetailPdf()">Lưu PDF</button>
+    <button class="btn btn-danger btn-sm" id="btnResetOtRequest" style="display:none;" onclick="resetOtRequestFromNotification()">Xóa yêu cầu OT</button>
     <button class="btn btn-warning btn-sm" onclick="toggleFeedbackForm()">📩 GỬI PHẢN HỒI / KHIẾU NẠI</button>
     <button class="btn btn-success btn-sm" id="btnCloseComplaint" style="display:none;" onclick="closeComplaint()">Đóng khiếu nại</button>
     <button class="btn btn-secondary btn-sm" onclick="closeNotificationDetail()">[ &lt;-- Quay lại ] Danh sách thông báo</button>
@@ -99,6 +100,7 @@
 {% block scripts %}
 <script>
 let activeComplaintId = null;
+let activeNotificationId = null;
 async function markRead(id, button){
   button.disabled = true;
   const res = await fetch(`/employee/notifications/${id}/read`, { method: 'POST' });
@@ -115,6 +117,7 @@ function normalizeType(type) {
 
 async function openNotificationDetail(el){
   const id = Number(el.dataset.id);
+  activeNotificationId = id;
   const detail = await fetch(`/employee/notifications/${id}/detail`).then((r)=>r.json());
   if (detail.error) return Swal.fire({ icon: "error", title: detail.error });
   document.getElementById("notification-detail").style.display = "block";
@@ -124,6 +127,7 @@ async function openNotificationDetail(el){
   document.getElementById("detailContent").textContent = detail.content || "(Không có nội dung)";
   document.getElementById("detailRead").textContent = detail.is_read ? "Đã đọc" : "Mới";
   document.getElementById("feedbackNotificationId").value = String(id);
+  document.getElementById("btnResetOtRequest").style.display = detail.type === "overtime" ? "inline-flex" : "none";
   activeComplaintId = null;
   const complaintMap = {{ complaint_map | tojson }};
   if (complaintMap[id]) {
@@ -195,6 +199,27 @@ async function closeComplaint(){
 
 function downloadDetailPdf(){
   window.print();
+}
+
+async function resetOtRequestFromNotification() {
+  if (!activeNotificationId) return;
+  const confirm = await Swal.fire({
+    title: "Xóa yêu cầu tăng ca?",
+    text: "Toàn bộ request, notification và trạng thái duyệt sẽ bị reset để test lại từ đầu.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Xóa",
+    cancelButtonText: "Hủy"
+  });
+  if (!confirm.isConfirmed) return;
+  const res = await fetch(`/employee/notifications/${activeNotificationId}/overtime-reset`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    await Swal.fire({ icon: "error", title: data.error || "Không thể xóa OT request" });
+    return;
+  }
+  await Swal.fire({ icon: "success", title: "Đã xóa OT request để test lại" });
+  window.location.reload();
 }
 </script>
 {% endblock %}
