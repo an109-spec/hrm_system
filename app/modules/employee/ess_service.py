@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 from app.extensions.db import db
 from app.models import Attendance, Complaint, Dependent, Employee, HistoryLog, Notification, OvertimeRequest, Role, Salary, User
 from app.models.file_upload import FileUpload
-
+from app.utils.time import parse_simulated_time
 
 class EmployeeESSService:
     RELATIONSHIPS = {"con", "vo_chong", "bo", "me", "khac"}
@@ -136,9 +136,10 @@ class EmployeeESSService:
     @staticmethod
     def submit_overtime(user_id: int | None, payload: dict, actor_user_id: int | None = None) -> dict:
         employee = EmployeeESSService._employee_by_user(user_id)
+        simulated_now = parse_simulated_time(payload)
         request_type = (payload.get("request_type") or "manual").strip().lower()
         ot_date_raw = payload.get("overtime_date")
-        ot_date = date.fromisoformat(ot_date_raw) if ot_date_raw else date.today()
+        ot_date = date.fromisoformat(ot_date_raw) if ot_date_raw else simulated_now.date()
         existing_request = OvertimeRequest.query.filter_by(
             employee_id=employee.id,
             overtime_date=ot_date,
@@ -208,7 +209,7 @@ class EmployeeESSService:
                     title="Yêu cầu tăng ca mới",
                     content=(
                         f"{employee.full_name} (EMP{employee.id:04d}) gửi OT ngày {ot_date.strftime('%d/%m/%Y')} "
-                        f"lúc {datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y - %H:%M')} "
+                        f"lúc {simulated_now.strftime('%d/%m/%Y - %H:%M')} "
                         f"({hours} giờ, {ot_window_label})."
                     ),
                     type="overtime",
