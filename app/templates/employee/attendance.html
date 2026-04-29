@@ -479,7 +479,9 @@ const state = {
     endAt: root.dataset.todayOtEnd ? new Date(root.dataset.todayOtEnd) : null,
   }
 };
-
+state.isOvertime = ["pending_hr", "pending_admin", "approved"].includes(state.todayOtRequest.status);
+state.isPreOvertimeRest = state.isOvertime && state.hasAttendance && !state.hasCheckout && state.now.getHours() >= 17 && state.now.getHours() < 19;
+state.overtimeStarted = state.isOvertime && state.now.getHours() >= 19;
 const dateKeyOf = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -541,18 +543,18 @@ function maybeNotifyOvertimeWindow() {
     state.notices.otInvite = true;
     Swal.fire({
       icon: "question",
-      title: "Đã hết ca làm việc",
-      html: "Bạn có muốn đăng ký tăng ca hôm nay không?",
+      title: "Hết ca làm việc",
+      html: "Hôm nay đã hết giờ làm việc.<br>Bạn có muốn đăng ký tăng ca ngoài giờ hành chính không?",
       showCancelButton: true,
-      confirmButtonText: "Đăng ký OT",
-      cancelButtonText: "Không",
+      confirmButtonText: "Có, đăng ký OT",
+      cancelButtonText: "Không, check-out",
       reverseButtons: true,
     }).then(async (result) => {
       if (result.isConfirmed) {
         await submitAutomaticOvertimeRequest("after_shift");
-        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Trạng thái: chờ HR/Admin duyệt." });
+        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Trạng thái: chờ HR duyệt, sau đó Admin duyệt." });
       } else if (result.dismiss === Swal.DismissReason.cancel) {
-        await Swal.fire({ icon: "info", title: "Không đăng ký OT", text: "Bạn có thể check-out khi sẵn sàng." });
+        await Swal.fire({ icon: "info", title: "Không đăng ký OT", text: "Vui lòng check-out để kết thúc ngày làm việc." });
       }
       renderState();
     });
@@ -562,18 +564,18 @@ function maybeNotifyOvertimeWindow() {
     state.isOvertime &&
     state.isPreOvertimeRest &&
     isWorkingSession &&
-    (hour > 18 || (hour === 18 && minute >= 55)) &&
+    (hour >= 19) &&
     !state.notices.otStart
   ) {
     state.notices.otStart = true;
     state.overtimeStarted = true;
     state.isPreOvertimeRest = false;
-    Swal.fire({ icon: "info", title: "Đã đến giờ tăng ca", text: "Vui lòng check-in tăng ca khi đã được duyệt." });
+    Swal.fire({ icon: "info", title: "Ca tăng ca đã bắt đầu", text: "Vui lòng check-in để bắt đầu OT." });
   }
 
   if (state.isOvertime && isWorkingSession && hour >= 22 && !state.notices.otEnd) {
     state.notices.otEnd = true;
-    Swal.fire({ icon: "warning", title: "Đã hết thời gian tăng ca", text: "Vui lòng check-out để kết thúc giờ làm." });
+    Swal.fire({ icon: "warning", title: "Ca tăng ca hôm nay đã kết thúc", text: "Vui lòng check-out để hoàn tất chấm công tăng ca." });
   }
 }
 /* ===================== FIX QUAN TRỌNG ===================== */ 
@@ -681,7 +683,10 @@ function renderState() {
     btn.className = 'btn btn-warning';
     let statusPrefix = '🟢 Đang làm việc';
     if (state.isPreOvertimeRest) {
-      statusPrefix = '🟠 Nghỉ ngơi trước tăng ca';
+      statusPrefix = '🟡 Nghỉ ngơi trước tăng ca';
+      btn.textContent = '⏳ Chờ vào ca OT lúc 19:00';
+      btn.disabled = true;
+      btn.className = 'btn btn-disabled';
     } else if (state.overtimeStarted || state.isOvertime) {
       statusPrefix = '🟣 Tăng ca';
     }
@@ -708,8 +713,10 @@ function renderState() {
       const createdAt = req.createdAt
         ? fmtDateTime(req.createdAt)
         : "--";
-      const statusLabel = req.status === "pending_hr" || req.status === "pending_admin"
-        ? "⏳ Yêu cầu OT đang chờ duyệt"
+      const statusLabel = req.status === "pending_hr"
+        ? "⏳ Yêu cầu OT đang chờ HR duyệt"
+        : req.status === "pending_admin"
+          ? "⏳ Yêu cầu OT đang chờ Admin duyệt"
         : req.status === "approved"
           ? "✅ Yêu cầu OT đã duyệt"
           : "❌ Yêu cầu OT đã bị từ chối";

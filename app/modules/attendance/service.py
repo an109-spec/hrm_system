@@ -9,7 +9,8 @@ class AttendanceService:
     REGULAR_START = time(8, 0, 0)
     LATE_THRESHOLD = time(8, 10, 0)
     REGULAR_END = time(17, 0, 0)
-
+    OT_START = time(19, 0, 0)
+    OT_END = time(22, 0, 0)
     @staticmethod
     def calculate_regular_hours(check_in: datetime, check_out: datetime) -> Decimal:
         end_of_shift = datetime.combine(check_in.date(), AttendanceService.REGULAR_END)
