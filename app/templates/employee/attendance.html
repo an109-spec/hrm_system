@@ -579,13 +579,7 @@ function maybeNotifyOvertimeWindow() {
 /* ===================== FIX QUAN TRỌNG ===================== */ 
 /* KHỚP BACKEND */
 const calcEffectiveStart = (checkInDate) => {
-  const d = new Date(checkInDate);
-
-  const start = new Date(d);
-
-  start.setHours(8,0,0,0);
-
-  return start;
+  return new Date(checkInDate);
 };
 
 /* ===================== WORKING TIME (preview realtime) ===================== */
