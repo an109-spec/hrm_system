@@ -828,6 +828,12 @@ def check_in_out():
             # WORK HOURS CALC
             # =========================
             is_holiday_shift = attendance.attendance_type == "holiday"
+            approved_ot_request = OvertimeRequest.query.filter(
+                OvertimeRequest.employee_id == employee.id,
+                OvertimeRequest.overtime_date == today,
+                OvertimeRequest.is_deleted.is_(False),
+                OvertimeRequest.status == "approved",
+            ).first()
             if is_holiday_shift:
                 regular_hours = Decimal("0.00")
                 overtime_hours = _compute_working_hours(effective_start, attendance.check_out)
@@ -836,7 +842,13 @@ def check_in_out():
                     effective_start,
                     min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
                 )
-                overtime_hours = Decimal("0.00")
+                if approved_ot_request and attendance.check_out > datetime.combine(today, AttendanceService.REGULAR_END):
+                    overtime_hours = _compute_working_hours(
+                        datetime.combine(today, AttendanceService.REGULAR_END),
+                        attendance.check_out,
+                    )
+                else:
+                    overtime_hours = Decimal("0.00")
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
             worked_hours = regular_hours + overtime_hours
