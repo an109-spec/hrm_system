@@ -767,15 +767,19 @@ def check_in_out():
                         ),
                     })
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
+                prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
+                prompt_message = (
+                    f"Hôm nay là ngày nghỉ lễ: {off_day_name}. "
+                    "Bạn có muốn đăng ký đi làm ngày lễ không?"
+                    if today_holiday
+                    else "Hôm nay là cuối tuần. Bạn có muốn đăng ký đi làm cuối tuần không?"
+                )
                 return jsonify({
                     "toast": False,
                     "type": "warning",
-                    "action": "holiday_ot_prompt",
+                    "action": prompt_action,
                     "holiday_name": off_day_name,
-                    "message": (
-                        f"Hôm nay là ngày nghỉ: {off_day_name}. "
-                        "Bạn có muốn đăng ký làm việc ngày nghỉ (OT ngày lễ) không?"
-                    ),
+                    "message": prompt_message,
                 })
             attendance_type = "normal"
             attendance = Attendance(
@@ -838,6 +842,16 @@ def check_in_out():
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status == "approved",
             ).first()
+            if (
+                approved_ot_request
+                and datetime.combine(today, AttendanceService.REGULAR_END) <= current_time < datetime.combine(today, AttendanceService.OT_START)
+            ):
+                return jsonify({
+                    "toast": False,
+                    "type": "info",
+                    "action": "break_before_ot",
+                    "message": "Đang trong khung nghỉ 17:00 → 19:00. Vui lòng check-in OT từ 19:00.",
+                }), 400
             regular_hours = _compute_working_hours(
                 effective_start,
                 min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))

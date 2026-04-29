@@ -150,10 +150,10 @@ class EmployeeESSService:
 
         start_raw = (payload.get("start_ot_time") or "").strip()
         end_raw = (payload.get("end_ot_time") or "").strip()
-        if request_type == "holiday" and not start_raw and not end_raw:
-            start_ot_time = None
-            end_ot_time = None
-            hours = Decimal("0.00")
+        if request_type in {"holiday", "weekend"} and not start_raw and not end_raw:
+            start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time()) if request_type == "weekend" else None
+            end_ot_time = datetime.combine(ot_date, datetime.strptime("22:00", "%H:%M").time()) if request_type == "weekend" else None
+            hours = Decimal("3.00") if request_type == "weekend" else Decimal("0.00")
         elif start_raw and end_raw:
             start_time = datetime.strptime(start_raw, "%H:%M").time()
             end_time = datetime.strptime(end_raw, "%H:%M").time()
@@ -169,18 +169,32 @@ class EmployeeESSService:
                 raise ValueError("Vui lòng cung cấp khung giờ OT hợp lệ")
             start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
             end_ot_time = start_ot_time + timedelta(hours=float(hours))
-        if request_type != "holiday" and  hours <= 0:
+        if request_type not in {"holiday", "weekend"} and  hours <= 0:
             raise ValueError("Số giờ OT phải lớn hơn 0")
         reason = (payload.get("reason") or "").strip()
         if not reason:
             if request_type == "holiday":
                 reason = "Đăng ký làm việc ngày nghỉ lễ"
+            elif request_type == "weekend":
+                reason = "Đăng ký làm việc cuối tuần"
             elif request_type == "after_shift":
                 reason = "Đăng ký tăng ca sau giờ hành chính"
             else:
                 raise ValueError("Lý do OT là bắt buộc")
         is_holiday_ot = request_type == "holiday"
         holiday_multiplier = Decimal("3.00") if is_holiday_ot else Decimal("1.00")
+        if request_type == "after_shift":
+            ot_start = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
+            ot_end = datetime.combine(ot_date, datetime.strptime("22:00", "%H:%M").time())
+            if start_ot_time and end_ot_time:
+                start_ot_time = max(start_ot_time, ot_start)
+                end_ot_time = min(end_ot_time, ot_end)
+                if end_ot_time <= start_ot_time:
+                    raise ValueError("Tăng ca chỉ được đăng ký trong khung 19:00 → 22:00")
+                hours = Decimal(str((end_ot_time - start_ot_time).total_seconds() / 3600)).quantize(Decimal("0.01"))
+            if hours > Decimal("3.00"):
+                raise ValueError("Số giờ OT tối đa là 3 giờ")
+
         request_ot = OvertimeRequest(
             employee_id=employee.id,
             overtime_date=ot_date,
