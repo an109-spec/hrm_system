@@ -39,18 +39,14 @@
             if (isProcessingDecode) return;
             isProcessingDecode = true;
             try {
-              if (scanEngine) {
-                try { await scanEngine.stop(); } catch (_) {}
-              }
               if (panelId) {
                 const panel = document.getElementById(panelId);
                 if (panel) panel.classList.add('success-flash');
               }
+              await close();
               await onDecoded(decodedText);
             } catch (err) {
               if (onError) onError(err);
-            } finally {
-              await close();
             }
           }
         );

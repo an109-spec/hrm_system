@@ -979,7 +979,6 @@ const scanner = HRMQRScanner.createQRScanner({
 
   onDecoded: async (decodedText) => {
     await submitAttendanceFromQR(decodedText);
-    await scanner.close();
   },
 
   onError: (err) => {
