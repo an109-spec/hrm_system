@@ -236,7 +236,12 @@ def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, De
     overtime_hours = Decimal(str(record.overtime_hours or 0))
     worked_hours = Decimal(str(record.working_hours or 0))
 
-    if record.check_in and record.check_out and regular_hours <= 0:
+    if (
+        record.check_in
+        and record.check_out
+        and regular_hours <= 0
+        and (record.attendance_type or "").lower() != "holiday"
+    ):
         today = record.date
         policy_start = datetime.combine(today, WORKDAY_START)
         effective_start = max(record.check_in.replace(tzinfo=None), policy_start)
