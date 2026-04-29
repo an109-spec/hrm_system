@@ -847,10 +847,16 @@ def check_in_out():
                     effective_start,
                     min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
                 )
-                ot_start_time = datetime.combine(today, AttendanceService.OT_START)
-                if approved_ot_request and attendance.check_out > ot_start_time:
+                ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
+                approved_ot_start = (
+                    approved_ot_request.start_ot_time.replace(tzinfo=None)
+                    if approved_ot_request and approved_ot_request.start_ot_time
+                    else ot_policy_start
+                )
+                ot_effective_start = max(ot_policy_start, approved_ot_start)
+                if approved_ot_request and attendance.check_out > ot_effective_start:
                     overtime_hours = _compute_working_hours(
-                        ot_start_time,
+                        ot_effective_start,
                         attendance.check_out,
                     )
                 else:
