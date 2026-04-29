@@ -20,4 +20,10 @@ def register_jobs(scheduler):
         trigger="cron",
         hour=2,
         minute=0
+   )
+    scheduler.add_job(
+        id="overtime_shift_notifications_job",
+        func=NotificationJob.push_overtime_shift_notifications,
+        trigger="cron",
+        minute="*"
     )

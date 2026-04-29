@@ -1641,6 +1641,8 @@ def attendance_overtime_final_review(overtime_id: int):
     note = (payload.get("note") or "").strip()
     if action not in {"approve", "reject"}:
         return jsonify({"error": "invalid action"}), 400
+    if action == "reject" and not note:
+        return jsonify({"error": "Admin bắt buộc nhập lý do từ chối"}), 400
     if row.status != "pending_admin":
         return jsonify({"error": "Yêu cầu OT này đã được xử lý trước đó"}), 409
     print("==== BEFORE APPROVE ====")
@@ -1669,22 +1671,22 @@ def attendance_overtime_final_review(overtime_id: int):
     employee = Employee.query.get(row.employee_id)
     if employee and employee.user_id:
         if action == "approve":
-            start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "--:--"
+            start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "19:00"
             content = (
-                "Yêu cầu tăng ca của bạn đã được Admin phê duyệt.\n"
-                f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
-                f"Ca OT bắt đầu lúc: {start_text}.\nVui lòng quay lại hệ thống để check-in tăng ca."
+                "Yêu cầu tăng ca của bạn đã được phê duyệt.\n"
+                f"Thời gian phản hồi: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
+                f"Ca OT dự kiến bắt đầu lúc: {start_text}.\nVui lòng chờ thông báo check-in."
             )
         else:
             content = (
-                "Yêu cầu tăng ca của bạn đã bị từ chối.\n"
-                f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
-                f"Lý do: {note or 'Không có'}"
+                "Yêu cầu tăng ca của bạn đã bị từ chối bởi Admin.\n"
+                f"Thời gian phản hồi: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
+                f"Lý do: {note}"
             )
         db.session.add(
             Notification(
                 user_id=employee.user_id,
-                title="Kết quả duyệt tăng ca",
+                title="🔔 Yêu cầu đã được duyệt" if action == "approve" else "🔔 Yêu cầu bị từ chối",
                 content=content,
                 type="overtime",
                 link="/employee/notifications",

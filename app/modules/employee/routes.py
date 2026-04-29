@@ -825,16 +825,6 @@ def check_in_out():
                     "type": "error",
                     "message": "Thời gian check-out không hợp lệ"
                 }), 400
-            attendance.check_out = current_time
-
-            # =========================
-            # EFFECTIVE START (late rule)
-            # =========================
-            policy_start = datetime.combine(today, WORKDAY_START)
-            effective_start = max(check_in_time, policy_start)
-            # =========================
-            # WORK HOURS CALC
-            # =========================
             is_holiday_shift = attendance.attendance_type == "holiday"
             approved_ot_request = OvertimeRequest.query.filter(
                 OvertimeRequest.employee_id == employee.id,
@@ -852,6 +842,13 @@ def check_in_out():
                     "action": "break_before_ot",
                     "message": "Đang trong khung nghỉ 17:00 → 19:00. Vui lòng check-in OT từ 19:00.",
                 }), 400
+            attendance.check_out = current_time
+
+            # =========================
+            # EFFECTIVE START (late rule)
+            # =========================
+            policy_start = datetime.combine(today, WORKDAY_START)
+            effective_start = max(check_in_time, policy_start)
             regular_hours = _compute_working_hours(
                 effective_start,
                 min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
@@ -900,7 +897,14 @@ def check_in_out():
                 msg += f" • OT ngày lễ: {overtime_hours}h (hệ số x3)"
             else:
                 msg += f" • Ca chính: {regular_hours}h"
-
+            if approved_ot_request and current_time >= datetime.combine(today, AttendanceService.OT_END):
+                db.session.add(Notification(
+                    user_id=employee.user_id,
+                    title="🔔 Kết thúc ca tăng ca",
+                    content="Ca tăng ca đã kết thúc lúc 22:00. Vui lòng check-out để hoàn tất chấm công.",
+                    type="overtime",
+                    link="/employee/attendance",
+                ))
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
             worked_hours, regular_hours, overtime_hours = _attendance_metrics(attendance)

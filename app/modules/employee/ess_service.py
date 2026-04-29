@@ -16,6 +16,12 @@ from app.utils.time import parse_simulated_time
 class EmployeeESSService:
     RELATIONSHIPS = {"con", "vo_chong", "bo", "me", "khac"}
     COMPLAINT_ISSUES = {"salary_data_error", "content_question", "system_error", "other"}
+    @staticmethod
+    def _users_by_role(role_name: str) -> list[User]:
+        role = Role.query.filter(db.func.lower(Role.name) == role_name.lower()).first()
+        if not role:
+            return []
+        return User.query.filter_by(role_id=role.id, is_active=True).all()
 
     @staticmethod
     def _employee_by_user(user_id: int | None) -> Employee:
@@ -211,29 +217,27 @@ class EmployeeESSService:
             updated_at=simulated_now,
         )
         db.session.add(request_ot)
-        role_ids = [r.id for r in Role.query.filter(db.func.lower(Role.name).in_(["hr", "admin"])).all()]
-        hr_admin_users = User.query.filter(User.role_id.in_(role_ids), User.is_active.is_(True)).all() if role_ids else []
-        for receiver in hr_admin_users:
-            ot_window_label = (
-                f"{start_ot_time.strftime('%H:%M')} → {end_ot_time.strftime('%H:%M')}"
-                if start_ot_time and end_ot_time
-                else "chưa xác định"
-            )
-            db.session.add(
-                Notification(
-                    user_id=receiver.id,
-                    title="Yêu cầu tăng ca mới",
-                    content=(
-                        f"{employee.full_name} (EMP{employee.id:04d}) gửi OT ngày {ot_date.strftime('%d/%m/%Y')} "
-                        f"lúc {simulated_now.strftime('%d/%m/%Y - %H:%M')} "
-                        f"({hours} giờ, {ot_window_label})."
-                    ),
-                    type="overtime",
-                    link="/hr/attendance",
-                    created_at=simulated_now,
-                    updated_at=simulated_now,
-                )
-            )
+        hr_users = EmployeeESSService._users_by_role("hr")
+        ot_window_label = (
+            f"{start_ot_time.strftime('%H:%M')} → {end_ot_time.strftime('%H:%M')}"
+            if start_ot_time and end_ot_time
+            else "chưa xác định"
+        )
+        for receiver in hr_users:
+            db.session.add(Notification(
+                user_id=receiver.id,
+                title="🔔 Yêu cầu cần duyệt",
+                content=(
+                    f"Nhân viên {employee.full_name} (EMP{employee.id:04d}) - phòng ban "
+                    f"{employee.department.name if employee.department else '--'} đã gửi yêu cầu {request_type} "
+                    f"ngày {ot_date.strftime('%d/%m/%Y')} lúc {simulated_now.strftime('%H:%M')} ({hours} giờ, {ot_window_label}). "
+                    "Vui lòng kiểm tra và xử lý."
+                ),
+                type="overtime",
+                link="/hr/attendance",
+                created_at=simulated_now,
+                updated_at=simulated_now,
+            ))
         db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h ({request_type})", performed_by=actor_user_id))
         db.session.commit()
         return {

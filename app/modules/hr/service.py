@@ -1743,6 +1743,8 @@ class HRService:
             record.status = "pending_admin"
             record.approved_hours = record.requested_hours or record.overtime_hours
         else:
+            if not (data.note or "").strip():
+                raise ValueError("HR bắt buộc nhập lý do từ chối")
             record.status = "rejected"
             record.rejection_reason = data.note or "HR từ chối"
         hr_employee = Employee.query.filter_by(user_id=actor_user_id, is_deleted=False).first() if actor_user_id else None
@@ -1762,31 +1764,30 @@ class HRService:
             )
         )
         employee = Employee.query.get(record.employee_id)
+        if action == "approve":
+            admin_role = Role.query.filter(db.func.lower(Role.name) == "admin").first()
+            if admin_role:
+                for admin_user in User.query.filter_by(role_id=admin_role.id, is_active=True).all():
+                    db.session.add(Notification(
+                        user_id=admin_user.id,
+                        title="🔔 Yêu cầu chờ duyệt cuối",
+                        content=f"Yêu cầu OT của nhân viên {employee.full_name if employee else '--'} đã được HR kiểm tra và đang chờ Admin duyệt.",
+                        type="overtime",
+                        link="/admin/attendance",
+                    ))
         if employee and employee.user_id:
-            if action == "approve":
-                ot_start = record.start_ot_time.strftime("%H:%M") if record.start_ot_time else "--:--"
-                ot_end = record.end_ot_time.strftime("%H:%M") if record.end_ot_time else "--:--"
-                content = (
-                    "HR đã kiểm tra yêu cầu OT lúc "
-                    f"{datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}. "
-                    f"Khung giờ dự kiến: {ot_start} → {ot_end}. "
-                    "Yêu cầu đã chuyển Admin duyệt cuối."
-                )
-            else:
-                content = (
-                    "HR từ chối yêu cầu OT lúc "
-                    f"{datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}. "
-                    f"Lý do: {record.rejection_reason or 'Không có'}"
-                )
-            db.session.add(
-                Notification(
-                    user_id=employee.user_id,
-                    title="Kết quả xử lý yêu cầu tăng ca",
-                    content=content,
-                    type="overtime",
-                    link="/employee/notifications",
-                )
+            content = (
+                "Yêu cầu tăng ca của bạn đã được HR kiểm tra và chuyển Admin duyệt cuối."
+                if action == "approve"
+                else f"Yêu cầu tăng ca của bạn đã bị từ chối bởi HR. Lý do: {record.rejection_reason or 'Không có'}"
             )
+            db.session.add(Notification(
+                user_id=employee.user_id,
+                title="🔔 Đã chuyển Admin duyệt" if action == "approve" else "🔔 Yêu cầu bị từ chối",
+                content=content,
+                type="overtime",
+                link="/employee/notifications",
+            ))
         db.session.commit()
         return {"attendance_id": record.id, "action": action, "status": record.status}
 
