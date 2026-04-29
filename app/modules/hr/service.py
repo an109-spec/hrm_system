@@ -1701,7 +1701,7 @@ class HRService:
             OvertimeRequest.overtime_date <= end,
             Employee.is_deleted.is_(False),
             OvertimeRequest.is_deleted.is_(False),
-            OvertimeRequest.status.in_(["pending_hr", "pending_admin", "approved", "rejected"]),
+            OvertimeRequest.status.in_(["pending_manager", "pending_hr", "pending_admin", "approved", "rejected"]),
         ).order_by(OvertimeRequest.overtime_date.desc()).all()
 
         rows = []

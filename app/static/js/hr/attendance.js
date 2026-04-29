@@ -137,6 +137,7 @@
     const rows = await api(`/hr/api/attendance/overtime?${p}`);
     const isPendingHr = (status) => status === "pending_hr";
     const hrStatusLabel = (status) => {
+      if (status === "pending_manager") return "Chờ Quản lý duyệt";
       if (status === "pending_hr") return "Chờ HR duyệt";
       if (status === "pending_admin") return "HR đã duyệt (chờ Admin)";
       if (status === "approved") return "Đã duyệt";
