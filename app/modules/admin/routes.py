@@ -8,7 +8,7 @@ from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import jsonify, render_template, request, session, redirect, url_for, Response, flash
-from sqlalchemy import cast, func, or_, String
+from sqlalchemy import case, cast, func, or_, String
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from app.extensions.db import db
@@ -509,12 +509,12 @@ def _attendance_stats(month: int, year: int, department_id: int | None):
 
     hotspot = db.session.query(
         Department.id,
-        func.sum(func.case((AttendanceStatus.status_name == "LATE", 1), else_=0)).label("late_total"),
+        func.sum(case((AttendanceStatus.status_name == "LATE", 1), else_=0)).label("late_total"),
         func.count(Attendance.id).label("count_total"),
     ).select_from(Attendance).join(Employee, Attendance.employee_id == Employee.id).join(Department, Employee.department_id == Department.id).join(AttendanceStatus, Attendance.status_id == AttendanceStatus.id).filter(
         func.extract("month", Attendance.date) == month,
         func.extract("year", Attendance.date) == year,
-    ).group_by(Department.id).order_by(func.sum(func.case((AttendanceStatus.status_name == "LATE", 1), else_=0)).desc()).first()
+    ).group_by(Department.id).order_by(func.sum(case((AttendanceStatus.status_name == "LATE", 1), else_=0)).desc()).first()
 
     hotspot_obj = None
     if hotspot and hotspot.count_total:
