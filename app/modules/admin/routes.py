@@ -1633,7 +1633,7 @@ def attendance_pending_overtime():
 @admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/final-review")
 def attendance_overtime_final_review(overtime_id: int):
     actor = _current_user()
-    if _role_name(actor) != "Admin":
+    if _role_name(actor).lower() != "admin":
         return jsonify({"error": "only admin can final approve overtime"}), 403
     row = OvertimeRequest.query.get_or_404(overtime_id)
     payload = request.get_json(silent=True) or {}
