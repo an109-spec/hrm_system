@@ -735,7 +735,9 @@ def check_in_out():
         # =========================
         if not attendance:
             today_holiday = _get_holiday_for_date(today)
-            if today_holiday:
+            is_weekend = today.weekday() >= 5
+            is_non_working_day = bool(today_holiday) or is_weekend
+            if is_non_working_day:
                 approved_holiday_ot = OvertimeRequest.query.filter(
                     OvertimeRequest.employee_id == employee.id,
                     OvertimeRequest.overtime_date == today,
@@ -757,16 +759,17 @@ def check_in_out():
                         "action": "check_in",
                         "message": (
                             f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
-                            "Bạn đã có yêu cầu OT ngày lễ được duyệt."
+                            "Bạn đã có yêu cầu OT ngày nghỉ được duyệt."
                         ),
                     })
+                off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
                 return jsonify({
                     "toast": False,
                     "type": "warning",
                     "action": "holiday_ot_prompt",
-                    "holiday_name": today_holiday.name,
+                    "holiday_name": off_day_name,
                     "message": (
-                        f"Hôm nay là ngày nghỉ lễ: {today_holiday.name}. "
+                        f"Hôm nay là ngày nghỉ: {off_day_name}. "
                         "Bạn có muốn đăng ký làm việc ngày nghỉ (OT ngày lễ) không?"
                     ),
                 })
