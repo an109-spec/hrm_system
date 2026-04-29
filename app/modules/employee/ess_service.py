@@ -149,7 +149,11 @@ class EmployeeESSService:
 
         start_raw = (payload.get("start_ot_time") or "").strip()
         end_raw = (payload.get("end_ot_time") or "").strip()
-        if start_raw and end_raw:
+        if request_type == "holiday" and not start_raw and not end_raw:
+            start_ot_time = None
+            end_ot_time = None
+            hours = Decimal("0.00")
+        elif start_raw and end_raw:
             start_time = datetime.strptime(start_raw, "%H:%M").time()
             end_time = datetime.strptime(end_raw, "%H:%M").time()
             start_ot_time = datetime.combine(ot_date, start_time)
@@ -164,7 +168,7 @@ class EmployeeESSService:
                 raise ValueError("Vui lòng cung cấp khung giờ OT hợp lệ")
             start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
             end_ot_time = start_ot_time + timedelta(hours=float(hours))
-        if hours <= 0:
+        if request_type != "holiday" and  hours <= 0:
             raise ValueError("Số giờ OT phải lớn hơn 0")
         reason = (payload.get("reason") or "").strip()
         if not reason:
@@ -193,6 +197,11 @@ class EmployeeESSService:
         role_ids = [r.id for r in Role.query.filter(db.func.lower(Role.name).in_(["hr", "admin"])).all()]
         hr_admin_users = User.query.filter(User.role_id.in_(role_ids), User.is_active.is_(True)).all() if role_ids else []
         for receiver in hr_admin_users:
+            ot_window_label = (
+                f"{start_ot_time.strftime('%H:%M')} → {end_ot_time.strftime('%H:%M')}"
+                if start_ot_time and end_ot_time
+                else "chưa xác định"
+            )
             db.session.add(
                 Notification(
                     user_id=receiver.id,
@@ -200,7 +209,7 @@ class EmployeeESSService:
                     content=(
                         f"{employee.full_name} (EMP{employee.id:04d}) gửi OT ngày {ot_date.strftime('%d/%m/%Y')} "
                         f"lúc {datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y - %H:%M')} "
-                        f"({hours} giờ, {start_ot_time.strftime('%H:%M')} → {end_ot_time.strftime('%H:%M')})."
+                        f"({hours} giờ, {ot_window_label})."
                     ),
                     type="overtime",
                     link="/hr/attendance",

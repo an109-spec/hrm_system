@@ -824,17 +824,21 @@ def check_in_out():
             # =========================
             # WORK HOURS CALC
             # =========================
-            regular_hours = _compute_working_hours(
-                effective_start,
-                min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
-            )
-            overtime_hours = Decimal("0.00")
+            is_holiday_shift = attendance.attendance_type == "holiday"
+            if is_holiday_shift:
+                regular_hours = Decimal("0.00")
+                overtime_hours = _compute_working_hours(effective_start, attendance.check_out)
+            else:
+                regular_hours = _compute_working_hours(
+                    effective_start,
+                    min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
+                )
+                overtime_hours = Decimal("0.00")
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
             worked_hours = regular_hours + overtime_hours
-            holiday_multiplier = Decimal("1.00")
             attendance.working_hours = worked_hours
-            if holiday_multiplier > 1:
+            if is_holiday_shift:
                 attendance.attendance_type = "holiday"
             elif overtime_hours > 0:
                 attendance.attendance_type = "overtime"
@@ -854,7 +858,10 @@ def check_in_out():
                 )
 
             msg = f"Check-out lúc {current_time.strftime('%H:%M:%S')}"
-            msg += f" • Ca chính: {regular_hours}h"
+            if is_holiday_shift:
+                msg += f" • OT ngày lễ: {overtime_hours}h (hệ số x3)"
+            else:
+                msg += f" • Ca chính: {regular_hours}h"
 
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
@@ -876,7 +883,7 @@ def check_in_out():
                 "worked_hours": str(worked_hours),
                 "regular_hours": str(regular_hours),
                 "overtime_hours": str(overtime_hours),
-                "holiday_multiplier": str(holiday_multiplier),
+                "holiday_multiplier": "3.00" if is_holiday_shift else "1.00",
                 "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
                 "check_out": attendance.check_out.isoformat() if attendance.check_out else None,
                 "status_key": status_key,

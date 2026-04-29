@@ -229,6 +229,7 @@
   data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
   data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
   data-today-ot-end="{{ today_ot_request.end_ot_time.isoformat() if today_ot_request and today_ot_request.end_ot_time else '' }}"
+  data-today-ot-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
   data-can-reset-ot-request="{{ 1 if can_reset_ot_request else 0 }}"
   data-server-now="{{ now.isoformat() }}"
 >
@@ -471,6 +472,7 @@ const state = {
   pendingCheckoutWithoutOT: false,
   todayOtRequest: {
     status: root.dataset.todayOtStatus || "",
+    requestType: root.dataset.todayOtType || "",
     createdAt: root.dataset.todayOtCreatedAt ? new Date(root.dataset.todayOtCreatedAt) : null,
     requestedHours: Number(root.dataset.todayOtHours || 0),
     startAt: root.dataset.todayOtStart ? new Date(root.dataset.todayOtStart) : null,
@@ -689,12 +691,14 @@ function renderState() {
       const windowLabel = req.startAt && req.endAt
         ? `${fmtHm(req.startAt)} → ${fmtHm(req.endAt)}`
         : "--";
+      const hasRealHours = Number.isFinite(Number(req.requestedHours)) && Number(req.requestedHours) > 0;
       otRequestStatusBox.style.display = "";
       otRequestStatusBox.innerHTML = `
         <div><strong>${statusLabel}</strong></div>
         <div>Ngày gửi: ${createdAt}</div>
+        <div>Loại OT: ${req.requestType === "holiday" ? "OT ngày nghỉ lễ/cuối tuần" : "OT ngoài giờ hành chính"}</div>
         <div>Khung giờ OT dự kiến: ${windowLabel}</div>
-        <div>Số giờ dự kiến: ${Number(req.requestedHours || 0).toFixed(2)} giờ</div>
+        ${hasRealHours ? `<div>Số giờ OT: ${Number(req.requestedHours).toFixed(2)} giờ</div>` : ""}
         ${root.dataset.canResetOtRequest === "1" ? `<div style="margin-top:8px;"><button class="btn btn-danger btn-sm" type="button" onclick="resetOtRequestForTest()">Reset OT Request</button></div>` : ""}
       `;
     }
@@ -899,11 +903,13 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
   const payload = {
     request_type: requestType,
     overtime_date: dateKeyOf(state.now),
-    start_ot_time: options.start || "19:00",
-    end_ot_time: options.end || "22:00",
     reason: options.reason || (requestType === "holiday" ? "Đăng ký làm việc ngày nghỉ lễ" : "Đăng ký tăng ca sau giờ hành chính"),
     note: requestType === "holiday" ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in." : "Yêu cầu OT sau giờ làm từ popup 17:00."
   };
+  if (requestType !== "holiday") {
+    payload.start_ot_time = options.start || "19:00";
+    payload.end_ot_time = options.end || "22:00";
+  }
   const res = await fetch("/employee/attendance/overtime-request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -914,6 +920,7 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     throw new Error(data.error || "Không thể gửi yêu cầu OT");
   }
   state.todayOtRequest.status = data.request?.status || "pending_hr";
+  state.todayOtRequest.requestType = requestType;
   state.todayOtRequest.createdAt = data.request?.created_at ? new Date(data.request.created_at) : new Date();
   state.todayOtRequest.requestedHours = Number(data.request?.requested_hours || data.request?.overtime_hours || 0);
   state.todayOtRequest.startAt = data.request?.start_ot_time ? new Date(data.request.start_ot_time) : null;
