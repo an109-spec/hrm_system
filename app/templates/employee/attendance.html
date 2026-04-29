@@ -675,35 +675,6 @@ function renderState() {
     identityText.style.display = 'none';
     lateWarning.style.display = 'none';
   }
-  if (otRequestStatusBox) {
-    const req = state.todayOtRequest;
-    if (!req.status) {
-      otRequestStatusBox.style.display = "none";
-    } else {
-      const createdAt = req.createdAt
-        ? fmtDateTime(req.createdAt)
-        : "--";
-      const statusLabel = req.status === "pending_hr" || req.status === "pending_admin"
-        ? "⏳ Yêu cầu OT đang chờ duyệt"
-        : req.status === "approved"
-          ? "✅ Yêu cầu OT đã duyệt"
-          : "❌ Yêu cầu OT đã bị từ chối";
-      const windowLabel = req.startAt && req.endAt
-        ? `${fmtHm(req.startAt)} → ${fmtHm(req.endAt)}`
-        : "--";
-      const hasRealHours = Number.isFinite(Number(req.requestedHours)) && Number(req.requestedHours) > 0;
-      otRequestStatusBox.style.display = "";
-      otRequestStatusBox.innerHTML = `
-        <div><strong>${statusLabel}</strong></div>
-        <div>Ngày gửi: ${createdAt}</div>
-        <div>Loại OT: ${req.requestType === "holiday" ? "OT ngày nghỉ lễ/cuối tuần" : "OT ngoài giờ hành chính"}</div>
-        <div>Khung giờ OT dự kiến: ${windowLabel}</div>
-        ${hasRealHours ? `<div>Số giờ OT: ${Number(req.requestedHours).toFixed(2)} giờ</div>` : ""}
-        ${root.dataset.canResetOtRequest === "1" ? `<div style="margin-top:8px;"><button class="btn btn-danger btn-sm" type="button" onclick="resetOtRequestForTest()">Reset OT Request</button></div>` : ""}
-      `;
-    }
-  }
-
   // =========================
   // CASE 3: ĐANG TRONG CA
   // =========================
@@ -733,6 +704,34 @@ function renderState() {
       lateWarning.textContent = 'Bạn đi muộn';
     } else {
       lateWarning.style.display = 'none';
+    }
+  }
+  if (otRequestStatusBox) {
+    const req = state.todayOtRequest;
+    if (!req.status) {
+      otRequestStatusBox.style.display = "none";
+    } else {
+      const createdAt = req.createdAt
+        ? fmtDateTime(req.createdAt)
+        : "--";
+      const statusLabel = req.status === "pending_hr" || req.status === "pending_admin"
+        ? "⏳ Yêu cầu OT đang chờ duyệt"
+        : req.status === "approved"
+          ? "✅ Yêu cầu OT đã duyệt"
+          : "❌ Yêu cầu OT đã bị từ chối";
+      const windowLabel = req.startAt && req.endAt
+        ? `${fmtHm(req.startAt)} → ${fmtHm(req.endAt)}`
+        : "--";
+      const hasRealHours = Number.isFinite(Number(req.requestedHours)) && Number(req.requestedHours) > 0;
+      otRequestStatusBox.style.display = "";
+      otRequestStatusBox.innerHTML = `
+        <div><strong>${statusLabel}</strong></div>
+        <div>Ngày gửi: ${createdAt}</div>
+        <div>Loại OT: ${req.requestType === "holiday" ? "OT ngày nghỉ lễ/cuối tuần" : "OT ngoài giờ hành chính"}</div>
+        <div>Khung giờ OT dự kiến: ${windowLabel}</div>
+        ${hasRealHours ? `<div>Số giờ OT: ${Number(req.requestedHours).toFixed(2)} giờ</div>` : ""}
+        ${root.dataset.canResetOtRequest === "1" ? `<div style="margin-top:8px;"><button class="btn btn-danger btn-sm" type="button" onclick="resetOtRequestForTest()">Reset OT Request</button></div>` : ""}
+      `;
     }
   }
 
