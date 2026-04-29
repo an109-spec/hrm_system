@@ -257,7 +257,8 @@ async function openRolePanel(userId) {
         text: 'Thay đổi role sẽ ảnh hưởng phạm vi truy cập của nhân viên.',
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: 'Xác nhận'
+        confirmButtonText: 'Xác nhận',
+        cancelButtonText: 'Hủy'
       });
       if (!ask.isConfirmed) return false;
       return { role_id: roleId };
@@ -1033,23 +1034,38 @@ async function openPendingOvertimePanel() {
 }
 
 async function finalReviewOt(id, action) {
-  const { value: note, isConfirmed } = await Swal.fire({
-    title: action === 'approve' ? 'Duyệt OT' : 'Từ chối OT',
+  const confirmText = action === 'approve' ? 'Xác nhận duyệt tăng ca?' : 'Xác nhận từ chối tăng ca?';
+  const confirm = await Swal.fire({
+    title: confirmText,
+    icon: 'question',
     input: 'text',
-    inputPlaceholder: action === 'approve' ? 'Ghi chú duyệt OT' : 'Lý do từ chối',
+    inputPlaceholder: action === 'approve' ? 'Ghi chú duyệt OT (tuỳ chọn)' : 'Lý do từ chối (tuỳ chọn)',
     showCancelButton: true,
     confirmButtonText: 'Xác nhận'
   });
-  if (!isConfirmed) return;
-  await api(`/api/admin/attendance/overtime/${id}/final-review`, { method: 'POST', body: JSON.stringify({ action, note: note || '' }) });
+  if (!confirm.isConfirmed) return;
+
+  await api(`/api/admin/attendance/overtime/${id}/final-review`, {
+    method: 'POST',
+    body: JSON.stringify({ action, note: confirm.value || '' })
+  });
+
   const statusEl = document.getElementById(`ot-status-${id}`);
   const actionsEl = document.getElementById(`ot-actions-${id}`);
-  if (statusEl) statusEl.textContent = `Trạng thái: ${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'}`;
-  if (actionsEl) actionsEl.innerHTML = `<span>${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'}</span>`;
-  await Swal.fire({ icon: 'success', title: action === 'approve' ? 'Đã duyệt OT' : 'Đã từ chối OT' });
-  if (action === 'reject') {
-    await Swal.fire({ icon: 'warning', title: 'OT không được tính lương' });
+  if (statusEl) {
+    statusEl.innerHTML = action === 'approve'
+      ? '✅ Trạng thái: Đã duyệt'
+      : '❌ Trạng thái: Đã từ chối';
   }
+  if (actionsEl) {
+    actionsEl.innerHTML = action === 'approve'
+      ? '<span class="badge badge-success">Đã duyệt</span>'
+      : '<span class="badge badge-danger">Đã từ chối</span>';
+  }
+  await Swal.fire({
+    icon: 'success',
+    title: action === 'approve' ? 'Đã duyệt yêu cầu tăng ca thành công' : 'Đã từ chối yêu cầu tăng ca thành công'
+  });
   await loadAttendanceSummary();
 }
 window.handleAttendanceAction = handleAttendanceAction;

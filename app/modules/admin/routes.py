@@ -1661,13 +1661,13 @@ def attendance_overtime_final_review(overtime_id: int):
         if action == "approve":
             start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "--:--"
             content = (
-                "Yêu cầu tăng ca đã được duyệt.\n"
+                "Yêu cầu tăng ca của bạn đã được Admin phê duyệt.\n"
                 f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
-                f"Vui lòng check-in lúc {start_text} để bắt đầu OT."
+                f"Ca OT bắt đầu lúc: {start_text}.\nVui lòng quay lại hệ thống để check-in tăng ca."
             )
         else:
             content = (
-                "Yêu cầu tăng ca đã bị từ chối.\n"
+                "Yêu cầu tăng ca của bạn đã bị từ chối.\n"
                 f"Thời gian: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
                 f"Lý do: {note or 'Không có'}"
             )
