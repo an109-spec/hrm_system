@@ -240,7 +240,6 @@ def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, De
         record.check_in
         and record.check_out
         and regular_hours <= 0
-        and (record.attendance_type or "").lower() != "holiday"
     ):
         today = record.date
         policy_start = datetime.combine(today, WORKDAY_START)
@@ -839,28 +838,26 @@ def check_in_out():
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status == "approved",
             ).first()
-            if is_holiday_shift:
-                regular_hours = Decimal("0.00")
-                overtime_hours = _compute_working_hours(effective_start, attendance.check_out)
+            regular_hours = _compute_working_hours(
+                effective_start,
+                min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
+            )
+            ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
+            ot_policy_end = datetime.combine(today, AttendanceService.OT_END)
+            approved_ot_start = (
+                approved_ot_request.start_ot_time.replace(tzinfo=None)
+                if approved_ot_request and approved_ot_request.start_ot_time
+                else ot_policy_start
+            )
+            ot_effective_start = max(ot_policy_start, approved_ot_start)
+            ot_effective_end = min(attendance.check_out, ot_policy_end)
+            if approved_ot_request and ot_effective_end > ot_effective_start:
+                overtime_hours = _compute_working_hours(
+                    ot_effective_start,
+                    ot_effective_end,
+                )
             else:
-                regular_hours = _compute_working_hours(
-                    effective_start,
-                    min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
-                )
-                ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
-                approved_ot_start = (
-                    approved_ot_request.start_ot_time.replace(tzinfo=None)
-                    if approved_ot_request and approved_ot_request.start_ot_time
-                    else ot_policy_start
-                )
-                ot_effective_start = max(ot_policy_start, approved_ot_start)
-                if approved_ot_request and attendance.check_out > ot_effective_start:
-                    overtime_hours = _compute_working_hours(
-                        ot_effective_start,
-                        attendance.check_out,
-                    )
-                else:
-                    overtime_hours = Decimal("0.00")
+                overtime_hours = Decimal("0.00")
             attendance.regular_hours = regular_hours
             attendance.overtime_hours = overtime_hours
             worked_hours = regular_hours + overtime_hours
