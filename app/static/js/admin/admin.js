@@ -1027,10 +1027,21 @@ async function openPendingOvertimePanel() {
       OT dự kiến: ${r.start_ot_time ? new Date(r.start_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'} → ${r.end_ot_time ? new Date(r.end_ot_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--'}<br>
       Số giờ OT: ${Number(r.hours || 0).toFixed(2)} giờ<br>
       Lý do: ${esc(r.reason || '')}
-      <div id="ot-status-${r.id}" style="margin-top:8px">Trạng thái: Chờ duyệt</div>
-      <div id="ot-actions-${r.id}" style="margin-top:8px"><button onclick="finalReviewOt(${r.id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${r.id}, 'reject')">Từ chối</button> <button onclick="resetOtRequest(${r.id})">Xóa</button></div>
+      <div id="ot-status-${r.id}" style="margin-top:8px">${renderOtStatus(r.status)}</div>
+      <div id="ot-actions-${r.id}" style="margin-top:8px">${renderOtActions(r.id, r.status)}</div>
     </div>`).join('')}</div>`;
   await Swal.fire({ title: 'Duyệt tăng ca cuối cùng', html, width: 800, showConfirmButton: false, showCancelButton: true });
+}
+function renderOtStatus(status) {
+  if (status === 'approved') return '✅ Trạng thái: Đã duyệt';
+  if (status === 'rejected') return '❌ Trạng thái: Đã từ chối';
+  return '⏳ Trạng thái: Chờ duyệt';
+}
+
+function renderOtActions(id, status) {
+  if (status === 'approved') return '<span class="badge badge-success">Đã duyệt</span>';
+  if (status === 'rejected') return '<span class="badge badge-danger">Đã từ chối</span>';
+  return `<button onclick="finalReviewOt(${id}, 'approve')">Duyệt</button> <button onclick="finalReviewOt(${id}, 'reject')">Từ chối</button> <button onclick="resetOtRequest(${id})">Xóa</button>`;
 }
 
 async function finalReviewOt(id, action) {
@@ -1053,14 +1064,10 @@ async function finalReviewOt(id, action) {
   const statusEl = document.getElementById(`ot-status-${id}`);
   const actionsEl = document.getElementById(`ot-actions-${id}`);
   if (statusEl) {
-    statusEl.innerHTML = action === 'approve'
-      ? '✅ Trạng thái: Đã duyệt'
-      : '❌ Trạng thái: Đã từ chối';
+    statusEl.innerHTML = renderOtStatus(action === 'approve' ? 'approved' : 'rejected');
   }
   if (actionsEl) {
-    actionsEl.innerHTML = action === 'approve'
-      ? '<span class="badge badge-success">Đã duyệt</span>'
-      : '<span class="badge badge-danger">Đã từ chối</span>';
+    actionsEl.innerHTML = renderOtActions(id, action === 'approve' ? 'approved' : 'rejected');
   }
   await Swal.fire({
     icon: 'success',

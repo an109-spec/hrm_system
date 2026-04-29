@@ -1648,7 +1648,8 @@ def attendance_overtime_final_review(overtime_id: int):
     admin_employee = Employee.query.filter_by(user_id=actor.id if actor else None, is_deleted=False).first()
     row.approved_by = admin_employee.id if admin_employee else None
     row.approved_at = datetime.utcnow()
-    row.approved_hours = row.requested_hours or row.overtime_hours if action == "approve" else Decimal("0.00")
+    row.approved_hours = (row.requested_hours or row.overtime_hours) if action == "approve" else Decimal("0.00")
+    row.rejection_reason = note if action == "reject" else None
     row.is_holiday_ot = bool(row.is_holiday_ot)
     row.holiday_multiplier = Decimal("3.00") if row.is_holiday_ot else Decimal("1.00")
     if action == "approve":
