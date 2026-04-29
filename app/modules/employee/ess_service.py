@@ -193,6 +193,8 @@ class EmployeeESSService:
             status="pending_hr",
             is_holiday_ot=is_holiday_ot,
             holiday_multiplier=holiday_multiplier,
+            created_at=simulated_now,
+            updated_at=simulated_now,
         )
         db.session.add(request_ot)
         role_ids = [r.id for r in Role.query.filter(db.func.lower(Role.name).in_(["hr", "admin"])).all()]
@@ -214,6 +216,8 @@ class EmployeeESSService:
                     ),
                     type="overtime",
                     link="/hr/attendance",
+                    created_at=simulated_now,
+                    updated_at=simulated_now,
                 )
             )
         db.session.add(HistoryLog(employee_id=employee.id, action="OVERTIME_SUBMITTED", entity_type="overtime_request", entity_id=None, description=f"Gửi yêu cầu OT {ot_date} - {hours}h ({request_type})", performed_by=actor_user_id))
