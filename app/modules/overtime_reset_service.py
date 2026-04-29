@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy import or_
+
 from app.models import Attendance, HistoryLog, Notification, OvertimeRequest, Employee
 from app.models.base import db
 
@@ -15,11 +17,21 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
     ).all()
     request_ids = [row.id for row in same_day_requests]
 
+    deleted_notifications = 0
     if user_id:
-        Notification.query.filter(
+        date_token = overtime_date.strftime("%d/%m/%Y")
+        notification_query = Notification.query.filter(
             Notification.user_id == user_id,
-            Notification.type == "overtime",
-        ).delete(synchronize_session=False)
+            Notification.is_deleted.is_(False),
+            or_(
+                Notification.type == "overtime",
+                Notification.content.ilike(f"%OT%"),
+                Notification.title.ilike(f"%OT%"),
+            ),
+            Notification.content.ilike(f"%{date_token}%"),
+        )
+        deleted_notifications = notification_query.count()
+        notification_query.delete(synchronize_session=False)
 
     attendance = Attendance.query.filter_by(
         employee_id=overtime_request.employee_id,
@@ -47,4 +59,9 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
         )
     )
     db.session.commit()
-    return {"success": True, "deleted_requests": len(request_ids), "overtime_date": overtime_date.isoformat()}
+    return {
+        "success": True,
+        "deleted_requests": len(request_ids),
+        "deleted_notifications": deleted_notifications,
+        "overtime_date": overtime_date.isoformat(),
+    }
