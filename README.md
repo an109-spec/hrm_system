@@ -29,6 +29,7 @@ HRM_TOTNGHIEP
 │  │  ├─ base.py
 │  │  ├─ complaint.py
 │  │  ├─ contract.py
+│  │  ├─ contract_proposal.py
 │  │  ├─ department.py
 │  │  ├─ dependent.py
 │  │  ├─ employee.py
@@ -40,6 +41,7 @@ HRM_TOTNGHIEP
 │  │  ├─ otp.py
 │  │  ├─ overtime_request.py
 │  │  ├─ position.py
+│  │  ├─ resignation.py
 │  │  ├─ role.py
 │  │  ├─ salary.py
 │  │  ├─ system.py
@@ -48,6 +50,7 @@ HRM_TOTNGHIEP
 │  ├─ modules
 │  │  ├─ admin
 │  │  │  ├─ routes.py
+│  │  │  ├─ service.py
 │  │  │  └─ __init__.py
 │  │  ├─ attendance
 │  │  │  ├─ dto.py
@@ -78,6 +81,7 @@ HRM_TOTNGHIEP
 │  │  ├─ employee
 │  │  │  ├─ dto.py
 │  │  │  ├─ ess_service.py
+│  │  │  ├─ payroll_service.py
 │  │  │  ├─ profile_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
@@ -119,6 +123,11 @@ HRM_TOTNGHIEP
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
+│  │  ├─ overtime_reset_service.py
+│  │  ├─ payroll_policy
+│  │  │  ├─ service.py
+│  │  │  └─ __init__.py
+│  │  ├─ resignation_service.py
 │  │  ├─ salary
 │  │  │  ├─ complaint_service.py
 │  │  │  ├─ dto.py
@@ -132,7 +141,8 @@ HRM_TOTNGHIEP
 │  ├─ static
 │  │  ├─ css
 │  │  │  ├─ admin
-│  │  │  │  └─ admin.css
+│  │  │  │  ├─ admin.css
+│  │  │  │  └─ profile.css
 │  │  │  ├─ auth.css
 │  │  │  ├─ base.css
 │  │  │  ├─ components
@@ -165,7 +175,9 @@ HRM_TOTNGHIEP
 │  │  │  └─ sidebar.css
 │  │  ├─ js
 │  │  │  ├─ admin
-│  │  │  │  └─ admin.js
+│  │  │  │  ├─ admin.js
+│  │  │  │  ├─ profile.js
+│  │  │  │  └─ salary_policy.js
 │  │  │  ├─ api
 │  │  │  │  ├─ attendance.api.js
 │  │  │  │  ├─ auth.api.js
@@ -199,6 +211,7 @@ HRM_TOTNGHIEP
 │  │  │  │  ├─ dashboard.js
 │  │  │  │  ├─ leave.js
 │  │  │  │  ├─ notification.js
+│  │  │  │  ├─ payslip.js
 │  │  │  │  ├─ profile.js
 │  │  │  │  ├─ qr-attendance.shared.js
 │  │  │  │  ├─ salary.js
@@ -215,7 +228,8 @@ HRM_TOTNGHIEP
 │  │  │  │  ├─ dashboard.js
 │  │  │  │  ├─ department_employees.js
 │  │  │  │  ├─ leave.js
-│  │  │  │  └─ payroll.js
+│  │  │  │  ├─ payroll.js
+│  │  │  │  └─ self_payroll.js
 │  │  │  ├─ socket
 │  │  │  │  └─ notification.socket.js
 │  │  │  ├─ store
@@ -245,6 +259,7 @@ HRM_TOTNGHIEP
 │  │  │  ├─ positions.html
 │  │  │  ├─ profile.html
 │  │  │  ├─ salary.html
+│  │  │  ├─ salary_config.html
 │  │  │  └─ staff_profile.html
 │  │  ├─ auth
 │  │  │  ├─ forgot_password.html
@@ -278,9 +293,11 @@ HRM_TOTNGHIEP
 │  │     ├─ attendance.html
 │  │     ├─ contract.html
 │  │     ├─ dashboard.html
+│  │     ├─ department_attendance.html
 │  │     ├─ department_employees.html
 │  │     ├─ leave.html
-│  │     └─ payroll.html
+│  │     ├─ payroll.html
+│  │     └─ self_payroll.html
 │  ├─ utils
 │  │  └─ time.py
 │  └─ __init__.py
@@ -295,8 +312,16 @@ HRM_TOTNGHIEP
 │  └─ versions
 │     ├─ 0e8242241019_add_address_fields_to_employee.py
 │     ├─ 4f2b6f9f8a1a_add_overtime_columns_to_attendance.py
+│     ├─ 779ee223a0da_merge_multiple_heads.py
+│     ├─ 7c3b2a1f9d10_add_holiday_ot_fields_to_overtime_request.py
 │     ├─ 9b2d7f7b4c10_add_leave_extended_fields_and_holidays.py
+│     ├─ a1b2c3d4e5f6_expand_leave_status_workflow.py
+│     ├─ aa11bb22cc33_extend_overtime_request_audit_fields.py
+│     ├─ b7c8d9e0f1a2_add_resignation_offboarding_flow.py
+│     ├─ bbccddeeff00_merge_overtime_and_leave_heads.py
 │     ├─ c3d9f7a1b2e4_add_attendance_required_flag_to_employee.py
+│     ├─ d4e5f6a7b8c9_fix_legacy_working_status_value.py
+│     ├─ e6f7a8b9c0d1_fix_postgres_leave_status_enum_values.py
 │     └─ f1a2b3c4d5e6_add_ess_overtime_and_complaint_columns.py
 ├─ README.md
 ├─ requirements.txt

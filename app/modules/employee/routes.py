@@ -38,6 +38,7 @@ WORKDAY_CHECKIN_START = time(7, 0, 0)
 WORKDAY_CHECKIN_NORMAL_END = time(8, 0, 0)
 WORKDAY_START = time(8, 0, 0)
 WORKDAY_END = time(17, 0, 0)
+HALF_DAY_LATE_CUTOFF = time(9, 0, 0)
 VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
     "01-01": "Tết Dương lịch",
     "04-30": "Ngày Giải phóng miền Nam",
@@ -228,6 +229,11 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     return max(total_hours, Decimal("0"))
 
     return current_time
+def _apply_day_multiplier(hours: Decimal, is_holiday_shift: bool) -> Decimal:
+    if not is_holiday_shift:
+        return hours
+    return (hours * Decimal("3")).quantize(Decimal("0.01"))
+
 def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, Decimal]:
     if not record:
         return Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
@@ -769,10 +775,9 @@ def check_in_out():
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
                 prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
                 prompt_message = (
-                    f"Hôm nay là ngày nghỉ lễ: {off_day_name}. "
-                    "Bạn có muốn đăng ký đi làm ngày lễ không?"
+                    "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm không?"
                     if today_holiday
-                    else "Hôm nay là cuối tuần. Bạn có muốn đăng ký đi làm cuối tuần không?"
+                    else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
                 )
                 return jsonify({
                     "toast": False,
@@ -853,6 +858,8 @@ def check_in_out():
                 effective_start,
                 min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
+            if check_in_time.time() > HALF_DAY_LATE_CUTOFF:
+                regular_hours = Decimal("4.00")
             ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
             ot_policy_end = datetime.combine(today, AttendanceService.OT_END)
             approved_ot_start = (
@@ -869,9 +876,13 @@ def check_in_out():
                 )
             else:
                 overtime_hours = Decimal("0.00")
-            attendance.regular_hours = regular_hours
-            attendance.overtime_hours = overtime_hours
-            worked_hours = regular_hours + overtime_hours
+            regular_hours = regular_hours.quantize(Decimal("0.01"))
+            overtime_hours = overtime_hours.quantize(Decimal("0.01"))
+            regular_hours_payroll = _apply_day_multiplier(regular_hours, is_holiday_shift)
+            overtime_hours_payroll = _apply_day_multiplier(overtime_hours, is_holiday_shift)
+            attendance.regular_hours = regular_hours_payroll
+            attendance.overtime_hours = overtime_hours_payroll
+            worked_hours = regular_hours_payroll + overtime_hours_payroll
             attendance.working_hours = worked_hours
             if is_holiday_shift:
                 attendance.attendance_type = "holiday"
@@ -894,7 +905,7 @@ def check_in_out():
 
             msg = f"Check-out lúc {current_time.strftime('%H:%M:%S')}"
             if is_holiday_shift:
-                msg += f" • OT ngày lễ: {overtime_hours}h (hệ số x3)"
+                msg += f" • Ca chính quy đổi: {regular_hours_payroll}h • OT quy đổi: {overtime_hours_payroll}h (hệ số x3)"
             else:
                 msg += f" • Ca chính: {regular_hours}h"
             if approved_ot_request and current_time >= datetime.combine(today, AttendanceService.OT_END):

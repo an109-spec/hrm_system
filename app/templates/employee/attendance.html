@@ -535,28 +535,16 @@ const isNewDay = (now, lastCheckin) => {
 function maybeNotifyOvertimeWindow() {
   const hour = state.now.getHours();
   const minute = state.now.getMinutes();
-  const isWeekend = [0, 6].includes(state.now.getDay());
   const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
-  const hasOtRequest = Boolean(state.todayOtRequest.status);
-  if (isWorkingSession && !hasOtRequest && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
+  const hasOtRequest = ["pending_hr", "pending_admin", "approved"].includes(state.todayOtRequest.status);
+  if (isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
     state.notices.otInvite = true;
     Swal.fire({
-      icon: "question",
-      title: "Hết ca làm việc",
-      html: "Hôm nay đã hết giờ làm việc.<br>Bạn có muốn đăng ký tăng ca ngoài giờ hành chính không?",
-      showCancelButton: true,
-      confirmButtonText: "Có, đăng ký OT",
-      cancelButtonText: "Không, check-out",
-      reverseButtons: true,
-    }).then(async (result) => {
-      if (result.isConfirmed) {
-        await submitAutomaticOvertimeRequest("after_shift");
-        await Swal.fire({ icon: "info", title: "Đã gửi yêu cầu OT", text: "Trạng thái: chờ HR duyệt, sau đó Admin duyệt." });
-      } else if (result.dismiss === Swal.DismissReason.cancel) {
-        await Swal.fire({ icon: "info", title: "Không đăng ký OT", text: "Vui lòng check-out để kết thúc ngày làm việc." });
-      }
-      renderState();
+      icon: "info",
+      title: "Đã hết ca làm việc.\nVui lòng check-out.",
+      timer: 2200,
+      showConfirmButton: false,
     });
   }
 
@@ -819,13 +807,25 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
     if (data.action === "holiday_ot_prompt") {
       const decision = await Swal.fire({
         icon: "question",
-        title: "Hôm nay là ngày nghỉ lễ",
-        html: "Bạn được nghỉ làm theo quy định.<br><br>Bạn có muốn đăng ký tăng ca ngày nghỉ không?",
+        title: "Hôm nay là ngày nghỉ lễ.\nBạn có muốn đi làm không?",
         showCancelButton: true,
-        confirmButtonText: "Đăng ký tăng ca",
-        cancelButtonText: "Không"
+        confirmButtonText: "Có",
+        cancelButtonText: "Không",
       });
 
+      if (decision.isConfirmed) {
+        await submitAutomaticOvertimeRequest("holiday");
+      }
+      return;
+    }
+    if (data.action === "weekend_work_prompt") {
+      const decision = await Swal.fire({
+        icon: "question",
+        title: "Hôm nay là ngày nghỉ cuối tuần.\nBạn có muốn đi làm không?",
+        showCancelButton: true,
+        confirmButtonText: "Có",
+        cancelButtonText: "Không",
+      });
       if (decision.isConfirmed) {
         await submitAutomaticOvertimeRequest("holiday");
       }
@@ -850,6 +850,18 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       state.workedHours = Number(data.worked_hours || 0);
       state.regularHours = Number(data.regular_hours || 0);
       state.overtimeHours = Number(data.overtime_hours || 0);
+      if (!state.todayOtRequest.status) {
+        const otDecision = await Swal.fire({
+          icon: "question",
+          title: "Bạn có muốn đăng ký tăng ca không?",
+          showCancelButton: true,
+          confirmButtonText: "Có",
+          cancelButtonText: "Không",
+        });
+        if (otDecision.isConfirmed) {
+          await submitAutomaticOvertimeRequest("after_shift");
+        }
+      }
       break;
 
     case 'done':
