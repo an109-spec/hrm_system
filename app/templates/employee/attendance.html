@@ -377,36 +377,6 @@ data-is-holiday="{{ 1 if today and today.is_holiday else 0 }}"
 const root = document.getElementById("attendanceRoot");
 const HOLIDAY_LOOKUP = {{ holiday_lookup|tojson }};
 
-const attendanceByDate = new Map([
-  {% if today %}
-  [
-    "{{ today.date.isoformat() }}",
-    {
-      hasAttendance: {{ "true" if today.check_in else "false" }},
-      hasCheckout: {{ "true" if today.check_out else "false" }},
-      checkIn: "{{ today.check_in.isoformat() if today.check_in else '' }}",
-      checkOut: "{{ today.check_out.isoformat() if today.check_out else '' }}",
-      mainHours: {{ (today.main_hours or today.regular_hours or 0)|float }},
-      overtimeHours: {{ (today.overtime_hours or 0)|float }}
-    }
-  ],
-  {% endif %}
-
-  {% for a in history %}
-  [
-    "{{ a.date.isoformat() }}",
-    {
-      hasAttendance: {{ "true" if a.check_in else "false" }},
-      hasCheckout: {{ "true" if a.check_out else "false" }},
-      checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
-      checkOut: "{{ a.check_out.isoformat() if a.check_out else '' }}",
-      mainHours: {{ (a.main_hours or a.regular_hours or 0)|float }},
-      overtimeHours: {{ (a.overtime_hours or 0)|float }}
-    }
-  ],
-  {% endfor %}
-]);
-
 const submitState = {
   attendance: false,
   ot: false,
@@ -498,9 +468,8 @@ const state = {
 
   pendingCheckoutWithoutOT: false,
 
-  hasAttendance: false,
-  hasCheckout: false,
-  currentDate: null
+  hasAttendance: Boolean(root.dataset.checkin),
+  hasCheckout: Boolean(root.dataset.checkout)
 };
 
 const isApprovedOt =
@@ -521,63 +490,6 @@ const dateKeyOf = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
-
-function syncAttendanceStateByDate(force = false) {
-  const key = dateKeyOf(state.now);
-
-  if (!force && key === state.currentDate) {
-    return;
-  }
-
-  state.currentDate = key;
-
-  const record = attendanceByDate.get(key);
-
-  // =========================
-  // Không có dữ liệu ngày này
-  // =========================
-  if (!record) {
-    state.hasAttendance = false;
-    state.hasCheckout = false;
-
-    state.checkIn = null;
-    state.checkOut = null;
-
-    state.mainHours = 0;
-    state.overtimeHours = 0;
-
-    // reset trạng thái ca
-    state.shiftStatus = "not_started";
-
-    // reset OT runtime state
-    state.isOvertime = false;
-    state.isPreOvertimeRest = false;
-    state.overtimeStarted = false;
-
-    return;
-  }
-
-  // =========================
-  // Có dữ liệu
-  // =========================
-  state.hasAttendance = Boolean(record.hasAttendance);
-  state.hasCheckout = Boolean(record.hasCheckout);
-
-  state.checkIn = record.checkIn
-    ? new Date(record.checkIn)
-    : null;
-
-  state.checkOut = record.checkOut
-    ? new Date(record.checkOut)
-    : null;
-
-  state.mainHours = Number(record.mainHours || 0);
-
-  state.overtimeHours = Number(
-    record.overtimeHours || 0
-  );
-}
-
 
 const fmtHm = (d) => {
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
@@ -1091,20 +1003,6 @@ async function submitAttendanceFromQR(decodedText) {
         break;
     }
 
-    /* =========================
-       CACHE CURRENT DATE RECORD
-    ========================= */
-
-    const selectedDateKey = dateKeyOf(new Date(root.dataset.serverNow));
-
-    attendanceByDate.set(selectedDateKey, {
-      hasAttendance: state.hasAttendance,
-      hasCheckout: state.hasCheckout,
-      checkIn: state.checkIn ? state.checkIn.toISOString() : "",
-      checkOut: state.checkOut ? state.checkOut.toISOString() : "",
-      mainHours: state.mainHours,
-      overtimeHours: state.overtimeHours
-    });
 
     /* =========================
        SUCCESS POPUP (ONLY ONCE)
@@ -1213,18 +1111,6 @@ async function submitAttendanceConfirmation(decodedText) {
     state.mainHours = 0;
     state.overtimeHours = 0;
 
-    const selectedDateKey = dateKeyOf(new Date(root.dataset.serverNow));
-
-    attendanceByDate.set(selectedDateKey, {
-      hasAttendance: true,
-      hasCheckout: false,
-      checkIn: state.checkIn
-        ? state.checkIn.toISOString()
-        : "",
-      checkOut: "",
-      mainHours: 0,
-      overtimeHours: 0
-    });
 
     await Swal.fire({
       icon: "success",
@@ -1403,7 +1289,7 @@ function updateEditorUI() {
 }
 
 /* ===================== INIT ===================== */
-syncAttendanceStateByDate(true);
+
 renderDate();
 renderState();
 /* ===================== QR SCANNER ===================== */
@@ -1517,9 +1403,7 @@ async function deleteRecord(dateIso) {
       throw new Error(data.message || "Xóa bản ghi thất bại");
     }
 
-    // sync local cache trước khi reload
-    attendanceByDate.delete(dateIso);
-
+   
     await Swal.fire({
       icon: "success",
       title: data.message || "Đã xóa bản ghi chấm công",
