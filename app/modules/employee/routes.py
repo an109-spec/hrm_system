@@ -744,6 +744,7 @@ def check_in_out():
         # CHECK-IN FLOW
         # =========================
         if not attendance:
+            overtime_confirmed = bool(payload.get("overtime_confirmed"))
             today_holiday = _get_holiday_for_date(today)
             is_weekend = today.weekday() >= 5
             is_non_working_day = bool(today_holiday) or is_weekend
@@ -770,6 +771,24 @@ def check_in_out():
                         "message": (
                             f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
                             "Bạn đã có yêu cầu OT ngày nghỉ được duyệt."
+                        ),
+                    })
+                if overtime_confirmed:
+                    attendance = Attendance(
+                        employee_id=employee.id,
+                        date=today,
+                        check_in=current_time,
+                        attendance_type="holiday",
+                    )
+                    db.session.add(attendance)
+                    db.session.commit()
+                    return jsonify({
+                        "toast": True,
+                        "type": "success",
+                        "action": "check_in",
+                        "message": (
+                            f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
+                            "Bạn đang làm ca ngày nghỉ, hãy check-out khi kết thúc ca hành chính."
                         ),
                     })
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
@@ -837,16 +856,6 @@ def check_in_out():
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status == "approved",
             ).first()
-            if (
-                approved_ot_request
-                and datetime.combine(today, AttendanceService.REGULAR_END) <= current_time < datetime.combine(today, AttendanceService.OT_START)
-            ):
-                return jsonify({
-                    "toast": False,
-                    "type": "info",
-                    "action": "break_before_ot",
-                    "message": "Đang trong khung nghỉ 17:00 → 19:00. Vui lòng check-in OT từ 19:00.",
-                }), 400
             attendance.check_out = current_time
 
             # =========================

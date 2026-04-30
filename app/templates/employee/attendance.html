@@ -538,7 +538,12 @@ function maybeNotifyOvertimeWindow() {
   const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
   const hasOtRequest = ["pending_hr", "pending_admin", "approved"].includes(state.todayOtRequest.status);
-  if (isWorkingSession && (hour > 17 || (hour === 17 && minute >= 0)) && !state.notices.otInvite) {
+  const hasApprovedOt = state.todayOtRequest.status === "approved";
+  const isAfterShiftStart = hour > 17 || (hour === 17 && minute >= 0);
+  if (!isAfterShiftStart) {
+    state.notices.otInvite = false;
+  }
+  if (isWorkingSession && isAfterShiftStart && !state.notices.otInvite) {
     state.notices.otInvite = true;
     Swal.fire({
       icon: "info",
@@ -549,9 +554,7 @@ function maybeNotifyOvertimeWindow() {
   }
 
   if (
-    state.isOvertime &&
-    state.isPreOvertimeRest &&
-    isWorkingSession &&
+    hasApprovedOt &&
     (hour >= 19) &&
     !state.notices.otStart
   ) {
@@ -561,7 +564,7 @@ function maybeNotifyOvertimeWindow() {
     Swal.fire({ icon: "info", title: "Ca tăng ca đã bắt đầu", text: "Vui lòng check-in để bắt đầu OT." });
   }
 
-  if (state.isOvertime && isWorkingSession && hour >= 22 && !state.notices.otEnd) {
+  if (hasApprovedOt && hour >= 22 && !state.notices.otEnd) {
     state.notices.otEnd = true;
     Swal.fire({ icon: "warning", title: "Ca tăng ca hôm nay đã kết thúc", text: "Vui lòng check-out để hoàn tất chấm công tăng ca." });
   }
@@ -667,12 +670,15 @@ function renderState() {
   // CASE 3: ĐANG TRONG CA
   // =========================
   else {
+    const endOfShift = new Date(state.now);
+    endOfShift.setHours(17, 0, 0, 0);
+    const canCheckoutNow = state.now >= endOfShift;
     btn.textContent = inLunch
       ? 'Giờ nghỉ trưa'
-      : '🔳 QUÉT QR CHECK-OUT';
+      : (canCheckoutNow ? '🔳 QUÉT QR CHECK-OUT' : '⏳ Chưa đến giờ tan ca (17:00)');
 
-    btn.disabled = inLunch;
-    btn.className = 'btn btn-warning';
+    btn.disabled = inLunch || !canCheckoutNow;
+    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
     let statusPrefix = '🟢 Đang làm việc';
     if (state.isPreOvertimeRest) {
       statusPrefix = '🟡 Nghỉ ngơi trước tăng ca';
@@ -818,7 +824,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       });
 
       if (decision.isConfirmed) {
-        await submitAutomaticOvertimeRequest("holiday");
+        await submitAttendanceConfirmation(decodedText);
       }
       return;
     }
@@ -831,7 +837,7 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
         cancelButtonText: "Không",
       });
       if (decision.isConfirmed) {
-        await submitAutomaticOvertimeRequest("holiday");
+        await submitAttendanceConfirmation(decodedText);
       }
       return;
     }
@@ -854,7 +860,10 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       state.workedHours = Number(data.worked_hours || 0);
       state.regularHours = Number(data.regular_hours || 0);
       state.overtimeHours = Number(data.overtime_hours || 0);
-      if (!state.todayOtRequest.status) {
+      const endOfShift = new Date(state.now);
+      endOfShift.setHours(17, 0, 0, 0);
+      const canInviteOt = state.now >= endOfShift;
+      if (!state.todayOtRequest.status && canInviteOt) {
         const otDecision = await Swal.fire({
           icon: "question",
           title: "Bạn có muốn đăng ký tăng ca không?",
@@ -910,6 +919,32 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
   } finally {
     isSubmittingAttendance = false;
   }
+}
+
+async function submitAttendanceConfirmation(decodedText) {
+  const res = await fetch("/employee/attendance/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      qr_text: decodedText,
+      simulated_now: toLocalISO(state.now),
+      overtime_confirmed: true,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || "Không thể check-in ngày nghỉ");
+  }
+  await Swal.fire({
+    icon: "success",
+    title: "Check-in thành công",
+    text: data.message || "Đã bắt đầu ca làm việc ngày nghỉ",
+    timer: 1400,
+    showConfirmButton: false,
+  });
+  window.location.href =
+    window.location.pathname +
+    "?simulated_now=" + toLocalISO(state.now);
 }
 async function submitAutomaticOvertimeRequest(requestType, options = {}) {
   const payload = {
