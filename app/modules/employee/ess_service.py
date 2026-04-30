@@ -18,10 +18,17 @@ class EmployeeESSService:
     COMPLAINT_ISSUES = {"salary_data_error", "content_question", "system_error", "other"}
     @staticmethod
     def _users_by_role(role_name: str) -> list[User]:
-        role = Role.query.filter(db.func.lower(Role.name) == role_name.lower()).first()
-        if not role:
+        normalized = (role_name or "").strip().lower()
+        if not normalized:
             return []
-        return User.query.filter_by(role_id=role.id, is_active=True).all()
+
+        exact_roles = Role.query.filter(db.func.lower(Role.name) == normalized).all()
+        if not exact_roles:
+            exact_roles = Role.query.filter(db.func.lower(Role.name).like(f"%{normalized}%")).all()
+        role_ids = [role.id for role in exact_roles]
+        if not role_ids:
+            return []
+        return User.query.filter(User.role_id.in_(role_ids), User.is_active.is_(True)).all()
 
     @staticmethod
     def _employee_by_user(user_id: int | None) -> Employee:

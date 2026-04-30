@@ -1696,13 +1696,31 @@ class HRService:
     @staticmethod
     def overtime_pending_list(month: int | None = None, year: int | None = None) -> list[dict]:
         start, end = HRService._month_window(month, year)
-        records = OvertimeRequest.query.join(Employee, OvertimeRequest.employee_id == Employee.id).filter(
-            OvertimeRequest.overtime_date >= start,
-            OvertimeRequest.overtime_date <= end,
-            Employee.is_deleted.is_(False),
-            OvertimeRequest.is_deleted.is_(False),
-            OvertimeRequest.status.in_(["pending_manager", "pending_hr", "pending_admin", "approved", "rejected"]),
-        ).order_by(OvertimeRequest.overtime_date.desc()).all()
+        pending_statuses = ["pending_manager", "pending_hr", "pending_admin"]
+        finished_statuses = ["approved", "rejected"]
+        records = (
+            OvertimeRequest.query.join(Employee, OvertimeRequest.employee_id == Employee.id)
+            .filter(
+                Employee.is_deleted.is_(False),
+                OvertimeRequest.is_deleted.is_(False),
+                OvertimeRequest.status.in_(pending_statuses + finished_statuses),
+                db.or_(
+                    OvertimeRequest.status.in_(pending_statuses),
+                    db.and_(
+                        OvertimeRequest.status.in_(finished_statuses),
+                        OvertimeRequest.overtime_date >= start,
+                        OvertimeRequest.overtime_date <= end,
+                    ),
+                ),
+            )
+            .order_by(
+                db.case((OvertimeRequest.status.in_(pending_statuses), 0), else_=1),
+                OvertimeRequest.overtime_date.desc(),
+                OvertimeRequest.created_at.desc(),
+            )
+            .all()
+        )
+
 
         rows = []
         for record in records:

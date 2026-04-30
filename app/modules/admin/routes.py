@@ -1597,8 +1597,6 @@ def attendance_mark_abnormal(attendance_id: int):
 
 @admin_bp.get("/api/admin/attendance/overtime/pending")
 def attendance_pending_overtime():
-    month = request.args.get("month", type=int) or datetime.utcnow().month
-    year = request.args.get("year", type=int) or datetime.utcnow().year
     rows = (
         db.session.query(OvertimeRequest, Employee, Department)
         .join(Employee, Employee.id == OvertimeRequest.employee_id)
@@ -1607,11 +1605,10 @@ def attendance_pending_overtime():
         .join(Department, Department.id == Employee.department_id, isouter=True)
         .filter(
             OvertimeRequest.status == "pending_admin",
-            func.extract("month", OvertimeRequest.overtime_date) == month,
-            func.extract("year", OvertimeRequest.overtime_date) == year,
-            Employee.is_attendance_required.is_(True),
-            func.coalesce(Role.name, "").notin_(["Admin", "HR"]),
-        ).all()
+            db.func.lower(func.coalesce(Role.name, "")).notin_(["admin", "hr"]),
+        )
+        .order_by(OvertimeRequest.created_at.desc(), OvertimeRequest.id.desc())
+        .all()
     )
     return jsonify([{
         "id": ot.id,

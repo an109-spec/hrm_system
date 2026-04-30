@@ -622,7 +622,7 @@ function renderState() {
   const identityText = document.getElementById('identityText');
   const otRequestStatusBox = document.getElementById('otRequestStatusBox');
   const inLunch = isLunchBreak(state.now);
-
+  const hasPendingOtApproval = ["pending_hr", "pending_admin"].includes(state.todayOtRequest.status);
   // ✅ FIX CỐT LÕI: detect khác ngày
   const isDifferentDay = state.checkIn && (
     state.now.getDate() !== state.checkIn.getDate() ||
@@ -651,10 +651,14 @@ function renderState() {
       ? 'Giờ nghỉ trưa'
       : '🔳 QUÉT QR CHECK-IN';
 
-    btn.disabled = inLunch;
+    btn.disabled = inLunch || hasPendingOtApproval;
     btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
-
-    statusText.textContent = '🟡 Chưa vào ca';
+    if (hasPendingOtApproval && !inLunch) {
+      btn.textContent = '⏳ ĐANG CHỜ DUYỆT OT';
+    }
+    statusText.textContent = hasPendingOtApproval
+      ? '⏳ Đang chờ HR/Admin duyệt OT'
+      : '🟡 Chưa vào ca';
 
     identityText.style.display = 'none';
     lateWarning.style.display = 'none';
