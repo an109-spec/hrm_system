@@ -542,14 +542,21 @@ function maybeNotifyOvertimeWindow() {
   const isAfterShiftStart = hour > 17 || (hour === 17 && minute >= 0);
   if (!isAfterShiftStart) {
     state.notices.otInvite = false;
+    state.notices.shiftEndCheckoutPrompt = false;
   }
-  if (isWorkingSession && isAfterShiftStart && !state.notices.otInvite) {
-    state.notices.otInvite = true;
+  if (isWorkingSession && isAfterShiftStart && !state.notices.shiftEndCheckoutPrompt) {
+    state.notices.shiftEndCheckoutPrompt = true;
     Swal.fire({
       icon: "info",
-      title: "Đã hết ca làm việc.\nVui lòng check-out.",
-      timer: 2200,
-      showConfirmButton: false,
+      title: "Thông báo tan ca",
+      html: "Đã hết ca làm việc hành chính.<br><br>Vui lòng thực hiện <b>CHECK-OUT</b> để hoàn tất ca làm hôm nay.",
+      confirmButtonText: "Check-out ngay",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        openScannerModal();
+      }
     });
   }
 
@@ -863,7 +870,13 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       const endOfShift = new Date(state.now);
       endOfShift.setHours(17, 0, 0, 0);
       const canInviteOt = state.now >= endOfShift;
-      if (!state.todayOtRequest.status && canInviteOt) {
+if (
+  canInviteOt &&
+  (
+    !state.todayOtRequest.status ||
+    state.todayOtRequest.status === "rejected"
+  )
+) {
         const otDecision = await Swal.fire({
           icon: "question",
           title: "Bạn có muốn đăng ký tăng ca không?",
@@ -874,6 +887,10 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
         if (otDecision.isConfirmed) {
           await submitAutomaticOvertimeRequest("after_shift");
         }
+        window.location.href =
+          window.location.pathname +
+          "?simulated_now=" + toLocalISO(state.now);
+        return;
       }
       break;
 
@@ -908,11 +925,13 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       showConfirmButton: false,
     });
 
-    setTimeout(() => {
-      window.location.href =
-        window.location.pathname +
-        "?simulated_now=" + toLocalISO(state.now);
-    }, 800);
+if (data.action !== "check_out") {
+  setTimeout(() => {
+    window.location.href =
+      window.location.pathname +
+      "?simulated_now=" + toLocalISO(state.now);
+  }, 800);
+}
 
   } catch (err) {
     await Swal.fire({ icon: "error", title: "Lỗi", text: err.message || "Không thể chấm công" });
