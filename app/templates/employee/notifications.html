@@ -101,14 +101,6 @@
 <script>
 let activeComplaintId = null;
 let activeNotificationId = null;
-async function markRead(id, button){
-  button.disabled = true;
-  const res = await fetch(`/employee/notifications/${id}/read`, { method: 'POST' });
-  if(res.ok){
-    window.location.reload();
-  }
-  button.disabled = false;
-}
 function normalizeType(type) {
   if(type === "salary") return "Biến động thu nhập";
   if(type === "leave") return "Trạng thái nghỉ phép";
@@ -118,8 +110,16 @@ function normalizeType(type) {
 async function openNotificationDetail(el){
   const id = Number(el.dataset.id);
   activeNotificationId = id;
-  const detail = await fetch(`/employee/notifications/${id}/detail`).then((r)=>r.json());
+ let detail = await fetch(`/employee/notifications/${id}/detail`).then((r)=>r.json());
   if (detail.error) return Swal.fire({ icon: "error", title: detail.error });
+  if (!detail.is_read) {
+    const readRes = await fetch(`/employee/notifications/${id}/read`, { method: "POST" });
+    if (readRes.ok) {
+      detail = await fetch(`/employee/notifications/${id}/detail`).then((r)=>r.json());
+      if (detail.error) return Swal.fire({ icon: "error", title: detail.error });
+    }
+  }
+
   document.getElementById("notification-detail").style.display = "block";
   document.getElementById("detailType").textContent = normalizeType(detail.type);
   document.getElementById("detailTitle").textContent = detail.title;
@@ -143,15 +143,6 @@ async function openNotificationDetail(el){
     detailLink.style.display = "inline-flex";
   } else {
     detailLink.style.display = "none";
-  }
-
-  if(el.dataset.isRead !== "true"){
-    el.dataset.isRead = "true";
-    const dot = el.querySelector(".dot-red");
-    if(dot) dot.remove();
-    el.classList.remove("notification-item--new");
-    document.getElementById("detailRead").textContent = "Đã đọc";
-  }
 }
 
 function closeNotificationDetail(){
