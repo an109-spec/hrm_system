@@ -308,14 +308,10 @@ function updateWorkingHours() {
     const now = getSimulatedDate();
     const checkInTime = new Date(state.checkIn);
     
-    // Logic: Nếu vào muộn sau 8:10, tính từ 9:00
     let startTime = checkInTime;
-    if (checkInTime.getHours() > 8 || (checkInTime.getHours() == 8 && checkInTime.getMinutes() > 10)) {
+    if (checkInTime.getHours() < 8) {
         startTime = new Date(checkInTime);
-        startTime.setHours(9, 0, 0);
-    } else if (checkInTime.getHours() < 8) {
-        startTime = new Date(checkInTime);
-        startTime.setHours(8, 0, 0);
+        startTime.setHours(8, 0, 0, 0);
     }
 
     let diffMs = now - startTime;
