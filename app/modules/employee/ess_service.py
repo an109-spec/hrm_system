@@ -163,10 +163,13 @@ class EmployeeESSService:
 
         start_raw = (payload.get("start_ot_time") or "").strip()
         end_raw = (payload.get("end_ot_time") or "").strip()
-        if request_type in {"holiday", "weekend"} and not start_raw and not end_raw:
-            start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time()) if request_type == "weekend" else None
-            end_ot_time = datetime.combine(ot_date, datetime.strptime("22:00", "%H:%M").time()) if request_type == "weekend" else None
-            hours = Decimal("3.00") if request_type == "weekend" else Decimal("0.00")
+        default_start = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
+        default_end = datetime.combine(ot_date, datetime.strptime("22:00", "%H:%M").time())
+
+        if not start_raw and not end_raw:
+            start_ot_time = default_start
+            end_ot_time = default_end
+            hours = Decimal(str((end_ot_time - start_ot_time).total_seconds() / 3600)).quantize(Decimal("0.01"))
         elif start_raw and end_raw:
             start_time = datetime.strptime(start_raw, "%H:%M").time()
             end_time = datetime.strptime(end_raw, "%H:%M").time()
@@ -180,8 +183,17 @@ class EmployeeESSService:
             hours = Decimal(str(hours_raw if hours_raw not in (None, "") else "0"))
             if hours <= 0:
                 raise ValueError("Vui lòng cung cấp khung giờ OT hợp lệ")
-            start_ot_time = datetime.combine(ot_date, datetime.strptime("19:00", "%H:%M").time())
+            start_ot_time = default_start
             end_ot_time = start_ot_time + timedelta(hours=float(hours))
+            if end_ot_time <= start_ot_time:
+                raise ValueError("Khung giờ OT không hợp lệ")
+
+        if not start_ot_time or not end_ot_time:
+            raise ValueError("Vui lòng cung cấp khung giờ OT hợp lệ")
+        hours = Decimal(str((end_ot_time - start_ot_time).total_seconds() / 3600)).quantize(Decimal("0.01"))
+        if hours <= 0:
+            raise ValueError("Số giờ OT phải lớn hơn 0")
+
         if request_type not in {"holiday", "weekend"} and  hours <= 0:
             raise ValueError("Số giờ OT phải lớn hơn 0")
         reason = (payload.get("reason") or "").strip()
@@ -217,7 +229,7 @@ class EmployeeESSService:
             end_ot_time=end_ot_time,
             reason=reason,
             note=(payload.get("note") or "").strip() or None,
-            status="pending_hr",
+            status="pending_manager",
             is_holiday_ot=is_holiday_ot,
             holiday_multiplier=holiday_multiplier,
             created_at=simulated_now,

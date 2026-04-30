@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 from lunardate import LunarDate
+from sqlalchemy.exc import IntegrityError
 from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -234,34 +235,43 @@ def _apply_day_multiplier(hours: Decimal, is_holiday_shift: bool) -> Decimal:
         return hours
     return (hours * Decimal("3")).quantize(Decimal("0.01"))
 
-def _attendance_metrics(record: Attendance | None) -> tuple[Decimal, Decimal, Decimal]:
+def _attendance_metrics(
+    record: Attendance | None,
+    is_holiday: bool = False,
+    is_weekend: bool = False,
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
     if not record:
-        return Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
-
-    regular_hours = Decimal(str(record.regular_hours or 0))
-    overtime_hours = Decimal(str(record.overtime_hours or 0))
-    worked_hours = Decimal(str(record.working_hours or 0))
-
-    if (
-        record.check_in
-        and record.check_out
-        and regular_hours <= 0
-    ):
-        today = record.date
-        policy_start = datetime.combine(today, WORKDAY_START)
-        effective_start = max(record.check_in.replace(tzinfo=None), policy_start)
-        regular_hours = _compute_working_hours(
-            effective_start,
-            min(
-                record.check_out.replace(tzinfo=None),
-                datetime.combine(today, AttendanceService.REGULAR_END),
-            ),
+        return (
+            Decimal("0.00"),
+            Decimal("0.00"),
+            Decimal("0.00"),
+            Decimal("0.00"),
+            Decimal("0.00"),
         )
 
-    if worked_hours <= 0:
-        worked_hours = regular_hours + overtime_hours
+    multiplier = Decimal("3.00") if (is_holiday or is_weekend) and (record.check_in or record.check_out) else Decimal("1.00")
 
-    return worked_hours, regular_hours, overtime_hours
+    stored_regular = Decimal(str(record.regular_hours or 0))
+    stored_overtime = Decimal(str(record.overtime_hours or 0))
+    stored_total = Decimal(str(record.working_hours or 0))
+
+    if multiplier > Decimal("1.00"):
+        raw_regular = (stored_regular / multiplier).quantize(Decimal("0.01"))
+        raw_overtime = (stored_overtime / multiplier).quantize(Decimal("0.01"))
+    else:
+        raw_regular = stored_regular.quantize(Decimal("0.01"))
+        raw_overtime = stored_overtime.quantize(Decimal("0.01"))
+
+    raw_total = (raw_regular + raw_overtime).quantize(Decimal("0.01"))
+    payroll_regular = (raw_regular * multiplier).quantize(Decimal("0.01"))
+    payroll_overtime = (raw_overtime * multiplier).quantize(Decimal("0.01"))
+    payroll_total = (payroll_regular + payroll_overtime).quantize(Decimal("0.01"))
+
+    if stored_total > 0 and multiplier == Decimal("1.00"):
+        payroll_total = stored_total.quantize(Decimal("0.01"))
+        raw_total = payroll_total
+
+    return payroll_total, payroll_regular, raw_overtime, raw_total, payroll_overtime
 
 def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
     hours, minutes = divmod(total_minutes, 60)
@@ -642,9 +652,17 @@ def attendance():
         else []
     )
     if today:
-        _, today.regular_hours, today.overtime_hours = _attendance_metrics(today)
+        _, today.regular_hours, _, _, today.overtime_hours = _attendance_metrics(
+            today,
+            is_holiday=(today.attendance_type == "holiday"),
+            is_weekend=bool(today.date.weekday() >= 5),
+        )
     for record in history:
-        _, record.regular_hours, record.overtime_hours = _attendance_metrics(record)
+        _, record.regular_hours, _, _, record.overtime_hours = _attendance_metrics(
+            record,
+            is_holiday=(record.attendance_type == "holiday"),
+            is_weekend=bool(record.date.weekday() >= 5),
+        )
     today_holiday = _get_holiday_for_date(now.date())
     holiday_lookup = _get_holiday_lookup()
     today_ot_request = (
@@ -755,6 +773,7 @@ def check_in_out():
                     OvertimeRequest.status == "approved",
                 ).first()
                 if approved_holiday_ot:
+                    effective_check_in = max(current_time, datetime.combine(today, WORKDAY_START))
                     attendance = Attendance(
                         employee_id=employee.id,
                         date=today,
@@ -762,34 +781,35 @@ def check_in_out():
                         attendance_type="holiday",
                     )
                     db.session.add(attendance)
-                    db.session.commit()
+                    try:
+                        db.session.commit()
+                    except IntegrityError:
+                        db.session.rollback()
+                        attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+                        if attendance:
+                            return jsonify({
+                                "toast": True,
+                                "type": "info",
+                                "action": "done",
+                                "message": "Bạn đã hoàn thành chấm công hôm nay"
+                            })
                     return jsonify({
                         "toast": True,
                         "type": "success",
                         "action": "check_in",
                         "message": (
-                            f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
+                            f"Check-in lúc {effective_check_in.strftime('%H:%M:%S')} • "
                             "Bạn đã có yêu cầu OT ngày nghỉ được duyệt."
                         ),
                     })
                 if overtime_confirmed:
-                    attendance = Attendance(
-                        employee_id=employee.id,
-                        date=today,
-                        check_in=current_time,
-                        attendance_type="holiday",
-                    )
-                    db.session.add(attendance)
-                    db.session.commit()
                     return jsonify({
                         "toast": True,
-                        "type": "success",
-                        "action": "check_in",
-                        "message": (
-                            f"Check-in lúc {current_time.strftime('%H:%M:%S')} • "
-                            "Bạn đang làm ca ngày nghỉ, hãy check-out khi kết thúc ca hành chính."
-                        ),
-                    })
+                        "type": "warning",
+                        "action": "holiday_ot_prompt",
+                        "holiday_name": today_holiday.name if today_holiday else "Cuối tuần",
+                        "message": "Bạn chỉ có thể chấm công ngày nghỉ khi yêu cầu OT đã được duyệt.",
+                    }), 403
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
                 prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
                 prompt_message = (
@@ -804,6 +824,7 @@ def check_in_out():
                     "holiday_name": off_day_name,
                     "message": prompt_message,
                 })
+            effective_check_in = max(current_time, datetime.combine(today, WORKDAY_START))
             attendance_type = "normal"
             attendance = Attendance(
                 employee_id=employee.id,
@@ -813,16 +834,28 @@ def check_in_out():
             )
 
             db.session.add(attendance)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+                if attendance:
+                    return jsonify({
+                        "toast": True,
+                        "type": "info",
+                        "action": "done",
+                        "message": "Bạn đã hoàn thành chấm công hôm nay"
+                    })
+                raise
 
             late_minutes = 0
-            if current_time > normal_checkin_end:
-                late_minutes = int((current_time - normal_checkin_end).total_seconds() // 60)
+            if effective_check_in > normal_checkin_end:
+                late_minutes = int((effective_check_in - normal_checkin_end).total_seconds() // 60)
 
-            msg = f"Check-in lúc {current_time.strftime('%H:%M:%S')}"
-            if checkin_window_start <= current_time < normal_checkin_end:
+            msg = f"Check-in lúc {effective_check_in.strftime('%H:%M:%S')}"
+            if checkin_window_start <= effective_check_in < normal_checkin_end:
                 msg += " • Trạng thái vào ca: Bình thường"
-            elif current_time >= normal_checkin_end:
+            elif effective_check_in >= normal_checkin_end:
                 msg += f" • Trạng thái vào ca: Đi muộn {_format_minutes_as_hours_minutes(late_minutes)}"
                 msg += _late_penalty_message(late_minutes)
             else:
@@ -855,7 +888,9 @@ def check_in_out():
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status == "approved",
             ).first()
-            attendance.check_out = current_time
+            raw_check_out_time = current_time
+            effective_check_out = min(raw_check_out_time, datetime.combine(today, WORKDAY_END))
+            attendance.check_out = raw_check_out_time
 
             # =========================
             # EFFECTIVE START (late rule)
@@ -864,7 +899,7 @@ def check_in_out():
             effective_start = max(check_in_time, policy_start)
             regular_hours = _compute_working_hours(
                 effective_start,
-                min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
+                min(effective_check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
             ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
             ot_policy_end = datetime.combine(today, AttendanceService.OT_END)
@@ -874,7 +909,7 @@ def check_in_out():
                 else ot_policy_start
             )
             ot_effective_start = max(ot_policy_start, approved_ot_start)
-            ot_effective_end = min(attendance.check_out, ot_policy_end)
+            ot_effective_end = min(raw_check_out_time, ot_policy_end)
             if approved_ot_request and ot_effective_end > ot_effective_start:
                 overtime_hours = _compute_working_hours(
                     ot_effective_start,
@@ -896,7 +931,7 @@ def check_in_out():
                 OvertimeRequest.employee_id == employee.id,
                 OvertimeRequest.overtime_date == today,
                 OvertimeRequest.is_deleted.is_(False),
-                OvertimeRequest.status == "pending",
+                OvertimeRequest.status.in_(["pending_hr", "pending_admin", "pending_manager", "pending"]),
             ).first()
             if approved_ot_request:
                 overtime_status = "APPROVED"
@@ -905,7 +940,7 @@ def check_in_out():
 
             attendance_status = (
                 "HALF_DAY"
-                if check_in_time.time() > HALF_DAY_LATE_CUTOFF
+                if effective_start.time() > HALF_DAY_LATE_CUTOFF
                 else "FULL_DAY"
             )
             if is_holiday_shift:
@@ -942,9 +977,13 @@ def check_in_out():
                 ))
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
-            worked_hours, regular_hours, overtime_hours = _attendance_metrics(attendance)
+            worked_hours, regular_hours, raw_overtime_hours, raw_total_hours, payroll_overtime_hours = _attendance_metrics(
+                attendance,
+                is_holiday=bool(today_holiday),
+                is_weekend=bool(today.weekday() >= 5),
+            )
             status_key = "checked_out"
-            if overtime_hours > 0:
+            if payroll_overtime_hours > 0:
                 status_key = "overtime"
             elif check_in_time > normal_checkin_end:
                 status_key = "late"
@@ -958,8 +997,10 @@ def check_in_out():
                 "message": msg,
                 "attendance_state": attendance.attendance_type,
                 "worked_hours": str(worked_hours),
+                "raw_hours": str(raw_total_hours),
+                "payroll_hours": str(worked_hours),
                 "regular_hours": str(regular_hours),
-                "overtime_hours": str(overtime_hours),
+                "overtime_hours": str(raw_overtime_hours),
                 "holiday_multiplier": "3.00" if is_holiday_shift else "1.00",
                 "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
                 "check_out": attendance.check_out.isoformat() if attendance.check_out else None,

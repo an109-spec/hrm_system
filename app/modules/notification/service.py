@@ -1,10 +1,13 @@
 # app/modules/notification/service.py
 
 from __future__ import annotations
-
+from datetime import datetime
 from app.extensions.db import db
 from app.models.notification import Notification
 from app.models.overtime_request import OvertimeRequest
+from app.models.employee import Employee
+from app.models.attendance import Attendance
+from app.models.history import HistoryLog
 from app.common.exceptions import ValidationError
 from .dto import NotificationDTO
 
@@ -80,6 +83,7 @@ class NotificationService:
         notification = Notification.query.filter_by(
             id=notification_id,
             user_id=user_id,
+            is_deleted=False,
         ).first()
 
         if not notification:
@@ -137,74 +141,57 @@ class NotificationService:
         ).first()
 
         if not notification:
-            raise ValidationError(
-                "Notification not found"
-            )
+            raise ValidationError("Notification not found")
+        employee = Employee.query.filter_by(user_id=user_id, is_deleted=False).first()
+        if not employee:
+            raise ValidationError("Employee profile not found")
 
+        now_ts = datetime.utcnow()
         try:
-            # =====================================
-            # CASE: OVERTIME NOTIFICATION
-            # =====================================
-            if notification.type == "overtime":
-                """
-                Cách liên kết phổ biến:
-                notification.link
+            overtime_request = None
+            attendance = None
+            overtime_request_id = getattr(notification, "overtime_request_id", None)
+            attendance_id = getattr(notification, "attendance_id", None)
 
-                Ví dụ:
-                /employee/overtime/12
+            if overtime_request_id:
+                overtime_request = OvertimeRequest.query.filter_by(
+                    id=overtime_request_id,
+                    employee_id=employee.id,
+                    is_deleted=False,
+                ).first()
+            if attendance_id:
+                attendance = Attendance.query.filter_by(
+                    id=attendance_id,
+                    employee_id=employee.id,
+                    is_deleted=False,
+                ).first()
 
-                hoặc:
-                overtime_request:12
-                """
+            notification.is_deleted = True
+            if hasattr(notification, "deleted_at"):
+                setattr(notification, "deleted_at", now_ts)
 
-                overtime_request = None
+            if overtime_request:
+                overtime_request.is_deleted = True
+                if hasattr(overtime_request, "deleted_at"):
+                    setattr(overtime_request, "deleted_at", now_ts)
 
-                if notification.link:
-                    # CASE 1:
-                    # link dạng overtime_request:12
-                    if "overtime_request:" in notification.link:
-                        try:
-                            request_id = int(
-                                notification.link.split(":")[-1]
-                            )
+            if attendance and overtime_request:
+                attendance.overtime_hours = 0
 
-                            overtime_request = (
-                                OvertimeRequest.query.filter_by(
-                                    id=request_id,
-                                    employee_id=user_id
-                                ).first()
-                            )
-                        except Exception:
-                            pass
-
-                    # CASE 2:
-                    # link dạng URL /overtime/12
-                    elif "/overtime/" in notification.link:
-                        try:
-                            request_id = int(
-                                notification.link.rstrip("/")
-                                .split("/")[-1]
-                            )
-
-                            overtime_request = (
-                                OvertimeRequest.query.filter_by(
-                                    id=request_id,
-                                    employee_id=user_id
-                                ).first()
-                            )
-                        except Exception:
-                            pass
-
-                # nếu tìm thấy request → xóa luôn
-                if overtime_request:
-                    db.session.delete(
-                        overtime_request
-                    )
-
-            # =====================================
-            # DELETE NOTIFICATION
-            # =====================================
-            db.session.delete(notification)
+            db.session.add(
+                HistoryLog(
+                    employee_id=employee.id,
+                    action="NOTIFICATION_CASCADE_DELETE",
+                    entity_type="notification",
+                    entity_id=notification.id,
+                    description=(
+                        f"OT cascade delete | notification_id={notification.id} "
+                        f"| overtime_request_id={overtime_request.id if overtime_request else None} "
+                        f"| attendance_id={attendance.id if attendance else None}"
+                    ),
+                    performed_by=user_id,
+                )
+            )
             db.session.commit()
 
             return True

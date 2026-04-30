@@ -5,6 +5,10 @@ from . import notification_bp
 from .service import NotificationService
 from .dto import NotificationDTO
 from app.models.user import User
+from app.models.notification import Notification
+from app.models.overtime_request import OvertimeRequest
+from app.models.attendance import Attendance
+from app.models.history import HistoryLog
 
 
 # =========================
@@ -90,13 +94,70 @@ def mark_all_read():
 @login_required
 def delete(noti_id):
     try:
+        before_noti = Notification.query.filter_by(id=noti_id, user_id=current_user.id).first()
+        overtime_request_id = getattr(before_noti, "overtime_request_id", None) if before_noti else None
+        attendance_id = getattr(before_noti, "attendance_id", None) if before_noti else None
+        before_ot_deleted = None
+        before_attendance_ot = None
+        before_logs = None
+        if overtime_request_id:
+            ot_row = OvertimeRequest.query.filter_by(id=overtime_request_id).first()
+            before_ot_deleted = bool(ot_row.is_deleted) if ot_row else None
+        if attendance_id:
+            att_row = Attendance.query.filter_by(id=attendance_id).first()
+            before_attendance_ot = float(att_row.overtime_hours or 0) if att_row else None
+        if before_noti:
+            before_logs = HistoryLog.query.filter_by(entity_type="notification", entity_id=before_noti.id).count()
+
         NotificationService.delete(
             notification_id=noti_id,
             user_id=current_user.id
         )
+        after_noti = Notification.query.filter_by(id=noti_id, user_id=current_user.id).first()
+        deleted_notification = bool(after_noti and after_noti.is_deleted)
 
+        deleted_overtime_request = False
+        if overtime_request_id:
+            ot_after = OvertimeRequest.query.filter_by(id=overtime_request_id).first()
+            deleted_overtime_request = bool(ot_after and ot_after.is_deleted)
+
+        updated_attendance = False
+        if attendance_id:
+            att_after = Attendance.query.filter_by(id=attendance_id).first()
+            if att_after:
+                current_ot = float(att_after.overtime_hours or 0)
+                if before_attendance_ot is None:
+                    updated_attendance = current_ot == 0
+                else:
+                    updated_attendance = current_ot != before_attendance_ot
+
+        deleted_logs = False
+        if before_noti:
+            after_logs = HistoryLog.query.filter_by(entity_type="notification", entity_id=before_noti.id).count()
+            deleted_logs = bool(after_logs > (before_logs or 0))
+
+        related_checks = []
+        if overtime_request_id is not None:
+            related_checks.append(deleted_overtime_request)
+        if attendance_id is not None:
+            related_checks.append(updated_attendance)
+        related_checks.append(deleted_logs)
+
+        if deleted_notification and all(related_checks):
+            status = "success"
+        elif deleted_notification:
+            status = "partial"
+        else:
+            status = "failed"
         return jsonify({
-            "message": "Deleted"
+            "deleted_notification": deleted_notification,
+            "deleted_overtime_request": deleted_overtime_request,
+            "updated_attendance": updated_attendance,
+            "deleted_logs": deleted_logs,
+            "notification_id": noti_id,
+            "overtime_request_id": overtime_request_id,
+            "attendance_id": attendance_id,
+            "status": status,
         })
 
     except Exception as e:

@@ -1809,6 +1809,105 @@ class HRService:
         db.session.commit()
         return {"attendance_id": record.id, "action": action, "status": record.status}
 
+class OvertimeApprovalService:
+    @staticmethod
+    def enforce_time_window(start_at: datetime, end_at: datetime, target_date: date) -> tuple[datetime, datetime]:
+        window_start = datetime.combine(target_date, datetime.strptime("19:00", "%H:%M").time())
+        window_end = datetime.combine(target_date, datetime.strptime("22:00", "%H:%M").time())
+        effective_start = max(start_at, window_start)
+        effective_end = min(end_at, window_end)
+        return effective_start, effective_end
+
+    @staticmethod
+    def compute_final_overtime(attendance: Attendance | None, target_date: date) -> Decimal:
+        if not attendance or not attendance.overtime_check_in or not attendance.overtime_check_out:
+            return Decimal("0.00")
+        start_at = attendance.overtime_check_in.replace(tzinfo=None)
+        end_at = attendance.overtime_check_out.replace(tzinfo=None)
+        if end_at <= start_at:
+            return Decimal("0.00")
+        effective_start, effective_end = OvertimeApprovalService.enforce_time_window(start_at, end_at, target_date)
+        if effective_end <= effective_start:
+            return Decimal("0.00")
+        return Decimal(str((effective_end - effective_start).total_seconds() / 3600)).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def approve_hr(data: OvertimeApprovalDTO, actor_user_id: int | None = None) -> dict:
+        return HRService.review_overtime(data, actor_user_id=actor_user_id)
+
+    @staticmethod
+    def approve_admin(overtime_id: int, action: str, note: str, actor_user_id: int | None = None) -> dict:
+        row = OvertimeRequest.query.get(overtime_id)
+        if not row:
+            raise ValueError("Không tìm thấy dữ liệu tăng ca")
+        if row.status != "pending_admin":
+            raise ValueError("Yêu cầu OT này đã được xử lý trước đó")
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"approve", "reject"}:
+            raise ValueError("invalid action")
+        if normalized_action == "reject" and not (note or "").strip():
+            raise ValueError("Admin bắt buộc nhập lý do từ chối")
+
+        admin_employee = Employee.query.filter_by(user_id=actor_user_id, is_deleted=False).first() if actor_user_id else None
+        employee = Employee.query.get(row.employee_id)
+        now = datetime.utcnow()
+        note_clean = (note or "").strip()
+
+        try:
+            row.status = "approved" if normalized_action == "approve" else "rejected"
+            row.note = note_clean
+            row.approved_by = admin_employee.id if admin_employee else None
+            row.approved_at = now
+            row.rejection_reason = note_clean if normalized_action == "reject" else None
+            row.is_holiday_ot = bool(row.is_holiday_ot)
+            row.holiday_multiplier = Decimal("3.00") if row.is_holiday_ot else Decimal("1.00")
+
+            attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
+            computed_hours = OvertimeApprovalService.compute_final_overtime(attendance, row.overtime_date) if normalized_action == "approve" else Decimal("0.00")
+            row.approved_hours = computed_hours
+
+            if attendance:
+                attendance.overtime_hours = computed_hours
+                attendance.attendance_type = "holiday" if attendance.attendance_type == "holiday" else ("overtime" if computed_hours > 0 else "normal")
+
+            if employee and employee.user_id:
+                if normalized_action == "approve":
+                    start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "19:00"
+                    content = (
+                        "Yêu cầu tăng ca của bạn đã được phê duyệt.\n"
+                        f"Thời gian phản hồi: {now.strftime('%d/%m/%Y - %H:%M')}.\n"
+                        f"Ca OT dự kiến bắt đầu lúc: {start_text}.\nVui lòng chờ thông báo check-in."
+                    )
+                else:
+                    content = (
+                        "Yêu cầu tăng ca của bạn đã bị từ chối bởi Admin.\n"
+                        f"Thời gian phản hồi: {now.strftime('%d/%m/%Y - %H:%M')}.\n"
+                        f"Lý do: {note_clean}"
+                    )
+                db.session.add(
+                    Notification(
+                        user_id=employee.user_id,
+                        title="🔔 Yêu cầu đã được duyệt" if normalized_action == "approve" else "🔔 Yêu cầu bị từ chối",
+                        content=content,
+                        type="overtime",
+                        link="/employee/notifications",
+                    )
+                )
+
+            db.session.add(HistoryLog(
+                employee_id=row.employee_id,
+                action="ADMIN_FINAL_OVERTIME_REVIEW",
+                entity_type="overtime_request",
+                entity_id=row.id,
+                description=f"{normalized_action} overtime | {note_clean}",
+                performed_by=actor_user_id,
+            ))
+            db.session.commit()
+            return {"success": True}
+        except Exception:
+            db.session.rollback()
+            raise
+
     @staticmethod
     def detect_abnormal_attendance(month: int | None = None, year: int | None = None) -> list[dict]:
         data = HRService.get_attendance_list(AttendanceFilterDTO(month=month, year=year))

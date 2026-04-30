@@ -35,6 +35,7 @@ from app.models.notification import Notification
 from app.modules.resignation_service import ResignationService
 from app.modules.payroll_policy import PayrollPolicyService
 from app.modules.overtime_reset_service import reset_overtime_request_flow
+from app.modules.hr.service import OvertimeApprovalService
 from app.models.complaint import ComplaintMessage
 from . import admin_bp
 from . import service as admin_service
@@ -1632,78 +1633,26 @@ def attendance_overtime_final_review(overtime_id: int):
     actor = _current_user()
     if _role_name(actor).lower() != "admin":
         return jsonify({"error": "only admin can final approve overtime"}), 403
-    row = OvertimeRequest.query.get_or_404(overtime_id)
     payload = request.get_json(silent=True) or {}
     action = (payload.get("action") or "").strip().lower()
     note = (payload.get("note") or "").strip()
-    if action not in {"approve", "reject"}:
-        return jsonify({"error": "invalid action"}), 400
-    if action == "reject" and not note:
-        return jsonify({"error": "Admin bắt buộc nhập lý do từ chối"}), 400
-    if row.status != "pending_admin":
-        return jsonify({"error": "Yêu cầu OT này đã được xử lý trước đó"}), 409
-    print("==== BEFORE APPROVE ====")
-    print("request.id =", row.id)
-    print("request.status =", row.status)
-    print("request.hr_status =", getattr(row, "hr_status", None))
-    print("request.admin_status =", getattr(row, "admin_status", None))
-    row.status = "approved" if action == "approve" else "rejected"
-    row.note = note
-    admin_employee = Employee.query.filter_by(user_id=actor.id if actor else None, is_deleted=False).first()
-    row.approved_by = admin_employee.id if admin_employee else None
-    row.approved_at = datetime.utcnow()
-    row.approved_hours = (row.requested_hours or row.overtime_hours) if action == "approve" else Decimal("0.00")
-    row.rejection_reason = note if action == "reject" else None
-    row.is_holiday_ot = bool(row.is_holiday_ot)
-    row.holiday_multiplier = Decimal("3.00") if row.is_holiday_ot else Decimal("1.00")
-    print("==== AFTER UPDATE BEFORE COMMIT ====")
-    print("request.status =", row.status)
-    print("request.hr_status =", getattr(row, "hr_status", None))
-    print("request.admin_status =", getattr(row, "admin_status", None))
-    if action == "approve":
-        attendance = Attendance.query.filter_by(employee_id=row.employee_id, date=row.overtime_date).first()
-        if attendance:
-            attendance.overtime_hours = row.approved_hours or row.requested_hours or row.overtime_hours
-            attendance.attendance_type = "holiday" if attendance.attendance_type == "holiday" else "overtime"
-    employee = Employee.query.get(row.employee_id)
-    if employee and employee.user_id:
-        if action == "approve":
-            start_text = row.start_ot_time.strftime("%H:%M") if row.start_ot_time else "19:00"
-            content = (
-                "Yêu cầu tăng ca của bạn đã được phê duyệt.\n"
-                f"Thời gian phản hồi: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
-                f"Ca OT dự kiến bắt đầu lúc: {start_text}.\nVui lòng chờ thông báo check-in."
-            )
-        else:
-            content = (
-                "Yêu cầu tăng ca của bạn đã bị từ chối bởi Admin.\n"
-                f"Thời gian phản hồi: {datetime.utcnow().strftime('%d/%m/%Y - %H:%M')}.\n"
-                f"Lý do: {note}"
-            )
-        db.session.add(
-            Notification(
-                user_id=employee.user_id,
-                title="🔔 Yêu cầu đã được duyệt" if action == "approve" else "🔔 Yêu cầu bị từ chối",
-                content=content,
-                type="overtime",
-                link="/employee/notifications",
-            )
+    try:
+        result = OvertimeApprovalService.approve_admin(
+            overtime_id=overtime_id,
+            action=action,
+            note=note,
+            actor_user_id=actor.id if actor else None,
         )
-    db.session.add(HistoryLog(
-        employee_id=row.employee_id,
-        action="ADMIN_FINAL_OVERTIME_REVIEW",
-        entity_type="overtime_request",
-        entity_id=row.id,
-        description=f"{action} overtime | {note}",
-        performed_by=actor.id if actor else None,
-    ))
-    db.session.commit()
-    db.session.refresh(row)
-    print("==== AFTER COMMIT ====")
-    print("request.status =", row.status)
-    print("request.hr_status =", getattr(row, "hr_status", None))
-    print("request.admin_status =", getattr(row, "admin_status", None))
-    return jsonify({"success": True})
+        return jsonify(result)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "Yêu cầu OT này đã được xử lý trước đó":
+            return jsonify({"error": message}), 409
+        if message in {"invalid action", "Admin bắt buộc nhập lý do từ chối"}:
+            return jsonify({"error": message}), 400
+        if message == "Không tìm thấy dữ liệu tăng ca":
+            return jsonify({"error": message}), 404
+        return jsonify({"error": message}), 400
 
 @admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/reset")
 def attendance_overtime_reset(overtime_id: int):
@@ -1818,10 +1767,21 @@ def _payroll_row(row: Salary):
     base_deduction = Decimal(str(row.penalty or 0))
     standard_days = int(row.standard_work_days or 22)
     late_penalty = _late_penalty(employee.id, row.month, row.year, basic_salary, standard_days) if employee else Decimal("0")
-    overtime_pay = (Decimal(str(row.total_work_days or 0)) - Decimal(str(standard_days)))
-    if overtime_pay < 0:
-        overtime_pay = Decimal("0")
-    overtime_pay = (overtime_pay * (basic_salary / Decimal(str(max(standard_days, 1)))) * Decimal("1.5")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    overtime_hours_used = Decimal("0")
+    if employee:
+        overtime_hours_used = Decimal(str(
+            db.session.query(func.coalesce(func.sum(Attendance.overtime_hours), 0))
+            .filter(
+                Attendance.employee_id == employee.id,
+                func.extract("month", Attendance.date) == row.month,
+                func.extract("year", Attendance.date) == row.year,
+                Attendance.is_deleted.is_(False),
+            )
+            .scalar()
+            or 0
+        ))
+    hourly_rate = (basic_salary / Decimal(str(max(standard_days, 1))) / Decimal("8")) if basic_salary > 0 else Decimal("0")
+    overtime_pay = (overtime_hours_used * hourly_rate * Decimal("1.5")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     gross = basic_salary + total_allowance + bonus + overtime_pay
     taxable_income = max(Decimal("0"), gross - total_allowance)
     insurance_rate = Decimal(str(policy["insurance"]["total_percent"])) / Decimal("100")
@@ -1850,6 +1810,8 @@ def _payroll_row(row: Salary):
         "deduction": float(base_deduction + late_penalty),
         "late_penalty": float(late_penalty),
         "ot": float(overtime_pay),
+        "overtime_hours_used": float(overtime_hours_used),
+        "overtime_source": "attendance_pipeline",
         "insurance": float(insurance),
         "tax": float(tax),
         "dependent_deduction": float(dependent_deduction),
