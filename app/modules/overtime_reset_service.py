@@ -6,7 +6,7 @@ from app.models import Attendance, HistoryLog, Notification, OvertimeRequest, Em
 from app.models.base import db
 
 
-def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user_id: int | None = None, source: str = "system") -> dict:
+def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user_id: int | None = None, source: str = "system", anchor_notification_id: int | None = None) -> dict:
     overtime_date = overtime_request.overtime_date
     employee = Employee.query.get(overtime_request.employee_id)
     user_id = employee.user_id if employee else None
@@ -20,7 +20,7 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
     deleted_notifications = 0
     if user_id:
         date_token = overtime_date.strftime("%d/%m/%Y")
-        notification_query = Notification.query.filter(
+        overtime_like_query = Notification.query.filter(
             Notification.user_id == user_id,
             Notification.is_deleted.is_(False),
             or_(
@@ -30,6 +30,23 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
             ),
             Notification.content.ilike(f"%{date_token}%"),
         )
+
+        extra_ids = []
+        if anchor_notification_id is not None:
+            extra_ids.append(anchor_notification_id)
+
+        if extra_ids:
+            notification_query = Notification.query.filter(
+                Notification.user_id == user_id,
+                Notification.is_deleted.is_(False),
+                or_(
+                    Notification.id.in_(extra_ids),
+                    overtime_like_query.whereclause,
+                ),
+            )
+        else:
+            notification_query = overtime_like_query
+
         deleted_notifications = notification_query.count()
         notification_query.delete(synchronize_session=False)
 

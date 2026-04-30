@@ -205,7 +205,7 @@ class EmployeeDashboardService:
     @staticmethod
     def get_notifications(user_id: int, limit: int = 5):
         return (
-            Notification.query.filter_by(user_id=user_id)
+            Notification.query.filter_by(user_id=user_id, is_deleted=False)
             .order_by(Notification.created_at.desc())
             .limit(limit)
             .all()
@@ -1381,12 +1381,20 @@ def reset_overtime_from_notification(noti_id: int):
         .first()
     )
     if not row:
+        if noti.is_deleted is False:
+            noti.is_deleted = True
+            db.session.commit()
         return jsonify({
             "ok": True,
             "already_deleted": True,
             "message": "OT request liên quan đã được xóa trước đó",
         })
-    return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=user.id, source="employee"))
+    return jsonify(reset_overtime_request_flow(
+        overtime_request=row,
+        actor_user_id=user.id,
+        source="employee",
+        anchor_notification_id=noti.id,
+    ))
 
 
 @employee_bp.route("/complaints/<int:complaint_id>/close", methods=["POST"])
