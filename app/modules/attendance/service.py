@@ -405,3 +405,32 @@ class AttendanceService:
         ).order_by(
             Attendance.date.desc()
         ).limit(limit).all()
+
+    @staticmethod
+    def delete_attendance(employee_id: int, date_str: str):
+        """
+        Xóa bản ghi chấm công theo ngày của nhân sự.
+        Trả về ngày chấm công gần nhất còn lại (hoặc None).
+        """
+        try:
+            target_date = datetime.fromisoformat(date_str).date()
+        except (TypeError, ValueError):
+            raise ValidationError("Ngày không hợp lệ. Dùng định dạng YYYY-MM-DD")
+
+        record = Attendance.query.filter_by(
+            employee_id=employee_id,
+            date=target_date,
+        ).first()
+
+        if not record:
+            raise ValidationError("Không tìm thấy dữ liệu chấm công trong ngày đã chọn")
+
+        db.session.delete(record)
+        db.session.commit()
+
+        last_record = (
+            Attendance.query.filter_by(employee_id=employee_id)
+            .order_by(Attendance.date.desc())
+            .first()
+        )
+        return last_record.date if last_record else None

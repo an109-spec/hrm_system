@@ -1996,8 +1996,7 @@ const scanner = HRMQRScanner.createQRScanner({
   panelId: "scannerPanel",
 
   onDecoded: async (decodedText) => {
-    if (submitState.attendance || submitState.scanner) return;
-
+    if (submitState.attendance) return;
     try {
       await submitAttendanceFromQR(decodedText);
     } catch (err) {
@@ -2042,6 +2041,7 @@ async function openScannerModal() {
     submitState.scanner = true;
     await scanner.open();
     state.isScannerOpen = true;
+    submitState.scanner = false;
   } catch (err) {
     state.isScannerOpen = false;
     submitState.scanner = false;
