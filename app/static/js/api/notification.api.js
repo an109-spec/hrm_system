@@ -15,5 +15,11 @@ export const NotificationAPI = {
     return request("/notifications/read-all", {
       method: "POST"
     });
+  },
+
+  delete(id) {
+    return request(`/notifications/${id}`, {
+      method: "DELETE"
+    });
   }
 };
