@@ -659,7 +659,7 @@ function renderState() {
         "🟡 Nghỉ trước tăng ca";
 
       buttonText =
-        "⏳ Chờ vào ca OT lúc 19:00";
+        "⏳ Chờ vào ca OT theo lịch đã duyệt";
 
       buttonDisabled = true;
       buttonClass =
@@ -1029,11 +1029,7 @@ async function submitAttendanceFromQR(decodedText) {
 
     if (data.action === "check_out") {
       const canInviteOt = state.nextEvent === "offer_overtime";
-      const noValidOtRequest =
-        !state.todayOtRequest.status ||
-        state.todayOtRequest.status === "rejected";
-
-      if (canInviteOt && noValidOtRequest) {
+      if (canInviteOt) {
         const otDecision = await Swal.fire({
           icon: "question",
           title: "Bạn có muốn đăng ký tăng ca không?",
@@ -1142,31 +1138,8 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
 
   try {
     const payload = {
-      request_type: requestType,
-      overtime_date: dateKeyOf(new Date(root.dataset.serverNow)),
-
-      reason:
-        options.reason ||
-        (
-          requestType === "holiday"
-            ? "Đăng ký làm việc ngày nghỉ lễ"
-            : "Đăng ký tăng ca sau giờ hành chính"
-        ),
-
-      note:
-        requestType === "holiday"
-          ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in."
-          : "Yêu cầu OT sau giờ làm từ popup 17:00."
+      request_type: requestType
     };
-
-    if (requestType !== "holiday") {
-      payload.start_ot_time =
-        options.start || "19:00";
-
-      payload.end_ot_time =
-        options.end || "22:00";
-    }
-
     const res = await fetch(
       "/employee/attendance/overtime-request",
       {
