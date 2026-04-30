@@ -730,7 +730,7 @@ def check_in_out():
     # =========================
     try:
         today = current_time.date()
-
+        today_holiday = _get_holiday_for_date(today)
         attendance = Attendance.query.filter_by(
             employee_id=employee.id,
             date=today
@@ -745,7 +745,6 @@ def check_in_out():
         # =========================
         if not attendance:
             overtime_confirmed = bool(payload.get("overtime_confirmed"))
-            today_holiday = _get_holiday_for_date(today)
             is_weekend = today.weekday() >= 5
             is_non_working_day = bool(today_holiday) or is_weekend
             if is_non_working_day:
@@ -867,8 +866,6 @@ def check_in_out():
                 effective_start,
                 min(attendance.check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
-            if check_in_time.time() > HALF_DAY_LATE_CUTOFF:
-                regular_hours = Decimal("4.00")
             ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
             ot_policy_end = datetime.combine(today, AttendanceService.OT_END)
             approved_ot_start = (
@@ -893,6 +890,24 @@ def check_in_out():
             attendance.overtime_hours = overtime_hours_payroll
             worked_hours = regular_hours_payroll + overtime_hours_payroll
             attendance.working_hours = worked_hours
+
+            overtime_status = "NONE"
+            pending_ot_request = OvertimeRequest.query.filter(
+                OvertimeRequest.employee_id == employee.id,
+                OvertimeRequest.overtime_date == today,
+                OvertimeRequest.is_deleted.is_(False),
+                OvertimeRequest.status == "pending",
+            ).first()
+            if approved_ot_request:
+                overtime_status = "APPROVED"
+            elif pending_ot_request:
+                overtime_status = "PENDING"
+
+            attendance_status = (
+                "HALF_DAY"
+                if check_in_time.time() > HALF_DAY_LATE_CUTOFF
+                else "FULL_DAY"
+            )
             if is_holiday_shift:
                 attendance.attendance_type = "holiday"
             elif overtime_hours > 0:
@@ -949,6 +964,12 @@ def check_in_out():
                 "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
                 "check_out": attendance.check_out.isoformat() if attendance.check_out else None,
                 "status_key": status_key,
+                "main_hours": float(regular_hours_payroll),
+                "total_hours": float(worked_hours),
+                "status": attendance_status,
+                "is_holiday": bool(today_holiday),
+                "is_weekend": bool(today.weekday() >= 5),
+                "overtime_status": overtime_status,
             })
 
         # =========================
