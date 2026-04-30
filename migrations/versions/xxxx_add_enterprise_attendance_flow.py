@@ -3,7 +3,7 @@
 """add enterprise attendance flow
 
 Revision ID: add_enterprise_attendance_flow
-Revises: <last_revision_id>
+Revises: 7c3b2a1f9d10
 Create Date: 2026-04-30
 
 """
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # sửa đúng revision trước đó của bạn
 revision = "add_enterprise_attendance_flow"
-down_revision = "<last_revision_id>"
+down_revision = "7c3b2a1f9d10"
 branch_labels = None
 depends_on = None
 

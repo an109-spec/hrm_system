@@ -216,8 +216,16 @@
   class="emp-card emp-center" 
   id="attendanceRoot"
 
-  data-has-attendance="{{ 1 if today else 0 }}"
-  data-has-checkout="{{ 1 if today and today.check_out else 0 }}"
+data-shift-status="{{ today.shift_status if today else 'not_started' }}"
+
+data-overtime-checkin="{{ today.overtime_check_in.isoformat() if today and today.overtime_check_in else '' }}"
+data-overtime-checkout="{{ today.overtime_check_out.isoformat() if today and today.overtime_check_out else '' }}"
+
+data-is-half-day="{{ 1 if today and today.is_half_day else 0 }}"
+data-late-minutes="{{ (today.late_minutes or 0) if today else 0 }}"
+
+data-is-weekend="{{ 1 if today and today.is_weekend else 0 }}"
+data-is-holiday="{{ 1 if today and today.is_holiday else 0 }}"
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
@@ -232,6 +240,7 @@
   data-today-ot-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
   data-can-reset-ot-request="{{ 1 if can_reset_ot_request else 0 }}"
   data-server-now="{{ now.isoformat() }}"
+  data-today-ot-request-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
 >
 
   <h3>🕒 Chấm công</h3>
@@ -284,12 +293,13 @@
   </p>
   <!-- ACTION -->
   <div class="attendance-actions">
-    <button 
-      id="attendanceBtn" 
-      class="btn btn-primary" 
-      onclick="openScannerModal()"
-    >
-      🔳 QUÉT QR CHECK-IN
+<button 
+  type="button"
+  id="attendanceBtn" 
+  class="btn btn-primary" 
+  onclick="openScannerModal()"
+>
+🔳 XÁC THỰC CHẤM CÔNG
     </button>
   </div>
 
@@ -343,25 +353,34 @@
           <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
           <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
           <td>
-            {% if not a.check_in %}
-              <span class="status status-danger">❌ Vắng</span>
-            {% elif a.check_in and not a.check_out %}
-              <span class="status status-warning">🟡 Đang làm</span>
+            {% if a.shift_status == "not_started" %}
+              <span class="status status-danger">❌ Chưa vào ca</span>
+            {% elif a.shift_status == "late" %}
+              <span class="status status-late">⏰ Đi muộn</span>
+
+            {% elif a.shift_status == "early_leave" %}
+              <span class="status status-early">🏃 Về sớm</span>
+            {% elif a.shift_status == "working" %}
+              <span class="status status-warning">🟡 Đang làm ca chính</span>
+
+            {% elif a.shift_status == "regular_completed" %}
+              <span class="status status-success">✅ Hoàn thành ca chính</span>
+
+            {% elif a.shift_status == "pre_ot_rest" %}
+              <span class="status status-warning">☕ Nghỉ trước OT</span>
+
+            {% elif a.shift_status == "overtime_working" %}
+              <span class="status status-late">🟣 Đang tăng ca</span>
+
+            {% elif a.shift_status == "completed" %}
+              <span class="status status-success">🏁 Hoàn tất ngày công</span>
 
             {% else %}
-              {% set hour = a.check_in.hour %}
-              {% set minute = a.check_in.minute %}
-              {% if hour > 8 or (hour == 8 and minute > 0) %}
-                <span class="status status-late">⏰ Đi muộn</span>
-              {% elif a.check_out and a.check_out.hour < 17 %}
-                <span class="status status-early">🏃 Về sớm</span>
-              {% else %}
-                <span class="status status-success">✅ Hoàn thành</span>
-              {% endif %}
+              <span class="status status-danger">—</span>
             {% endif %}
           </td>
           <td>
-            <button class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
+            <button  type="button" class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
           </td>
         </tr>
         {% endfor %}
@@ -384,7 +403,7 @@
       </div>
     </div>
     <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:10px;">
-      <button class="btn" onclick="closeScannerModal()">Đóng</button>
+      <button  type="button" class="btn" onclick="closeScannerModal()">Đóng</button>
     </div>
   </div>
 </div>
@@ -394,50 +413,91 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
-const root = document.getElementById('attendanceRoot');
-const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const root = document.getElementById("attendanceRoot");
+const SHARED_SIM_TIME_KEY = "hrm_simulated_now";
 const HOLIDAY_LOOKUP = {{ holiday_lookup|tojson }};
+
 const attendanceByDate = new Map([
   {% if today %}
-  ["{{ today.date.isoformat() }}", {
-    hasAttendance: {{ 'true' if today.check_in else 'false' }},
-    hasCheckout: {{ 'true' if today.check_out else 'false' }},
-    checkIn: "{{ today.check_in.isoformat() if today.check_in else '' }}",
-    checkOut: "{{ today.check_out.isoformat() if today.check_out else '' }}",
-    workedHours: {{ (today.working_hours or 0)|float }},
-    regularHours: {{ (today.regular_hours or 0)|float }},
-    overtimeHours: {{ (today.overtime_hours or 0)|float }}
-  }],
+  [
+    "{{ today.date.isoformat() }}",
+    {
+      hasAttendance: {{ "true" if today.check_in else "false" }},
+      hasCheckout: {{ "true" if today.check_out else "false" }},
+      checkIn: "{{ today.check_in.isoformat() if today.check_in else '' }}",
+      checkOut: "{{ today.check_out.isoformat() if today.check_out else '' }}",
+      workedHours: {{ (today.working_hours or 0)|float }},
+      regularHours: {{ (today.regular_hours or 0)|float }},
+      overtimeHours: {{ (today.overtime_hours or 0)|float }}
+    }
+  ],
   {% endif %}
+
   {% for a in history %}
-  ["{{ a.date.isoformat() }}", {
-    hasAttendance: {{ 'true' if a.check_in else 'false' }},
-    hasCheckout: {{ 'true' if a.check_out else 'false' }},
-    checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
-    checkOut: "{{ a.check_out.isoformat() if a.check_out else '' }}",
-    workedHours: {{ (a.working_hours or 0)|float }},
-    regularHours: {{ (a.regular_hours or 0)|float }},
-    overtimeHours: {{ (a.overtime_hours or 0)|float }}
-  }],
+  [
+    "{{ a.date.isoformat() }}",
+    {
+      hasAttendance: {{ "true" if a.check_in else "false" }},
+      hasCheckout: {{ "true" if a.check_out else "false" }},
+      checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
+      checkOut: "{{ a.check_out.isoformat() if a.check_out else '' }}",
+      workedHours: {{ (a.working_hours or 0)|float }},
+      regularHours: {{ (a.regular_hours or 0)|float }},
+      overtimeHours: {{ (a.overtime_hours or 0)|float }}
+    }
+  ],
   {% endfor %}
 ]);
+
 let isSubmittingAttendance = false;
+const todayOtRequest = {
+  status: root.dataset.todayOtStatus || "",
+  createdAt: root.dataset.todayOtCreatedAt
+    ? new Date(root.dataset.todayOtCreatedAt)
+    : null,
+
+  requestedHours: Number(root.dataset.todayOtHours || 0),
+
+  startAt: root.dataset.todayOtStart
+    ? new Date(root.dataset.todayOtStart)
+    : null,
+
+  endAt: root.dataset.todayOtEnd
+    ? new Date(root.dataset.todayOtEnd)
+    : null,
+
+  requestType:
+    root.dataset.todayOtRequestType ||
+    root.dataset.todayOtType ||
+    ""
+};
+
 
 function readSharedSimTime(fallback) {
   try {
     const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
     if (!raw) return fallback;
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) return fallback;
-    const toDateKey = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-    // Chỉ dùng giờ mô phỏng khi cùng ngày với server để tránh lệch
-    // trạng thái chấm công "hôm nay" do localStorage cũ.
-    if (toDateKey(parsed) !== toDateKey(fallback)) return fallback;
+    const parsed = new Date(raw);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return fallback;
+    }
+
+    const toDateKey = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+
+    // Chỉ dùng simulated time khi cùng ngày với server
+    if (toDateKey(parsed) !== toDateKey(fallback)) {
+      return fallback;
+    }
 
     return parsed;
-  } catch (_) {
+  } catch (error) {
     return fallback;
   }
 }
@@ -448,40 +508,105 @@ function persistSharedSimTime(date) {
   } catch (_) {}
 }
 const state = {
-  isOvertime: false,
-  overtimeDeclined: false,
-  overtimeStartAt: null,
-  overtimeStarted: false,
-  isPreOvertimeRest: false,
-  now: readSharedSimTime(new Date(root.dataset.serverNow)),
-  hasAttendance: root.dataset.hasAttendance === '1',
-  hasCheckout: root.dataset.hasCheckout === '1',
-  checkIn: root.dataset.checkin ? new Date(root.dataset.checkin) : null,
-  checkOut: root.dataset.checkout ? new Date(root.dataset.checkout) : null,
-  workedHours: Number(root.dataset.workedHours || 0),
+  shiftStatus: root.dataset.shiftStatus || "not_started",
+
+  checkIn: root.dataset.checkin
+    ? new Date(root.dataset.checkin)
+    : null,
+
+  checkOut: root.dataset.checkout
+    ? new Date(root.dataset.checkout)
+    : null,
+
+  overtimeCheckIn: root.dataset.overtimeCheckin
+    ? new Date(root.dataset.overtimeCheckin)
+    : null,
+
+  overtimeCheckOut: root.dataset.overtimeCheckout
+    ? new Date(root.dataset.overtimeCheckout)
+    : null,
+
   regularHours: Number(root.dataset.regularHours || 0),
   overtimeHours: Number(root.dataset.overtimeHours || 0),
-  scanEngine: null,
-  isScannerOpen: false,
-  currentDate: null,
+
+  isHalfDay: root.dataset.isHalfDay === "1",
+  lateMinutes: Number(root.dataset.lateMinutes || 0),
+
+  isWeekend: root.dataset.isWeekend === "1",
+  isHoliday: root.dataset.isHoliday === "1",
+
+  now: readSharedSimTime(
+    new Date(root.dataset.serverNow)
+  ),
+
+  /* =========================
+     FIX QUAN TRỌNG NHẤT
+  ========================= */
+
+  todayOtRequest: {
+    status: root.dataset.todayOtStatus || "",
+
+    createdAt: root.dataset.todayOtCreatedAt
+      ? new Date(root.dataset.todayOtCreatedAt)
+      : null,
+
+    requestedHours: Number(
+      root.dataset.todayOtHours || 0
+    ),
+
+    startAt: root.dataset.todayOtStart
+      ? new Date(root.dataset.todayOtStart)
+      : null,
+
+    endAt: root.dataset.todayOtEnd
+      ? new Date(root.dataset.todayOtEnd)
+      : null,
+
+    requestType:
+      root.dataset.todayOtRequestType ||   // FIX CHUẨN
+      root.dataset.todayOtType ||          // fallback cũ
+      ""
+  },
+
   notices: {
     otInvite: false,
     otStart: false,
-    otEnd: false
+    otEnd: false,
+    shiftEndCheckoutPrompt: false
   },
+
   pendingCheckoutWithoutOT: false,
-  todayOtRequest: {
-    status: root.dataset.todayOtStatus || "",
-    requestType: root.dataset.todayOtType || "",
-    createdAt: root.dataset.todayOtCreatedAt ? new Date(root.dataset.todayOtCreatedAt) : null,
-    requestedHours: Number(root.dataset.todayOtHours || 0),
-    startAt: root.dataset.todayOtStart ? new Date(root.dataset.todayOtStart) : null,
-    endAt: root.dataset.todayOtEnd ? new Date(root.dataset.todayOtEnd) : null,
-  }
+
+  hasAttendance: false,
+  hasCheckout: false,
+  workedHours: 0,
+  currentDate: null
 };
-state.isOvertime = ["pending_hr", "pending_admin", "approved"].includes(state.todayOtRequest.status);
-state.isPreOvertimeRest = state.isOvertime && state.hasAttendance && !state.hasCheckout && state.now.getHours() >= 17 && state.now.getHours() < 19;
-state.overtimeStarted = state.isOvertime && state.now.getHours() >= 19;
+
+const isApprovedOt =
+  state.todayOtRequest.status === "approved";
+
+const hasPendingOt =
+  ["pending_hr", "pending_admin"].includes(
+    state.todayOtRequest.status
+  );
+
+state.isOvertime = isApprovedOt;
+
+state.isPreOvertimeRest =
+  isApprovedOt &&
+  state.hasAttendance &&
+  !state.hasCheckout &&
+  state.now.getHours() >= 17 &&
+  state.now.getHours() < 19;
+
+state.overtimeStarted =
+  isApprovedOt &&
+  state.hasAttendance &&
+  !state.hasCheckout &&
+  state.now.getHours() >= 19;
+
+
 const dateKeyOf = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -489,70 +614,183 @@ const dateKeyOf = (d) => {
 
 function syncAttendanceStateByDate(force = false) {
   const key = dateKeyOf(state.now);
-  if (!force && key === state.currentDate) return;
 
-  state.currentDate = key;
-  const record = attendanceByDate.get(key);
-
-  if (!record) {
-    state.hasAttendance = false;
-    state.hasCheckout = false;
-    state.checkIn = null;
-    state.checkOut = null;
-    state.workedHours = 0;
-    state.regularHours = 0;
-    state.overtimeHours = 0;
+  if (!force && key === state.currentDate) {
     return;
   }
 
+  state.currentDate = key;
+
+  const record = attendanceByDate.get(key);
+
+  // =========================
+  // Không có dữ liệu ngày này
+  // =========================
+  if (!record) {
+    state.hasAttendance = false;
+    state.hasCheckout = false;
+
+    state.checkIn = null;
+    state.checkOut = null;
+
+    state.workedHours = 0;
+    state.regularHours = 0;
+    state.overtimeHours = 0;
+
+    // reset trạng thái ca
+    state.shiftStatus = "not_started";
+
+    // reset OT runtime state
+    state.isOvertime = false;
+    state.isPreOvertimeRest = false;
+    state.overtimeStarted = false;
+
+    return;
+  }
+
+  // =========================
+  // Có dữ liệu
+  // =========================
   state.hasAttendance = Boolean(record.hasAttendance);
   state.hasCheckout = Boolean(record.hasCheckout);
-  state.checkIn = record.checkIn ? new Date(record.checkIn) : null;
-  state.checkOut = record.checkOut ? new Date(record.checkOut) : null;
-  state.workedHours = Number(record.workedHours || 0);
-  state.regularHours = Number(record.regularHours || 0);
-  state.overtimeHours = Number(record.overtimeHours || 0);
+
+  state.checkIn = record.checkIn
+    ? new Date(record.checkIn)
+    : null;
+
+  state.checkOut = record.checkOut
+    ? new Date(record.checkOut)
+    : null;
+
+  state.workedHours = Number(
+    record.workedHours || 0
+  );
+
+  state.regularHours = Number(
+    record.regularHours || 0
+  );
+
+  state.overtimeHours = Number(
+    record.overtimeHours || 0
+  );
 }
 
 function toLocalISO(date) {
-  const pad = n => String(n).padStart(2,'0');
-  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3,'0')}`;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
-const fmtHm = (d) =>
-  `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+const fmtHm = (d) => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return "--:--";
+  }
+
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
 const fmtDateTime = (d) => {
-  if (!d) return "--";
-  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} - ${fmtHm(d)}`;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return "--";
+  }
+
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} - ${fmtHm(d)}`;
 };
 
 const isLunchBreak = (d) => d.getHours() === 12;
 
-const isNewDay = (now, lastCheckin) => {
+function isNewDay(now, lastCheckin) {
   if (!lastCheckin) return true;
-  return now.getDate() !== lastCheckin.getDate() ||
-         now.getMonth() !== lastCheckin.getMonth();
-};
+
+  return (
+    now.getDate() !== lastCheckin.getDate() ||
+    now.getMonth() !== lastCheckin.getMonth() ||
+    now.getFullYear() !== lastCheckin.getFullYear()
+  );
+}
+
 function maybeNotifyOvertimeWindow() {
   const hour = state.now.getHours();
   const minute = state.now.getMinutes();
-  const isWorkingSession = state.hasAttendance && !state.hasCheckout;
 
-  const hasOtRequest = ["pending_hr", "pending_admin", "approved"].includes(state.todayOtRequest.status);
-  const hasApprovedOt = state.todayOtRequest.status === "approved";
-  const isAfterShiftStart = hour > 17 || (hour === 17 && minute >= 0);
+  const isWorkingSession =
+    state.hasAttendance &&
+    !state.hasCheckout;
+
+  const otStatusList = [
+    "pending_hr",
+    "pending_admin",
+    "approved"
+  ];
+
+  const hasOtRequest =
+    otStatusList.includes(state.todayOtRequest.status);
+
+  const hasApprovedOt =
+    state.todayOtRequest.status === "approved";
+
+  const isAfterShiftStart =
+    hour > 17 || (hour === 17 && minute >= 0);
+
+  const isOtStartTime =
+    hour >= 19;
+
+  const isOtEndTime =
+    hour >= 22;
+
+  /*
+  =========================
+  RESET NOTICE KHI CHƯA TỚI GIỜ
+  =========================
+  */
+
   if (!isAfterShiftStart) {
     state.notices.otInvite = false;
     state.notices.shiftEndCheckoutPrompt = false;
   }
-  if (isWorkingSession && isAfterShiftStart && !state.notices.shiftEndCheckoutPrompt) {
+
+  if (!isOtStartTime) {
+    state.notices.otStart = false;
+  }
+
+  if (!isOtEndTime) {
+    state.notices.otEnd = false;
+  }
+
+  /*
+  =========================
+  HẾT CA CHÍNH (17:00)
+  =========================
+
+  Nếu KHÔNG có OT:
+  → bắt checkout
+
+  Nếu CÓ OT:
+  → chuyển sang nghỉ trước OT
+  → KHÔNG checkout
+  */
+
+  if (
+    isWorkingSession &&
+    isAfterShiftStart &&
+    !hasApprovedOt &&
+    !state.notices.shiftEndCheckoutPrompt
+  ) {
     state.notices.shiftEndCheckoutPrompt = true;
+
     Swal.fire({
       icon: "info",
       title: "Thông báo tan ca",
-      html: "Đã hết ca làm việc hành chính.<br><br>Vui lòng thực hiện <b>CHECK-OUT</b> để hoàn tất ca làm hôm nay.",
+      html:
+        "Đã hết ca làm việc hành chính.<br><br>" +
+        "Vui lòng thực hiện <b>CHECK-OUT</b> để hoàn tất ca làm hôm nay.",
       confirmButtonText: "Check-out ngay",
       allowOutsideClick: false,
-      allowEscapeKey: false,
+      allowEscapeKey: false
     }).then((result) => {
       if (result.isConfirmed) {
         openScannerModal();
@@ -560,193 +798,588 @@ function maybeNotifyOvertimeWindow() {
     });
   }
 
+  /*
+  =========================
+  CÓ OT ĐƯỢC DUYỆT
+  17:00 → 19:00 nghỉ trước OT
+  =========================
+  */
+
   if (
     hasApprovedOt &&
-    (hour >= 19) &&
+    isAfterShiftStart &&
+    !isOtStartTime
+  ) {
+    state.isPreOvertimeRest = true;
+    state.overtimeStarted = false;
+  }
+
+  /*
+  =========================
+  19:00 BẮT ĐẦU OT
+  =========================
+  */
+
+  if (
+    hasApprovedOt &&
+    isOtStartTime &&
     !state.notices.otStart
   ) {
     state.notices.otStart = true;
+
     state.overtimeStarted = true;
     state.isPreOvertimeRest = false;
-    Swal.fire({ icon: "info", title: "Ca tăng ca đã bắt đầu", text: "Vui lòng check-in để bắt đầu OT." });
+
+    Swal.fire({
+      icon: "info",
+      title: "Ca tăng ca đã bắt đầu",
+      text: "Vui lòng check-in để bắt đầu tăng ca."
+    });
   }
 
-  if (hasApprovedOt && hour >= 22 && !state.notices.otEnd) {
+  /*
+  =========================
+  22:00 KẾT THÚC OT
+  =========================
+  */
+
+  if (
+    hasApprovedOt &&
+    isOtEndTime &&
+    !state.notices.otEnd
+  ) {
     state.notices.otEnd = true;
-    Swal.fire({ icon: "warning", title: "Ca tăng ca hôm nay đã kết thúc", text: "Vui lòng check-out để hoàn tất chấm công tăng ca." });
+
+    Swal.fire({
+      icon: "warning",
+      title: "Ca tăng ca hôm nay đã kết thúc",
+      text:
+        "Vui lòng check-out để hoàn tất chấm công tăng ca."
+    });
   }
 }
-/* ===================== FIX QUAN TRỌNG ===================== */ 
-/* KHỚP BACKEND */
+
 const calcEffectiveStart = (checkInDate) => {
-  return new Date(checkInDate);
-};
+  if (!checkInDate) return null;
 
-/* ===================== WORKING TIME (preview realtime) ===================== */
-function calcWorkedDuration(now) {
-  if (!state.checkIn) return {hours:0, minutes:0};
+  const effective = new Date(checkInDate);
 
-  const end = state.checkOut || now;
-  if (end <= state.checkIn) return {hours:0, minutes:0};
+  /*
+  =========================
+  HALF DAY
+  =========================
+  */
 
-  let effectiveStart = calcEffectiveStart(state.checkIn);
-  const regularEnd = new Date(effectiveStart);
-  regularEnd.setHours(17, 0, 0, 0);
-  const cappedEnd = end > regularEnd ? regularEnd : end;
-
-  if (cappedEnd <= effectiveStart) return {hours:0, minutes:0};
-  let ms = cappedEnd - effectiveStart;
-
-  // trừ nghỉ trưa
-  const lunchStart = new Date(effectiveStart);
-  lunchStart.setHours(12,0,0,0);
-
-  const lunchEnd = new Date(effectiveStart);
-  lunchEnd.setHours(13,0,0,0);
-
-  if (cappedEnd > lunchStart) {
-    const overlap =
-      Math.min(cappedEnd, lunchEnd) - Math.max(effectiveStart, lunchStart);
-    if (overlap > 0) ms -= overlap;
+  if (state.isHalfDay) {
+    effective.setHours(13, 0, 0, 0);
+    return effective;
   }
 
-  const totalMin = Math.max(0, Math.floor(ms/60000));
+  /*
+  =========================
+  ĐI MUỘN
+  =========================
+  */
+
+  const standardStart = new Date(checkInDate);
+  standardStart.setHours(8, 0, 0, 0);
+
+  if (effective < standardStart) {
+    return standardStart;
+  }
+
+  return effective;
+};
+
+
+/* =====================
+   WORKING TIME PREVIEW
+===================== */
+
+function calcWorkedDuration(now) {
+  if (!state.checkIn) {
+    return {
+      hours: 0,
+      minutes: 0
+    };
+  }
+
+  const end = state.checkOut || now;
+
+  if (end <= state.checkIn) {
+    return {
+      hours: 0,
+      minutes: 0
+    };
+  }
+
+  /*
+  =========================
+  CA CHÍNH
+  =========================
+  */
+
+  const effectiveStart =
+    calcEffectiveStart(state.checkIn);
+
+  if (!effectiveStart) {
+    return {
+      hours: 0,
+      minutes: 0
+    };
+  }
+
+  const regularEnd = new Date(effectiveStart);
+  regularEnd.setHours(17, 0, 0, 0);
+
+  const regularCappedEnd =
+    end > regularEnd ? regularEnd : end;
+
+  let regularMs = 0;
+
+  if (regularCappedEnd > effectiveStart) {
+    regularMs =
+      regularCappedEnd - effectiveStart;
+
+    /*
+    =========================
+    TRỪ NGHỈ TRƯA
+    =========================
+    */
+
+    if (!state.isHalfDay) {
+      const lunchStart = new Date(effectiveStart);
+      lunchStart.setHours(12, 0, 0, 0);
+
+      const lunchEnd = new Date(effectiveStart);
+      lunchEnd.setHours(13, 0, 0, 0);
+
+      if (regularCappedEnd > lunchStart) {
+        const overlap =
+          Math.min(regularCappedEnd, lunchEnd) -
+          Math.max(effectiveStart, lunchStart);
+
+        if (overlap > 0) {
+          regularMs -= overlap;
+        }
+      }
+    }
+  }
+
+  /*
+  =========================
+  TĂNG CA
+  =========================
+  */
+
+  let overtimeMs = 0;
+
+  const hasApprovedOt =
+    state.todayOtRequest &&
+    state.todayOtRequest.status === "approved";
+
+  if (
+    hasApprovedOt &&
+    state.overtimeCheckIn
+  ) {
+    const otStart =
+      new Date(state.overtimeCheckIn);
+
+    const otEnd =
+      state.overtimeCheckOut || now;
+
+    if (otEnd > otStart) {
+      overtimeMs =
+        otEnd - otStart;
+    }
+  }
+
+  /*
+  =========================
+  OT NGÀY LỄ / CUỐI TUẦN
+  =========================
+  */
+
+  if (
+    (state.isHoliday || state.isWeekend) &&
+    state.checkIn
+  ) {
+    const holidayEnd =
+      state.checkOut || now;
+
+    if (holidayEnd > state.checkIn) {
+      regularMs = 0;
+      overtimeMs =
+        holidayEnd - state.checkIn;
+    }
+  }
+
+  const totalMin =
+    Math.max(
+      0,
+      Math.floor((regularMs + overtimeMs) / 60000)
+    );
 
   return {
-    hours: Math.floor(totalMin/60),
-    minutes: totalMin%60
+    hours: Math.floor(totalMin / 60),
+    minutes: totalMin % 60
   };
 }
 
 /* ===================== TOAST ===================== */
-async function notifySwal(msg, type="success") {
-  const icon = type === "error" ? "error" : type === "warning" ? "warning" : "success";
-  await Swal.fire({ icon, title: msg, timer: 1400, showConfirmButton: false });
+async function notifySwal(msg, type = "success") {
+  const icon =
+    type === "error"
+      ? "error"
+      : type === "warning"
+      ? "warning"
+      : "success";
+
+  await Swal.fire({
+    icon,
+    title: msg,
+    timer: 1400,
+    showConfirmButton: false
+  });
 }
 
 function renderState() {
   syncAttendanceStateByDate();
-  const btn = document.getElementById('attendanceBtn');
-  const statusText = document.getElementById('statusText');
-  const lateWarning = document.getElementById('lateWarning');
-  const identityText = document.getElementById('identityText');
-  const otRequestStatusBox = document.getElementById('otRequestStatusBox');
+
+  const btn = document.getElementById("attendanceBtn");
+  const statusText = document.getElementById("statusText");
+  const lateWarning = document.getElementById("lateWarning");
+  const identityText = document.getElementById("identityText");
+  const otRequestStatusBox = document.getElementById("otRequestStatusBox");
+  const workHoursText = document.getElementById("workHoursText");
+
   const inLunch = isLunchBreak(state.now);
-  const hasPendingOtApproval = ["pending_hr", "pending_admin"].includes(state.todayOtRequest.status);
-  // ✅ FIX CỐT LÕI: detect khác ngày
-  const isDifferentDay = state.checkIn && (
-    state.now.getDate() !== state.checkIn.getDate() ||
-    state.now.getMonth() !== state.checkIn.getMonth() ||
-    state.now.getFullYear() !== state.checkIn.getFullYear()
-  );
 
-  // =========================
-  // CASE 1: ĐÃ CHECK-OUT (CHỈ KHÓA KHI CÙNG NGÀY)
-  // =========================
-  if (state.hasCheckout && !isDifferentDay){
-    btn.textContent = '✅ ĐÃ HOÀN THÀNH CÔNG VIỆC';
+  const hasPendingOtApproval =
+    ["pending_hr", "pending_admin"]
+      .includes(state.todayOtRequest.status);
+
+  const hasApprovedOt =
+    state.todayOtRequest.status === "approved";
+
+  const isDifferentDay =
+    state.checkIn &&
+    (
+      state.now.getDate() !== state.checkIn.getDate() ||
+      state.now.getMonth() !== state.checkIn.getMonth() ||
+      state.now.getFullYear() !== state.checkIn.getFullYear()
+    );
+
+  /*
+  =========================
+  RESET UI MẶC ĐỊNH
+  =========================
+  */
+
+  lateWarning.style.display = "none";
+  identityText.style.display = "none";
+
+  /*
+  =========================
+  CASE 1
+  ĐÃ HOÀN TẤT NGÀY CÔNG
+  =========================
+  */
+
+  if (
+    state.hasCheckout &&
+    !isDifferentDay
+  ) {
+    btn.textContent =
+      "✅ ĐÃ HOÀN THÀNH CÔNG VIỆC";
+
     btn.disabled = true;
-    btn.className = 'btn btn-disabled';
+    btn.className =
+      "btn btn-disabled";
 
-    statusText.textContent = '⚪ Hết ca';
-    identityText.style.display = 'block';
-    lateWarning.style.display = 'none';
+    statusText.textContent =
+      "⚪ Hết ca";
+
+    identityText.style.display =
+      "block";
   }
 
-  // =========================
-  // CASE 2: NGÀY MỚI hoặc CHƯA CÓ ATTENDANCE
-  // =========================
-  else if (!state.hasAttendance || isDifferentDay) {
-    btn.textContent = inLunch
-      ? 'Giờ nghỉ trưa'
-      : '🔳 QUÉT QR CHECK-IN';
+  /*
+  =========================
+  CASE 2
+  CHƯA CHECK-IN / NGÀY MỚI
+  =========================
+  */
 
-    btn.disabled = inLunch || hasPendingOtApproval;
-    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-primary';
-    if (hasPendingOtApproval && !inLunch) {
-      btn.textContent = '⏳ ĐANG CHỜ DUYỆT OT';
-    }
-    statusText.textContent = hasPendingOtApproval
-      ? '⏳ Đang chờ HR/Admin duyệt OT'
-      : '🟡 Chưa vào ca';
+  else if (
+    !state.hasAttendance ||
+    isDifferentDay
+  ) {
+    btn.textContent =
+      inLunch
+        ? "☕ Giờ nghỉ trưa"
+        : "🔳 XÁC THỰC CHẤM CÔNG";
 
-    identityText.style.display = 'none';
-    lateWarning.style.display = 'none';
+    btn.disabled =
+      inLunch;
+
+    btn.className =
+      btn.disabled
+        ? "btn btn-disabled"
+        : "btn btn-primary";
+
+    /*
+    pending OT chỉ hiển thị trạng thái,
+    không khóa check-in ca chính
+    */
+
+    statusText.textContent =
+      hasPendingOtApproval
+        ? "⏳ Đang chờ duyệt yêu cầu tăng ca"
+        : "🟡 Chưa vào ca";
   }
-  // =========================
-  // CASE 3: ĐANG TRONG CA
-  // =========================
+
+  /*
+  =========================
+  CASE 3
+  ĐANG TRONG CA
+  =========================
+  */
+
   else {
-    const endOfShift = new Date(state.now);
-    endOfShift.setHours(17, 0, 0, 0);
-    const canCheckoutNow = state.now >= endOfShift;
-    btn.textContent = inLunch
-      ? 'Giờ nghỉ trưa'
-      : (canCheckoutNow ? '🔳 QUÉT QR CHECK-OUT' : '⏳ Chưa đến giờ tan ca (17:00)');
+    const endOfShift =
+      new Date(state.now);
 
-    btn.disabled = inLunch || !canCheckoutNow;
-    btn.className = btn.disabled ? 'btn btn-disabled' : 'btn btn-warning';
-    let statusPrefix = '🟢 Đang làm việc';
+    endOfShift.setHours(
+      17,
+      0,
+      0,
+      0
+    );
+
+    const canCheckoutNow =
+      state.now >= endOfShift;
+
+    let statusPrefix =
+      "🟢 Đang làm việc";
+
+    let buttonText =
+      "⏳ Chưa đến giờ tan ca (17:00)";
+
+    let buttonDisabled =
+      inLunch || !canCheckoutNow;
+
+    let buttonClass =
+      "btn btn-warning";
+
+    /*
+    =========================
+    PRE OT REST
+    =========================
+    */
+
     if (state.isPreOvertimeRest) {
-      statusPrefix = '🟡 Nghỉ ngơi trước tăng ca';
-      btn.textContent = '⏳ Chờ vào ca OT lúc 19:00';
-      btn.disabled = true;
-      btn.className = 'btn btn-disabled';
-    } else if (state.overtimeStarted || state.isOvertime) {
-      statusPrefix = '🟣 Tăng ca';
+      statusPrefix =
+        "🟡 Nghỉ trước tăng ca";
+
+      buttonText =
+        "⏳ Chờ vào ca OT lúc 19:00";
+
+      buttonDisabled = true;
+      buttonClass =
+        "btn btn-disabled";
     }
+
+    /*
+    =========================
+    OT STARTED
+    =========================
+    */
+
+    else if (
+      state.overtimeStarted &&
+      hasApprovedOt
+    ) {
+      statusPrefix =
+        "🟣 Đang tăng ca";
+
+      buttonText =
+        "🔳 XÁC THỰC CHẤM CÔNG";
+
+      buttonDisabled = false;
+      buttonClass =
+        "btn btn-warning";
+    }
+
+    /*
+    =========================
+    NORMAL SHIFT
+    =========================
+    */
+
+    else {
+      buttonText =
+        inLunch
+          ? "☕ Giờ nghỉ trưa"
+          : canCheckoutNow
+          ? "🔳 XÁC THỰC CHẤM CÔNG"
+          : "⏳ Chưa đến giờ tan ca (17:00)";
+    }
+
+    btn.textContent =
+      buttonText;
+
+    btn.disabled =
+      buttonDisabled;
+
+    btn.className =
+      buttonDisabled
+        ? "btn btn-disabled"
+        : buttonClass;
+
     statusText.textContent =
       `${statusPrefix} (vào ${fmtHm(state.checkIn)})`;
 
-    identityText.style.display = 'block';
+    identityText.style.display =
+      "block";
 
-    const lateLine = new Date(state.checkIn);
-    lateLine.setHours(8,0,0,0);
+    /*
+    =========================
+    ĐI MUỘN
+    =========================
+    */
 
-    if (state.checkIn > lateLine) {
-      lateWarning.style.display = 'block';
-      lateWarning.textContent = 'Bạn đi muộn';
-    } else {
-      lateWarning.style.display = 'none';
+    const lateLine =
+      new Date(state.checkIn);
+
+    lateLine.setHours(
+      8,
+      0,
+      0,
+      0
+    );
+
+    if (
+      state.checkIn > lateLine &&
+      !state.isHoliday &&
+      !state.isWeekend
+    ) {
+      lateWarning.style.display =
+        "block";
+
+      lateWarning.textContent =
+        "⚠️ Bạn đã đi muộn hôm nay";
     }
   }
+
+  /*
+  =========================
+  BOX THÔNG TIN OT
+  =========================
+  */
+
   if (otRequestStatusBox) {
-    const req = state.todayOtRequest;
+    const req =
+      state.todayOtRequest;
+
     if (!req.status) {
-      otRequestStatusBox.style.display = "none";
+      otRequestStatusBox.style.display =
+        "none";
     } else {
-      const createdAt = req.createdAt
-        ? fmtDateTime(req.createdAt)
-        : "--";
-      const statusLabel = req.status === "pending_hr"
-        ? "⏳ Yêu cầu OT đang chờ HR duyệt"
-        : req.status === "pending_admin"
-          ? "⏳ Yêu cầu OT đang chờ Admin duyệt"
-        : req.status === "approved"
-          ? "✅ Yêu cầu OT đã duyệt"
-          : "❌ Yêu cầu OT đã bị từ chối";
-      const hasRealHours = Number.isFinite(Number(req.requestedHours)) && Number(req.requestedHours) > 0;
-      otRequestStatusBox.style.display = "";
+      const createdAt =
+        req.createdAt
+          ? fmtDateTime(req.createdAt)
+          : "--";
+
+      let statusLabel =
+        "❌ Yêu cầu OT đã bị từ chối";
+
+      if (req.status === "pending_hr") {
+        statusLabel =
+          "⏳ Yêu cầu OT đang chờ HR duyệt";
+      }
+
+      if (req.status === "pending_admin") {
+        statusLabel =
+          "⏳ Yêu cầu OT đang chờ Admin duyệt";
+      }
+
+      if (req.status === "approved") {
+        statusLabel =
+          "✅ Yêu cầu OT đã được duyệt";
+      }
+
+      const hasRealHours =
+        Number(req.requestedHours || 0) > 0;
+
+      otRequestStatusBox.style.display =
+        "block";
+
       otRequestStatusBox.innerHTML = `
         <div><strong>${statusLabel}</strong></div>
         <div>Ngày gửi: ${createdAt}</div>
-        <div>Loại OT: ${req.requestType === "holiday" ? "OT ngày nghỉ lễ/cuối tuần" : "OT ngoài giờ hành chính"}</div>
-        ${hasRealHours ? `<div>Số giờ OT: ${Number(req.requestedHours).toFixed(2)} giờ</div>` : ""}
-        ${root.dataset.canResetOtRequest === "1" ? `<div style="margin-top:8px;"><button class="btn btn-danger btn-sm" type="button" onclick="resetOtRequestForTest()">Reset OT Request</button></div>` : ""}
+        <div>
+          Loại OT:
+          ${
+            req.requestType === "holiday"
+              ? "OT ngày nghỉ / lễ"
+              : "OT ngoài giờ hành chính"
+          }
+        </div>
+        ${
+          hasRealHours
+            ? `<div>Số giờ OT: ${Number(req.requestedHours).toFixed(2)} giờ</div>`
+            : ""
+        }
+        ${
+          root.dataset.canResetOtRequest === "1"
+            ? `
+              <div style="margin-top:10px;">
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  onclick="resetOtRequestForTest()"
+                >
+                  Reset OT Request
+                </button>
+              </div>
+            `
+            : ""
+        }
       `;
     }
   }
 
+  /*
+  =========================
+  WORK HOURS
+  =========================
+  */
+
   if (state.hasCheckout) {
-    const totalDone = state.workedHours || (state.regularHours + state.overtimeHours);
-    const totalMinutes = Math.round(totalDone * 60);
-    const hh = Math.floor(totalMinutes / 60);
-    const mm = totalMinutes % 60;
-    document.getElementById('workHoursText').textContent =
+    const totalDone =
+      state.workedHours ||
+      (
+        state.regularHours +
+        state.overtimeHours
+      );
+
+    const totalMinutes =
+      Math.round(totalDone * 60);
+
+    const hh =
+      Math.floor(totalMinutes / 60);
+
+    const mm =
+      totalMinutes % 60;
+
+    workHoursText.textContent =
       `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${state.regularHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ)`;
   } else {
-    const worked = calcWorkedDuration(state.now);
-    document.getElementById('workHoursText').textContent =
+    const worked =
+      calcWorkedDuration(state.now);
+
+    workHoursText.textContent =
       `Công hôm nay: ${worked.hours} giờ ${String(worked.minutes).padStart(2, "0")} phút`;
   }
 }
@@ -764,70 +1397,111 @@ function renderDate() {
 }
 
 function renderHolidayNotice() {
-  const key = `${String(state.now.getMonth() + 1).padStart(2, '0')}-${String(state.now.getDate()).padStart(2, '0')}`;
-  const holidayName = HOLIDAY_LOOKUP[key];
-  const holidayEl = document.getElementById('holidayText');
+  const holidayEl = document.getElementById("holidayText");
   if (!holidayEl) return;
 
-  if (!holidayName) {
-    holidayEl.style.display = 'none';
-    holidayEl.textContent = '';
+  const key = `${String(state.now.getMonth() + 1).padStart(2, "0")}-${String(state.now.getDate()).padStart(2, "0")}`;
+  const holidayName = HOLIDAY_LOOKUP[key];
+
+  // Ưu tiên backend flag trước
+  if (!state.isHoliday && !holidayName) {
+    holidayEl.style.display = "none";
+    holidayEl.textContent = "";
     return;
   }
 
-  holidayEl.style.display = '';
-  holidayEl.textContent = `🎉 Hôm nay là ngày nghỉ lễ: ${holidayName}`;
+  holidayEl.style.display = "";
+
+  if (holidayName) {
+    holidayEl.textContent =
+      `🎉 Hôm nay là ngày nghỉ lễ: ${holidayName}`;
+  } else if (state.isHoliday) {
+    holidayEl.textContent =
+      `🎉 Hôm nay là ngày nghỉ lễ`;
+  } else {
+    holidayEl.style.display = "none";
+    holidayEl.textContent = "";
+  }
 }
 
 /* ===================== CLOCK ===================== */
+let clockTimer = null;
+
 function startClock() {
-  setInterval(() => {
-    const oldDay = state.now.getDate();
+  // tránh tạo nhiều interval nếu script chạy lại
+  if (clockTimer) {
+    clearInterval(clockTimer);
+  }
+
+  clockTimer = setInterval(() => {
+    const oldDateKey = dateKeyOf(state.now);
+
+    // tăng 1 giây theo thời gian mô phỏng
     state.now = new Date(state.now.getTime() + 1000);
 
-    if (state.now.getDate() !== oldDay) {
+    const newDateKey = dateKeyOf(state.now);
+
+    // sang ngày mới → đồng bộ attendance state
+    if (oldDateKey !== newDateKey) {
+      syncAttendanceStateByDate(true);
+
+      // reload để lấy dữ liệu backend mới cho đúng tuyệt đối
       location.reload();
+      return;
     }
+
     maybeNotifyOvertimeWindow();
+
     persistSharedSimTime(state.now);
+
     updateEditorUI();
+    renderDate();
     renderState();
   }, 1000);
 }
-
 /* ===================== API ===================== */
 async function submitAttendanceFromQR(decodedText) {
   if (isSubmittingAttendance) return;
   isSubmittingAttendance = true;
+
   try {
-    console.log("TIME SENT:", state.now)
-    console.log("FE TIME:", state.now.toString());
-console.log("SEND TIME:", state.now.toISOString().slice(0,19));
-  const payload = {
+    const payload = {
       qr_text: decodedText,
       simulated_now: toLocalISO(state.now),
       overtime_confirmed: false
     };
 
     const res = await fetch("/employee/attendance/check", {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify(payload)
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      await Swal.fire({ icon: "error", title: "Chấm công thất bại", text: data.message || "Lỗi hệ thống" });
+      await Swal.fire({
+        icon: "error",
+        title: "Chấm công thất bại",
+        text: data.message || "Lỗi hệ thống"
+      });
       return;
     }
+
+    /* =========================
+       HOLIDAY / WEEKEND PROMPT
+    ========================= */
+
     if (data.action === "holiday_ot_prompt") {
       const decision = await Swal.fire({
         icon: "question",
-        title: "Hôm nay là ngày nghỉ lễ.\nBạn có muốn đi làm không?",
+        title: "Hôm nay là ngày nghỉ lễ",
+        text: "Bạn có muốn đi làm không?",
         showCancelButton: true,
         confirmButtonText: "Có",
-        cancelButtonText: "Không",
+        cancelButtonText: "Không"
       });
 
       if (decision.isConfirmed) {
@@ -835,276 +1509,614 @@ console.log("SEND TIME:", state.now.toISOString().slice(0,19));
       }
       return;
     }
+
     if (data.action === "weekend_work_prompt") {
       const decision = await Swal.fire({
         icon: "question",
-        title: "Hôm nay là ngày nghỉ cuối tuần.\nBạn có muốn đi làm không?",
+        title: "Hôm nay là ngày nghỉ cuối tuần",
+        text: "Bạn có muốn đi làm không?",
         showCancelButton: true,
         confirmButtonText: "Có",
-        cancelButtonText: "Không",
+        cancelButtonText: "Không"
       });
+
       if (decision.isConfirmed) {
         await submitAttendanceConfirmation(decodedText);
       }
       return;
     }
-    state.pendingCheckoutWithoutOT = false;
-  switch (data.action) {
-    case 'check_in':
-      state.hasAttendance = true;
-      state.hasCheckout = false;
-      state.checkIn = new Date(state.now);
-      state.checkOut = null;
-      state.workedHours = 0;
-      state.regularHours = 0;
-      state.overtimeHours = 0;
-      break;
 
-    case 'check_out':
-      state.hasCheckout = true;
-      state.checkOut = data.check_out ? new Date(data.check_out) : new Date(state.now);
-      state.checkIn = data.check_in ? new Date(data.check_in) : state.checkIn;
-      state.workedHours = Number(data.worked_hours || 0);
-      state.regularHours = Number(data.regular_hours || 0);
-      state.overtimeHours = Number(data.overtime_hours || 0);
+    state.pendingCheckoutWithoutOT = false;
+
+    /* =========================
+       UPDATE LOCAL STATE
+    ========================= */
+
+    switch (data.action) {
+      case "check_in":
+        state.hasAttendance = true;
+        state.hasCheckout = false;
+
+        state.checkIn = data.check_in
+          ? new Date(data.check_in)
+          : new Date(state.now);
+
+        state.checkOut = null;
+
+        state.workedHours = 0;
+        state.regularHours = 0;
+        state.overtimeHours = 0;
+        break;
+
+      case "check_out":
+        state.hasCheckout = true;
+
+        state.checkIn = data.check_in
+          ? new Date(data.check_in)
+          : state.checkIn;
+
+        state.checkOut = data.check_out
+          ? new Date(data.check_out)
+          : new Date(state.now);
+
+        state.workedHours = Number(data.worked_hours || 0);
+        state.regularHours = Number(data.regular_hours || 0);
+        state.overtimeHours = Number(data.overtime_hours || 0);
+        break;
+
+      case "done":
+        state.hasCheckout = true;
+        break;
+
+      default:
+        break;
+    }
+
+    /* =========================
+       CACHE CURRENT DATE RECORD
+    ========================= */
+
+    const selectedDateKey = dateKeyOf(state.now);
+
+    attendanceByDate.set(selectedDateKey, {
+      hasAttendance: state.hasAttendance,
+      hasCheckout: state.hasCheckout,
+      checkIn: state.checkIn ? state.checkIn.toISOString() : "",
+      checkOut: state.checkOut ? state.checkOut.toISOString() : "",
+      workedHours: state.workedHours,
+      regularHours: state.regularHours,
+      overtimeHours: state.overtimeHours
+    });
+
+    persistSharedSimTime(state.now);
+
+    /* =========================
+       SUCCESS POPUP (ONLY ONCE)
+    ========================= */
+
+    const successTitle =
+      data.action === "check_in"
+        ? "Check-in thành công"
+        : data.action === "check_out"
+          ? "Check-out thành công"
+          : "Thông báo chấm công";
+
+    await Swal.fire({
+      icon: data.type === "error" ? "error" : "success",
+      title: successTitle,
+      text: data.message || "Đã cập nhật dữ liệu chấm công",
+      timer: 1500,
+      showConfirmButton: false
+    });
+
+    /* =========================
+       AFTER CHECKOUT → ASK OT
+    ========================= */
+
+    if (data.action === "check_out") {
       const endOfShift = new Date(state.now);
       endOfShift.setHours(17, 0, 0, 0);
+
       const canInviteOt = state.now >= endOfShift;
-if (
-  canInviteOt &&
-  (
-    !state.todayOtRequest.status ||
-    state.todayOtRequest.status === "rejected"
-  )
-) {
+      const noValidOtRequest =
+        !state.todayOtRequest.status ||
+        state.todayOtRequest.status === "rejected";
+
+      if (canInviteOt && noValidOtRequest) {
         const otDecision = await Swal.fire({
           icon: "question",
           title: "Bạn có muốn đăng ký tăng ca không?",
           showCancelButton: true,
           confirmButtonText: "Có",
-          cancelButtonText: "Không",
+          cancelButtonText: "Không"
         });
+
         if (otDecision.isConfirmed) {
           await submitAutomaticOvertimeRequest("after_shift");
         }
-        window.location.href =
-          window.location.pathname +
-          "?simulated_now=" + toLocalISO(state.now);
-        return;
       }
-      break;
+    }
 
-    case 'done':
-      state.hasCheckout = true;
-      break;
-    default:
-      state.hasCheckout = true;
-  }
-    const selectedDateKey = dateKeyOf(state.now);
-    attendanceByDate.set(selectedDateKey, {
-      hasAttendance: state.hasAttendance,
-      hasCheckout: state.hasCheckout,
-      checkIn: state.checkIn ? state.checkIn.toISOString() : '',
-      checkOut: state.checkOut ? state.checkOut.toISOString() : '',
-      workedHours: state.workedHours,
-      regularHours: state.regularHours,
-      overtimeHours: state.overtimeHours
-    });
-    persistSharedSimTime(state.now);
-    await notifySwal(data.message, data.type || "success");
-    const successTitle = data.action === "check_out"
-      ? "Check-out thành công"
-      : data.action === "check_in"
-        ? "Check-in thành công"
-        : "Thông báo chấm công";
-    await Swal.fire({
-      icon: data.type === "error" ? "error" : "success",
-      title: successTitle,
-      text: data.message || "Đã cập nhật dữ liệu chấm công",
-      timer: 1400,
-      showConfirmButton: false,
-    });
+    /* =========================
+       RELOAD PAGE
+    ========================= */
 
-if (data.action !== "check_out") {
-  setTimeout(() => {
     window.location.href =
       window.location.pathname +
-      "?simulated_now=" + toLocalISO(state.now);
-  }, 800);
-}
+      "?simulated_now=" +
+      toLocalISO(state.now);
 
   } catch (err) {
-    await Swal.fire({ icon: "error", title: "Lỗi", text: err.message || "Không thể chấm công" });
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi hệ thống",
+      text: err.message || "Không thể chấm công"
+    });
   } finally {
     isSubmittingAttendance = false;
   }
 }
 
 async function submitAttendanceConfirmation(decodedText) {
-  const res = await fetch("/employee/attendance/check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      qr_text: decodedText,
-      simulated_now: toLocalISO(state.now),
-      overtime_confirmed: true,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || "Không thể check-in ngày nghỉ");
+  if (isSubmittingAttendance) return;
+  isSubmittingAttendance = true;
+
+  try {
+    const res = await fetch("/employee/attendance/check", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        qr_text: decodedText,
+        simulated_now: toLocalISO(state.now),
+        overtime_confirmed: true
+      })
+    });
+
+    let data = {};
+
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        data.message || "Không thể check-in ngày nghỉ"
+      );
+    }
+
+    /* =========================
+       UPDATE LOCAL STATE
+    ========================= */
+
+    state.hasAttendance = true;
+    state.hasCheckout = false;
+
+    state.checkIn = data.check_in
+      ? new Date(data.check_in)
+      : new Date(state.now);
+
+    state.checkOut = null;
+
+    state.workedHours = 0;
+    state.regularHours = 0;
+    state.overtimeHours = 0;
+
+    const selectedDateKey = dateKeyOf(state.now);
+
+    attendanceByDate.set(selectedDateKey, {
+      hasAttendance: true,
+      hasCheckout: false,
+      checkIn: state.checkIn
+        ? state.checkIn.toISOString()
+        : "",
+      checkOut: "",
+      workedHours: 0,
+      regularHours: 0,
+      overtimeHours: 0
+    });
+
+    persistSharedSimTime(state.now);
+
+    await Swal.fire({
+      icon: "success",
+      title: "Check-in thành công",
+      text:
+        data.message ||
+        "Đã bắt đầu ca làm việc ngày nghỉ",
+      timer: 1500,
+      showConfirmButton: false
+    });
+
+    window.location.href =
+      window.location.pathname +
+      "?simulated_now=" +
+      toLocalISO(state.now);
+
+  } catch (err) {
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi chấm công",
+      text:
+        err.message ||
+        "Không thể check-in ngày nghỉ"
+    });
+  } finally {
+    isSubmittingAttendance = false;
   }
-  await Swal.fire({
-    icon: "success",
-    title: "Check-in thành công",
-    text: data.message || "Đã bắt đầu ca làm việc ngày nghỉ",
-    timer: 1400,
-    showConfirmButton: false,
-  });
-  window.location.href =
-    window.location.pathname +
-    "?simulated_now=" + toLocalISO(state.now);
 }
 async function submitAutomaticOvertimeRequest(requestType, options = {}) {
-  const payload = {
-    request_type: requestType,
-    overtime_date: dateKeyOf(state.now),
-    reason: options.reason || (requestType === "holiday" ? "Đăng ký làm việc ngày nghỉ lễ" : "Đăng ký tăng ca sau giờ hành chính"),
-    note: requestType === "holiday" ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in." : "Yêu cầu OT sau giờ làm từ popup 17:00."
-  };
-  if (requestType !== "holiday") {
-    payload.start_ot_time = options.start || "19:00";
-    payload.end_ot_time = options.end || "22:00";
+  if (isSubmittingAttendance) return;
+  isSubmittingAttendance = true;
+
+  try {
+    const payload = {
+      request_type: requestType,
+      overtime_date: dateKeyOf(state.now),
+
+      reason:
+        options.reason ||
+        (
+          requestType === "holiday"
+            ? "Đăng ký làm việc ngày nghỉ lễ"
+            : "Đăng ký tăng ca sau giờ hành chính"
+        ),
+
+      note:
+        requestType === "holiday"
+          ? "Yêu cầu OT ngày nghỉ lễ từ popup check-in."
+          : "Yêu cầu OT sau giờ làm từ popup 17:00."
+    };
+
+    if (requestType !== "holiday") {
+      payload.start_ot_time =
+        options.start || "19:00";
+
+      payload.end_ot_time =
+        options.end || "22:00";
+    }
+
+    const res = await fetch(
+      "/employee/attendance/overtime-request",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    let data = {};
+
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        data.error ||
+        data.message ||
+        "Không thể gửi yêu cầu OT"
+      );
+    }
+
+    /* =========================
+       SYNC OT REQUEST STATE
+    ========================= */
+
+    state.todayOtRequest.status =
+      data.request?.status || "pending_hr";
+
+    state.todayOtRequest.requestType =
+      requestType;
+
+    state.todayOtRequest.createdAt =
+      data.request?.created_at
+        ? new Date(data.request.created_at)
+        : new Date();
+
+    state.todayOtRequest.requestedHours =
+      Number(
+        data.request?.requested_hours ||
+        data.request?.overtime_hours ||
+        0
+      );
+
+    state.todayOtRequest.startAt =
+      data.request?.start_ot_time
+        ? new Date(data.request.start_ot_time)
+        : null;
+
+    state.todayOtRequest.endAt =
+      data.request?.end_ot_time
+        ? new Date(data.request.end_ot_time)
+        : null;
+
+    /* =========================
+       UPDATE UI FLAGS
+    ========================= */
+
+    state.isOvertime = true;
+
+    state.isPreOvertimeRest =
+      requestType !== "holiday" &&
+      state.hasAttendance &&
+      !state.hasCheckout &&
+      state.now.getHours() >= 17 &&
+      state.now.getHours() < 19;
+
+    state.overtimeStarted =
+      requestType !== "holiday" &&
+      state.now.getHours() >= 19;
+
+    renderState();
+
+    /* =========================
+       SUCCESS MESSAGE
+    ========================= */
+
+    const statusLabel =
+      state.todayOtRequest.status === "pending_hr"
+        ? "Đang chờ HR duyệt"
+        : state.todayOtRequest.status === "pending_admin"
+          ? "Đang chờ Admin duyệt"
+          : state.todayOtRequest.status === "approved"
+            ? "Đã được duyệt"
+            : "Đã gửi yêu cầu";
+
+    await Swal.fire({
+      icon: "success",
+      title:
+        data.message || "Đã gửi yêu cầu OT",
+      text: `Trạng thái: ${statusLabel}`,
+      timer: 1500,
+      showConfirmButton: false
+    });
+
+  } catch (err) {
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi đăng ký OT",
+      text:
+        err.message ||
+        "Không thể gửi yêu cầu tăng ca"
+    });
+  } finally {
+    isSubmittingAttendance = false;
   }
-  const res = await fetch("/employee/attendance/overtime-request", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || "Không thể gửi yêu cầu OT");
-  }
-  state.todayOtRequest.status = data.request?.status || "pending_hr";
-  state.todayOtRequest.requestType = requestType;
-  state.todayOtRequest.createdAt = data.request?.created_at ? new Date(data.request.created_at) : new Date();
-  state.todayOtRequest.requestedHours = Number(data.request?.requested_hours || data.request?.overtime_hours || 0);
-  state.todayOtRequest.startAt = data.request?.start_ot_time ? new Date(data.request.start_ot_time) : null;
-  state.todayOtRequest.endAt = data.request?.end_ot_time ? new Date(data.request.end_ot_time) : null;
-  await Swal.fire({ icon: "success", title: data.message || "Đã gửi yêu cầu OT", text: "Trạng thái: PENDING_APPROVAL" });
 }
-/* ===================== SIM EDITOR ===================== */
 function initSimEditor() {
-  document.querySelectorAll('.time-part').forEach(el => {
-    el.addEventListener('wheel', (e) => {
+  document.querySelectorAll(".time-part").forEach((el) => {
+    el.addEventListener("wheel", (e) => {
       e.preventDefault();
 
       const unit = el.dataset.unit;
       const delta = e.deltaY < 0 ? 1 : -1;
 
+      const oldDateKey = dateKeyOf(state.now);
       let dt = new Date(state.now);
 
-      if(unit === 'hours') dt.setHours(dt.getHours() + delta);
-      if(unit === 'minutes') dt.setMinutes(dt.getMinutes() + delta);
-      if(unit === 'seconds') dt.setSeconds(dt.getSeconds() + delta);
-      if(unit === 'date') dt.setDate(dt.getDate() + delta);
-      if(unit === 'month') dt.setMonth(dt.getMonth() + delta);
+      switch (unit) {
+        case "hours":
+          dt.setHours(dt.getHours() + delta);
+          break;
+
+        case "minutes":
+          dt.setMinutes(dt.getMinutes() + delta);
+          break;
+
+        case "seconds":
+          dt.setSeconds(dt.getSeconds() + delta);
+          break;
+
+        case "date":
+          dt.setDate(dt.getDate() + delta);
+          break;
+
+        case "month":
+          {
+            const currentDate = dt.getDate();
+
+            dt.setDate(1);
+            dt.setMonth(dt.getMonth() + delta);
+
+            const lastDayOfMonth = new Date(
+              dt.getFullYear(),
+              dt.getMonth() + 1,
+              0
+            ).getDate();
+
+            dt.setDate(
+              Math.min(currentDate, lastDayOfMonth)
+            );
+          }
+          break;
+
+        default:
+          return;
+      }
 
       state.now = dt;
+
+      const newDateKey = dateKeyOf(state.now);
+
       persistSharedSimTime(state.now);
+
+      if (oldDateKey !== newDateKey) {
+        syncAttendanceStateByDate(true);
+
+        window.location.href =
+          window.location.pathname +
+          "?simulated_now=" +
+          toLocalISO(state.now);
+
+        return;
+      }
+
       maybeNotifyOvertimeWindow();
+
       updateEditorUI();
+      renderDate();
+      renderState();
     });
   });
 }
 
 function updateEditorUI() {
-  document.getElementById('edit-h').textContent =
-    String(state.now.getHours()).padStart(2,'0');
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
 
-  document.getElementById('edit-m').textContent =
-    String(state.now.getMinutes()).padStart(2,'0');
+    el.textContent = String(value).padStart(2, "0");
+  };
 
-  document.getElementById('edit-s').textContent =
-    String(state.now.getSeconds()).padStart(2,'0');
-
-  document.getElementById('edit-d').textContent =
-    String(state.now.getDate()).padStart(2,'0');
-
-  document.getElementById('edit-mo').textContent =
-    String(state.now.getMonth()+1).padStart(2,'0');
-
-  renderDate();
-  renderState();
+  setText("edit-h", state.now.getHours());
+  setText("edit-m", state.now.getMinutes());
+  setText("edit-s", state.now.getSeconds());
+  setText("edit-d", state.now.getDate());
+  setText("edit-mo", state.now.getMonth() + 1);
 }
 
 /* ===================== INIT ===================== */
-renderDate();
 syncAttendanceStateByDate(true);
-renderState();
-startClock();
-initSimEditor();
 updateEditorUI();
+renderDate();
+renderState();
+initSimEditor();
+startClock();
 /* ===================== QR SCANNER ===================== */
+let scannerErrorLocked = false;
 
 const scanner = HRMQRScanner.createQRScanner({
-  modalId: 'scannerModal',
-  readerId: 'qr-reader',
-  panelId: 'scannerPanel',
+  modalId: "scannerModal",
+  readerId: "qr-reader",
+  panelId: "scannerPanel",
 
   onDecoded: async (decodedText) => {
-    await submitAttendanceFromQR(decodedText);
+    if (isSubmittingAttendance) return;
+
+    try {
+      await submitAttendanceFromQR(decodedText);
+    } catch (err) {
+      await Swal.fire({
+        icon: "error",
+        title: "Lỗi chấm công",
+        text: err.message || "Không thể xử lý QR"
+      });
+    }
   },
 
-  onError: (err) => {
-    Swal.fire({ icon: "error", title: err.message || "Lỗi camera" });
+  onError: async (err) => {
+    if (scannerErrorLocked) return;
+
+    scannerErrorLocked = true;
+
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi camera",
+      text: err?.message || "Không thể truy cập camera"
+    });
+
+    setTimeout(() => {
+      scannerErrorLocked = false;
+    }, 2000);
   }
 });
 
 async function openScannerModal() {
-  const btn = document.getElementById('attendanceBtn');
-  if (btn.disabled) return;
+  const btn = document.getElementById("attendanceBtn");
+
+  // chặn khi nút bị disable
+  if (!btn || btn.disabled) return;
+
+  // chặn khi đang submit attendance
+  if (isSubmittingAttendance) return;
+
+  // tránh mở nhiều lần
+  if (state.isScannerOpen) return;
 
   try {
     await scanner.open();
     state.isScannerOpen = true;
   } catch (err) {
-    await Swal.fire({ icon: "error", title: "Không thể mở camera", text: err.message || "Không thể khởi tạo camera QR" });
+    state.isScannerOpen = false;
+
+    await Swal.fire({
+      icon: "error",
+      title: "Không thể mở camera",
+      text: err.message || "Không thể khởi tạo camera QR"
+    });
   }
 }
 
 async function closeScannerModal() {
-  await scanner.close();
+  try {
+    await scanner.close();
+  } catch (_) {
+    // bỏ qua lỗi đóng scanner
+  }
+
   state.isScannerOpen = false;
 }
 async function deleteRecord(dateIso) {
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  };
+
   const confirmDelete = await Swal.fire({
     icon: "warning",
-    title: "Xóa bản ghi ngày " + dateIso + "?",
+    title: `Xóa bản ghi ngày ${formatDate(dateIso)}?`,
+    text: "Dữ liệu chấm công sẽ bị xóa và không thể khôi phục.",
     showCancelButton: true,
     confirmButtonText: "Xóa",
+    cancelButtonText: "Hủy",
+    confirmButtonColor: "#d33"
   });
+
   if (!confirmDelete.isConfirmed) return;
 
   try {
     const res = await fetch("/employee/attendance/delete", {
       method: "DELETE",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ date: dateIso })
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        date: dateIso
+      })
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.message || "Xóa thất bại");
+      throw new Error(data.message || "Xóa bản ghi thất bại");
     }
 
-    await Swal.fire({ icon: "success", title: data.message || "Đã xóa bản ghi chấm công" });
+    // sync local cache trước khi reload
+    attendanceByDate.delete(dateIso);
 
-    setTimeout(() => location.reload(), 500);
+    await Swal.fire({
+      icon: "success",
+      title: data.message || "Đã xóa bản ghi chấm công",
+      timer: 1200,
+      showConfirmButton: false
+    });
+
+    location.reload();
 
   } catch (err) {
-    await Swal.fire({ icon: "error", title: err.message || "Không thể xóa bản ghi" });
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi",
+      text: err.message || "Không thể xóa bản ghi"
+    });
   }
 }
 
@@ -1115,17 +2127,51 @@ async function resetOtRequestForTest() {
     icon: "warning",
     showCancelButton: true,
     confirmButtonText: "Xóa",
-    cancelButtonText: "Hủy"
+    cancelButtonText: "Hủy",
+    confirmButtonColor: "#d33"
   });
+
   if (!confirmReset.isConfirmed) return;
+
   try {
-    const res = await fetch("/employee/attendance/overtime-request/reset", { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Không thể reset OT Request");
-    await Swal.fire({ icon: "success", title: data.message || "Đã reset OT Request" });
+    const res = await fetch("/employee/attendance/overtime-request/reset", {
+      method: "DELETE"
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {}
+
+    if (!res.ok) {
+      throw new Error(data.error || "Không thể reset OT Request");
+    }
+
+    // sync state local trước reload (tránh UI flash sai trạng thái)
+    state.todayOtRequest = {
+      status: "",
+      createdAt: null,
+      requestedHours: 0,
+      startAt: null,
+      endAt: null,
+      requestType: ""
+    };
+
+    await Swal.fire({
+      icon: "success",
+      title: data.message || "Đã reset OT Request",
+      timer: 1200,
+      showConfirmButton: false
+    });
+
     location.reload();
+
   } catch (err) {
-    await Swal.fire({ icon: "error", title: err.message || "Không thể reset OT Request" });
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi",
+      text: err.message || "Không thể reset OT Request"
+    });
   }
 }
 </script>

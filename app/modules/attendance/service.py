@@ -1,173 +1,407 @@
-from datetime import datetime, time 
+from datetime import datetime, time
 from decimal import Decimal
+
+from flask import session
+
 from app.extensions import db
 from app.models import Attendance, AttendanceStatus, Employee
 from app.common.exceptions import ValidationError
 
 
 class AttendanceService:
+    """
+    Enterprise Attendance Flow
+
+    Tách riêng hoàn toàn:
+    - check_in()
+    - check_out_regular()
+    - check_in_overtime()
+    - check_out_overtime()
+
+    Không dùng check_in_out() kiểu cũ nữa.
+    """
+
+    # ===== FIXED SHIFT CONFIG =====
+
     REGULAR_START = time(8, 0, 0)
-    LATE_THRESHOLD = time(8, 10, 0)
     REGULAR_END = time(17, 0, 0)
+
+    LUNCH_START = time(12, 0, 0)
+    LUNCH_END = time(13, 0, 0)
+
+    HALF_DAY_THRESHOLD = time(9, 0, 0)  # sau 09:00 => half day
+
     OT_START = time(19, 0, 0)
     OT_END = time(22, 0, 0)
-    @staticmethod
-    def calculate_regular_hours(check_in: datetime, check_out: datetime) -> Decimal:
-        end_of_shift = datetime.combine(check_in.date(), AttendanceService.REGULAR_END)
-        capped_checkout = min(check_out, end_of_shift)
-        if capped_checkout <= check_in:
-            return Decimal("0.00")
-        return Decimal(str(AttendanceService.recalculate_hours(check_in, capped_checkout)))
-    @staticmethod
-    def check_in_out(employee_id: int, sim_time_str: str = None):
-        employee = Employee.query.get(employee_id)
-        if employee and employee.is_attendance_required is False:
-            return {"message": "Nhân sự này không áp dụng chấm công bắt buộc."}
-        if not sim_time_str:
-            raise ValidationError("Thiếu simulated_now")
-        now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
-        if now_dt.tzinfo is not None:
-            now_dt = now_dt.replace(tzinfo=None)
-        today = now_dt.date()
-        record = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
-        if not record:
-            standard_time_dt = now_dt.replace(hour=8, minute=10, second=0, microsecond=0)
-            is_late = now_dt > standard_time_dt
-            status_name = "LATE" if is_late else "PRESENT"
-            status = AttendanceStatus.query.filter_by(status_name=status_name).first()
-            record = Attendance(
-                employee_id=employee_id,
-                date=today,
-                check_in=now_dt,
-                status_id=status.id if status else None,
-                working_hours=0
-            )
-            db.session.add(record)
-            db.session.commit()
-            msg = f"Check-in lúc {now_dt.strftime('%H:%M:%S')}. Trạng thái: {'Muộn' if is_late else 'Đúng giờ'}"
-            return {"message": msg}
-        if record.check_out:
-            raise ValidationError("Bạn đã hoàn thành ca hôm nay")
-        check_in = record.check_in
-        if not check_in:
-            raise ValidationError("Dữ liệu check-in không hợp lệ")
-        if check_in.tzinfo is not None:
-            check_in = check_in.replace(tzinfo=None)
-        if now_dt < check_in:
-            record.check_out = None
-            raise ValidationError("Thời gian check-out không hợp lệ")
-        duration = (now_dt - check_in).total_seconds()
-        if duration < 60:
-            record.check_out = None # Reset lại
-            raise ValidationError("Thao tác quá nhanh. Vui lòng đợi ít nhất 1 phút sau khi check-in.")
-        record.check_out = now_dt
-        record.working_hours = AttendanceService.recalculate_hours(check_in, now_dt)
-        db.session.commit()
-        return {"message": f"Check-out thành công. Tổng công: {record.working_hours}h"}
+
+    SHIFT_STATUS_NOT_STARTED = "not_started"
+    SHIFT_STATUS_WORKING = "working_regular"
+    SHIFT_STATUS_REGULAR_DONE = "regular_done"
+    SHIFT_STATUS_PRE_OT_REST = "pre_ot_rest"
+    SHIFT_STATUS_WORKING_OT = "working_overtime"
+    SHIFT_STATUS_COMPLETED = "completed"
+
+    # =========================================================
+    # COMMON
+    # =========================================================
 
     @staticmethod
-    def get_today(employee_id: int, sim_time_str: str = None):
-        from flask import session
-        sim_time_str = sim_time_str or session.get("simulated_now")
-
+    def parse_time(sim_time_str: str) -> datetime:
         if not sim_time_str:
             raise ValidationError("Thiếu simulated_now")
 
-        now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
+        now_dt = datetime.fromisoformat(
+            sim_time_str.replace("Z", "+00:00")
+        )
+
         if now_dt.tzinfo is not None:
             now_dt = now_dt.replace(tzinfo=None)
 
-        today = now_dt.date()
+        return now_dt
 
-        return Attendance.query.filter_by(
+    @staticmethod
+    def get_or_create_today(employee_id: int, now_dt: datetime) -> Attendance:
+        record = Attendance.query.filter_by(
             employee_id=employee_id,
-            date=today
+            date=now_dt.date()
         ).first()
 
+        if record:
+            return record
+
+        record = Attendance(
+            employee_id=employee_id,
+            date=now_dt.date(),
+            shift_status=AttendanceService.SHIFT_STATUS_NOT_STARTED,
+            working_hours=Decimal("0.00"),
+            regular_hours=Decimal("0.00"),
+            overtime_hours=Decimal("0.00"),
+            is_half_day=False,
+            late_minutes=0,
+            is_weekend=False,
+            is_holiday=False,
+        )
+
+        db.session.add(record)
+        db.session.flush()
+
+        return record
+
     @staticmethod
-    def get_history(employee_id: int, sim_time_str=None, limit=10):
-        from flask import session
+    def get_status(status_name: str):
+        return AttendanceStatus.query.filter_by(
+            status_name=status_name
+        ).first()
 
-        sim_time_str = sim_time_str or session.get("simulated_now")
-        if not sim_time_str:
-            raise ValidationError("Thiếu simulated_now")
+    # =========================================================
+    # REGULAR HOURS
+    # =========================================================
 
-        now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
-        if now_dt.tzinfo is not None:
-            now_dt = now_dt.replace(tzinfo=None)
-
-        return Attendance.query.filter(
-            Attendance.employee_id == employee_id,
-            Attendance.date <= now_dt.date()
-        ).order_by(Attendance.date.desc()).limit(limit).all()
-    
     @staticmethod
-    def recalculate_hours(check_in, check_out):
+    def calculate_regular_hours(
+        check_in: datetime,
+        check_out: datetime
+    ) -> Decimal:
+        """
+        Logic chuẩn:
+
+        if check_in < 08:00:
+            start = 08:00
+
+        elif check_in > 08:00:
+            start = check_in
+
+        nếu check_in > 09:00:
+            => half day = 4.0h
+
+        check_out:
+            max = 17:00
+        """
+
         if not check_in or not check_out:
-            raise ValidationError("Thiếu dữ liệu check-in/check-out")
+            return Decimal("0.00")
 
-        if check_in.tzinfo is not None:
-            check_in = check_in.replace(tzinfo=None)
+        day = check_in.date()
 
-        if check_out.tzinfo is not None:
-            check_out = check_out.replace(tzinfo=None)
+        shift_start = datetime.combine(day, AttendanceService.REGULAR_START)
+        shift_end = datetime.combine(day, AttendanceService.REGULAR_END)
 
-        if check_out < check_in:
-            raise ValidationError("Thời gian không hợp lệ")
+        lunch_start = datetime.combine(day, AttendanceService.LUNCH_START)
+        lunch_end = datetime.combine(day, AttendanceService.LUNCH_END)
 
-        start_dt = check_in.replace()
+        half_day_limit = datetime.combine(
+            day,
+            AttendanceService.HALF_DAY_THRESHOLD
+        )
 
-        if start_dt.hour > 8 or (start_dt.hour == 8 and start_dt.minute > 10):
-            start_dt = start_dt.replace(hour=9, minute=0, second=0, microsecond=0)
-        elif start_dt.hour < 8:
-            start_dt = start_dt.replace(hour=8, minute=0, second=0, microsecond=0)
+        # check-out capped at 17:00
+        actual_end = min(check_out, shift_end)
 
-        delta = check_out - start_dt
-        total_seconds = delta.total_seconds()
+        # check-in logic chuẩn
+        if check_in < shift_start:
+            actual_start = shift_start
+        else:
+            actual_start = check_in
 
-        lunch_start = start_dt.replace(hour=12, minute=0, second=0, microsecond=0)
-        lunch_end = start_dt.replace(hour=13, minute=0, second=0, microsecond=0)
+        if actual_end <= actual_start:
+            return Decimal("0.00")
 
-        overlap_start = max(start_dt, lunch_start)
-        overlap_end = min(check_out, lunch_end)
+        # sau 09:00 => half day cố định
+        if check_in > half_day_limit:
+            return Decimal("4.00")
+
+        total_seconds = (actual_end - actual_start).total_seconds()
+
+        # trừ nghỉ trưa nếu overlap
+        overlap_start = max(actual_start, lunch_start)
+        overlap_end = min(actual_end, lunch_end)
 
         lunch_seconds = 0
         if overlap_end > overlap_start:
             lunch_seconds = (overlap_end - overlap_start).total_seconds()
 
         hours = (total_seconds - lunch_seconds) / 3600
-        return max(0, round(hours, 2))
-    
+
+        return Decimal(str(round(max(0, hours), 2)))
+
+    # =========================================================
+    # OVERTIME
+    # =========================================================
+
     @staticmethod
-    def delete_attendance(employee_id, target_date_str):
-        from flask import session
+    def calculate_overtime_hours(
+        overtime_check_in: datetime,
+        overtime_check_out: datetime
+    ) -> Decimal:
+        """
+        OT chuẩn:
 
-        if not target_date_str:
-            raise ValidationError("Thiếu ngày cần xóa")
+        max(19:00, overtime_check_in)
+        →
+        min(22:00, overtime_check_out)
+        """
 
-        dt = datetime.fromisoformat(target_date_str.replace("Z", "+00:00"))
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
-        target_date = dt.date()
+        if not overtime_check_in or not overtime_check_out:
+            return Decimal("0.00")
 
-        try:
-            latest = Attendance.query.filter_by(employee_id=employee_id)\
-                .order_by(Attendance.date.desc()).first()
+        day = overtime_check_in.date()
 
-            if not latest or latest.date != target_date:
-                raise ValidationError("Chỉ được xóa bản ghi của ngày mới nhất để đảm bảo tính liên tục.")
+        ot_start = datetime.combine(day, AttendanceService.OT_START)
+        ot_end = datetime.combine(day, AttendanceService.OT_END)
 
-            db.session.delete(latest)
-            db.session.commit()
+        actual_start = max(ot_start, overtime_check_in)
+        actual_end = min(ot_end, overtime_check_out)
 
-            # 🔥 reset demo time
-            session.pop("simulated_now", None)
+        if actual_end <= actual_start:
+            return Decimal("0.00")
 
-            remaining = Attendance.query.filter_by(employee_id=employee_id)\
-                .order_by(Attendance.date.desc()).first()
+        hours = (actual_end - actual_start).total_seconds() / 3600
 
-            return remaining.date if remaining else None
+        return Decimal(str(round(hours, 2)))
 
-        except Exception:
-            db.session.rollback()
-            raise
+    # =========================================================
+    # CHECK IN
+    # =========================================================
+
+    @staticmethod
+    def check_in(employee_id: int, sim_time_str: str):
+        employee = Employee.query.get(employee_id)
+
+        if employee and employee.is_attendance_required is False:
+            raise ValidationError(
+                "Nhân sự này không áp dụng chấm công bắt buộc."
+            )
+
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        record = AttendanceService.get_or_create_today(
+            employee_id,
+            now_dt
+        )
+
+        if record.check_in:
+            raise ValidationError("Bạn đã check-in hôm nay.")
+
+        record.check_in = now_dt
+        record.shift_status = AttendanceService.SHIFT_STATUS_WORKING
+
+        late_minutes = max(
+            0,
+            int(
+                (
+                    now_dt - datetime.combine(
+                        now_dt.date(),
+                        AttendanceService.REGULAR_START
+                    )
+                ).total_seconds() / 60
+            )
+        )
+
+        record.late_minutes = late_minutes
+
+        if now_dt.time() > AttendanceService.HALF_DAY_THRESHOLD:
+            record.is_half_day = True
+
+        status_name = "LATE" if late_minutes > 0 else "PRESENT"
+        status = AttendanceService.get_status(status_name)
+
+        if status:
+            record.status_id = status.id
+
+        db.session.commit()
+
+        return {
+            "message": f"Check-in thành công lúc {now_dt.strftime('%H:%M:%S')}"
+        }
+
+    # =========================================================
+    # CHECK OUT REGULAR
+    # =========================================================
+
+    @staticmethod
+    def check_out_regular(employee_id: int, sim_time_str: str):
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        record = Attendance.query.filter_by(
+            employee_id=employee_id,
+            date=now_dt.date()
+        ).first()
+
+        if not record or not record.check_in:
+            raise ValidationError("Bạn chưa check-in.")
+
+        if record.check_out:
+            raise ValidationError("Bạn đã check-out ca chính.")
+
+        record.check_out = now_dt
+
+        record.regular_hours = (
+            AttendanceService.calculate_regular_hours(
+                record.check_in,
+                record.check_out
+            )
+        )
+
+        record.shift_status = (
+            AttendanceService.SHIFT_STATUS_REGULAR_DONE
+        )
+
+        db.session.commit()
+
+        return {
+            "message": f"Check-out ca chính thành công. Công thường: {record.regular_hours}h"
+        }
+
+    # =========================================================
+    # CHECK IN OT
+    # =========================================================
+
+    @staticmethod
+    def check_in_overtime(employee_id: int, sim_time_str: str):
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        record = Attendance.query.filter_by(
+            employee_id=employee_id,
+            date=now_dt.date()
+        ).first()
+
+        if not record or not record.check_out:
+            raise ValidationError(
+                "Bạn phải hoàn tất ca chính trước khi OT."
+            )
+
+        if record.overtime_check_in:
+            raise ValidationError("Bạn đã check-in OT.")
+
+        record.overtime_check_in = now_dt
+        record.shift_status = (
+            AttendanceService.SHIFT_STATUS_WORKING_OT
+        )
+
+        db.session.commit()
+
+        return {
+            "message": f"Check-in OT lúc {now_dt.strftime('%H:%M:%S')}"
+        }
+
+    # =========================================================
+    # CHECK OUT OT
+    # =========================================================
+
+    @staticmethod
+    def check_out_overtime(employee_id: int, sim_time_str: str):
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        record = Attendance.query.filter_by(
+            employee_id=employee_id,
+            date=now_dt.date()
+        ).first()
+
+        if not record or not record.overtime_check_in:
+            raise ValidationError("Bạn chưa check-in OT.")
+
+        if record.overtime_check_out:
+            raise ValidationError("Bạn đã check-out OT.")
+
+        record.overtime_check_out = now_dt
+
+        record.overtime_hours = (
+            AttendanceService.calculate_overtime_hours(
+                record.overtime_check_in,
+                record.overtime_check_out
+            )
+        )
+
+        AttendanceService.finalize_attendance(record)
+
+        db.session.commit()
+
+        return {
+            "message": f"Check-out OT thành công. Tăng ca: {record.overtime_hours}h"
+        }
+
+    # =========================================================
+    # FINALIZE
+    # =========================================================
+
+    @staticmethod
+    def finalize_attendance(record: Attendance):
+        total = (
+            Decimal(record.regular_hours or 0)
+            + Decimal(record.overtime_hours or 0)
+        )
+
+        record.working_hours = total
+        record.shift_status = (
+            AttendanceService.SHIFT_STATUS_COMPLETED
+        )
+
+    # =========================================================
+    # GET TODAY
+    # =========================================================
+
+    @staticmethod
+    def get_today(employee_id: int, sim_time_str: str = None):
+        sim_time_str = sim_time_str or session.get("simulated_now")
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        return Attendance.query.filter_by(
+            employee_id=employee_id,
+            date=now_dt.date()
+        ).first()
+
+    # =========================================================
+    # HISTORY
+    # =========================================================
+
+    @staticmethod
+    def get_history(employee_id: int, sim_time_str=None, limit=10):
+        sim_time_str = sim_time_str or session.get("simulated_now")
+        now_dt = AttendanceService.parse_time(sim_time_str)
+
+        return Attendance.query.filter(
+            Attendance.employee_id == employee_id,
+            Attendance.date <= now_dt.date()
+        ).order_by(
+            Attendance.date.desc()
+        ).limit(limit).all()
