@@ -546,8 +546,6 @@ function renderState() {
   const otRequestStatusBox = document.getElementById("otRequestStatusBox");
   const workHoursText = document.getElementById("workHoursText");
 
-  const inLunch = false;
-
   const hasPendingOtApproval =
     ["pending_hr", "pending_admin"]
       .includes(state.todayOtRequest.status);
@@ -603,12 +601,9 @@ function renderState() {
     isDifferentDay
   ) {
     btn.textContent =
-      inLunch
-        ? "☕ Giờ nghỉ trưa"
-        : "🔳 XÁC THỰC CHẤM CÔNG";
+      "🔳 XÁC THỰC CHẤM CÔNG";
 
-    btn.disabled =
-      inLunch;
+    btn.disabled = false;
 
     btn.className =
       btn.disabled
@@ -634,73 +629,60 @@ function renderState() {
   */
 
   else {
-    const canCheckoutNow = state.attendanceState === "checkout_allowed" || state.attendanceState === "working_checkout_allowed";
+    const uiByShiftStatus = {
+      working: {
+        statusPrefix: "🟢 Đang làm việc",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
+      regular_completed: {
+        statusPrefix: "✅ Hoàn thành ca chính",
+        buttonText: hasApprovedOt
+          ? "⏳ Chờ vào ca OT theo lịch đã duyệt"
+          : "✅ Đã hoàn thành ca chính",
+        buttonDisabled: true,
+        buttonClass: "btn btn-disabled"
+      },
+      pre_ot_rest: {
+        statusPrefix: "🟡 Nghỉ trước tăng ca",
+        buttonText: "⏳ Chờ vào ca OT theo lịch đã duyệt",
+        buttonDisabled: true,
+        buttonClass: "btn btn-disabled"
+      },
+      overtime_working: {
+        statusPrefix: "🟣 Đang tăng ca",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
+      late: {
+        statusPrefix: "🟢 Đang làm việc",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
+      early_leave: {
+        statusPrefix: "🏃 Về sớm",
+        buttonText: "✅ Đã check-out",
+        buttonDisabled: true,
+        buttonClass: "btn btn-disabled"
+      },
+      completed: {
+        statusPrefix: "🏁 Hoàn tất ngày công",
+        buttonText: "✅ ĐÃ HOÀN THÀNH CÔNG VIỆC",
+        buttonDisabled: true,
+        buttonClass: "btn btn-disabled"
+      }
+    };
 
-    let statusPrefix =
-      "🟢 Đang làm việc";
+    const currentShiftUi =
+      uiByShiftStatus[state.shiftStatus] || uiByShiftStatus.working;
 
-    let buttonText =
-      "⏳ Chưa đến giờ tan ca (17:00)";
-
-    let buttonDisabled =
-      inLunch || !canCheckoutNow;
-
-    let buttonClass =
-      "btn btn-warning";
-
-    /*
-    =========================
-    PRE OT REST
-    =========================
-    */
-
-    if (state.isPreOvertimeRest) {
-      statusPrefix =
-        "🟡 Nghỉ trước tăng ca";
-
-      buttonText =
-        "⏳ Chờ vào ca OT theo lịch đã duyệt";
-
-      buttonDisabled = true;
-      buttonClass =
-        "btn btn-disabled";
-    }
-
-    /*
-    =========================
-    OT STARTED
-    =========================
-    */
-
-    else if (
-      state.overtimeStarted &&
-      hasApprovedOt
-    ) {
-      statusPrefix =
-        "🟣 Đang tăng ca";
-
-      buttonText =
-        "🔳 XÁC THỰC CHẤM CÔNG";
-
-      buttonDisabled = false;
-      buttonClass =
-        "btn btn-warning";
-    }
-
-    /*
-    =========================
-    NORMAL SHIFT
-    =========================
-    */
-
-    else {
-      buttonText =
-        inLunch
-          ? "☕ Giờ nghỉ trưa"
-          : canCheckoutNow
-          ? "🔳 XÁC THỰC CHẤM CÔNG"
-          : "⏳ Chưa đến giờ tan ca (17:00)";
-    }
+    const statusPrefix = currentShiftUi.statusPrefix;
+    const buttonText = currentShiftUi.buttonText;
+    const buttonDisabled = currentShiftUi.buttonDisabled;
+    const buttonClass = currentShiftUi.buttonClass;
 
     btn.textContent =
       buttonText;
