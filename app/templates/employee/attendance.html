@@ -449,27 +449,10 @@ const attendanceByDate = new Map([
   {% endfor %}
 ]);
 
-let isSubmittingAttendance = false;
-const todayOtRequest = {
-  status: root.dataset.todayOtStatus || "",
-  createdAt: root.dataset.todayOtCreatedAt
-    ? new Date(root.dataset.todayOtCreatedAt)
-    : null,
-
-  requestedHours: Number(root.dataset.todayOtHours || 0),
-
-  startAt: root.dataset.todayOtStart
-    ? new Date(root.dataset.todayOtStart)
-    : null,
-
-  endAt: root.dataset.todayOtEnd
-    ? new Date(root.dataset.todayOtEnd)
-    : null,
-
-  requestType:
-    root.dataset.todayOtRequestType ||
-    root.dataset.todayOtType ||
-    ""
+const submitState = {
+  attendance: false,
+  ot: false,
+  scanner: false
 };
 
 
@@ -507,6 +490,23 @@ function persistSharedSimTime(date) {
     localStorage.setItem(SHARED_SIM_TIME_KEY, toLocalISO(date));
   } catch (_) {}
 }
+function reloadAttendancePage() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("simulated_now", toLocalISO(state.now));
+  window.location.assign(url.toString());
+}
+
+function getOtWindowState() {
+  return root.dataset.otState || "";
+}
+
+function getOtWindowTimes() {
+  return {
+    start: root.dataset.otWindowStart ? new Date(root.dataset.otWindowStart) : null,
+    end: root.dataset.otWindowEnd ? new Date(root.dataset.otWindowEnd) : null
+  };
+}
+
 const state = {
   shiftStatus: root.dataset.shiftStatus || "not_started",
 
@@ -735,12 +735,18 @@ function maybeNotifyOvertimeWindow() {
 
   const isAfterShiftStart =
     hour > 17 || (hour === 17 && minute >= 0);
+  const otWindowState = getOtWindowState();
+  const otWindowTimes = getOtWindowTimes();
 
   const isOtStartTime =
-    hour >= 19;
+    otWindowState
+      ? ["active", "ended"].includes(otWindowState)
+      : (otWindowTimes.start ? state.now >= otWindowTimes.start : hour >= 19);
 
   const isOtEndTime =
-    hour >= 22;
+    otWindowState
+      ? otWindowState === "ended"
+      : (otWindowTimes.end ? state.now >= otWindowTimes.end : hour >= 22);
 
   /*
   =========================
@@ -819,17 +825,18 @@ function maybeNotifyOvertimeWindow() {
   19:00 BẮT ĐẦU OT
   =========================
   */
-
+  const otNotifyKey = `ot_notified_start_${dateKeyOf(state.now)}`;
   if (
     hasApprovedOt &&
     isOtStartTime &&
-    !state.notices.otStart
+    !state.notices.otStart &&
+    !sessionStorage.getItem(otNotifyKey)
   ) {
     state.notices.otStart = true;
 
     state.overtimeStarted = true;
     state.isPreOvertimeRest = false;
-
+    sessionStorage.setItem(otNotifyKey, "1");
     Swal.fire({
       icon: "info",
       title: "Ca tăng ca đã bắt đầu",
@@ -1044,7 +1051,6 @@ async function notifySwal(msg, type = "success") {
 }
 
 function renderState() {
-  syncAttendanceStateByDate();
 
   const btn = document.getElementById("attendanceBtn");
   const statusText = document.getElementById("statusText");
@@ -1446,7 +1452,7 @@ function startClock() {
       syncAttendanceStateByDate(true);
 
       // reload để lấy dữ liệu backend mới cho đúng tuyệt đối
-      location.reload();
+      reloadAttendancePage();
       return;
     }
 
@@ -1461,8 +1467,8 @@ function startClock() {
 }
 /* ===================== API ===================== */
 async function submitAttendanceFromQR(decodedText) {
-  if (isSubmittingAttendance) return;
-  isSubmittingAttendance = true;
+  if (submitState.attendance) return;
+  submitState.attendance = true;
 
   try {
     const payload = {
@@ -1641,10 +1647,7 @@ async function submitAttendanceFromQR(decodedText) {
        RELOAD PAGE
     ========================= */
 
-    window.location.href =
-      window.location.pathname +
-      "?simulated_now=" +
-      toLocalISO(state.now);
+    reloadAttendancePage();
 
   } catch (err) {
     await Swal.fire({
@@ -1653,13 +1656,13 @@ async function submitAttendanceFromQR(decodedText) {
       text: err.message || "Không thể chấm công"
     });
   } finally {
-    isSubmittingAttendance = false;
+    submitState.attendance = false;
   }
 }
 
 async function submitAttendanceConfirmation(decodedText) {
-  if (isSubmittingAttendance) return;
-  isSubmittingAttendance = true;
+  if (submitState.attendance) return;
+  submitState.attendance = true;
 
   try {
     const res = await fetch("/employee/attendance/check", {
@@ -1731,10 +1734,7 @@ async function submitAttendanceConfirmation(decodedText) {
       showConfirmButton: false
     });
 
-    window.location.href =
-      window.location.pathname +
-      "?simulated_now=" +
-      toLocalISO(state.now);
+    reloadAttendancePage();
 
   } catch (err) {
     await Swal.fire({
@@ -1745,12 +1745,12 @@ async function submitAttendanceConfirmation(decodedText) {
         "Không thể check-in ngày nghỉ"
     });
   } finally {
-    isSubmittingAttendance = false;
+    submitState.attendance = false;
   }
 }
 async function submitAutomaticOvertimeRequest(requestType, options = {}) {
-  if (isSubmittingAttendance) return;
-  isSubmittingAttendance = true;
+  if (submitState.ot) return;
+  submitState.ot = true;
 
   try {
     const payload = {
@@ -1888,7 +1888,7 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
         "Không thể gửi yêu cầu tăng ca"
     });
   } finally {
-    isSubmittingAttendance = false;
+    submitState.ot = false;
   }
 }
 function initSimEditor() {
@@ -1951,10 +1951,7 @@ function initSimEditor() {
       if (oldDateKey !== newDateKey) {
         syncAttendanceStateByDate(true);
 
-        window.location.href =
-          window.location.pathname +
-          "?simulated_now=" +
-          toLocalISO(state.now);
+        reloadAttendancePage();
 
         return;
       }
@@ -1999,7 +1996,7 @@ const scanner = HRMQRScanner.createQRScanner({
   panelId: "scannerPanel",
 
   onDecoded: async (decodedText) => {
-    if (isSubmittingAttendance) return;
+    if (submitState.attendance || submitState.scanner) return;
 
     try {
       await submitAttendanceFromQR(decodedText);
@@ -2036,17 +2033,18 @@ async function openScannerModal() {
   if (!btn || btn.disabled) return;
 
   // chặn khi đang submit attendance
-  if (isSubmittingAttendance) return;
+   if (submitState.attendance || submitState.scanner) return;
 
   // tránh mở nhiều lần
-  if (state.isScannerOpen) return;
+  if (state.isScannerOpen || submitState.scanner) return;
 
   try {
+    submitState.scanner = true;
     await scanner.open();
     state.isScannerOpen = true;
   } catch (err) {
     state.isScannerOpen = false;
-
+    submitState.scanner = false;
     await Swal.fire({
       icon: "error",
       title: "Không thể mở camera",
@@ -2063,6 +2061,7 @@ async function closeScannerModal() {
   }
 
   state.isScannerOpen = false;
+  submitState.scanner = false;
 }
 async function deleteRecord(dateIso) {
   const formatDate = (iso) => {
@@ -2109,7 +2108,7 @@ async function deleteRecord(dateIso) {
       showConfirmButton: false
     });
 
-    location.reload();
+    reloadAttendancePage();
 
   } catch (err) {
     await Swal.fire({
@@ -2164,7 +2163,7 @@ async function resetOtRequestForTest() {
       showConfirmButton: false
     });
 
-    location.reload();
+    reloadAttendancePage();
 
   } catch (err) {
     await Swal.fire({
