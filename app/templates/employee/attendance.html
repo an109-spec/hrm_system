@@ -205,7 +205,6 @@
   class="emp-card emp-center" 
   id="attendanceRoot"
 
-data-shift-status="{{ today.shift_status if today else 'not_started' }}"
 
 data-overtime-checkin="{{ today.overtime_check_in.isoformat() if today and today.overtime_check_in else '' }}"
 data-overtime-checkout="{{ today.overtime_check_out.isoformat() if today and today.overtime_check_out else '' }}"
@@ -218,10 +217,10 @@ data-is-holiday="{{ 1 if today and today.is_holiday else 0 }}"
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
-  data-main-hours="{{ (today.main_hours or today.regular_hours or 0)|float if today else 0 }}"
+  data-main-hours="{{ (today.main_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
   data-attendance-state="{{ today.attendance_state if today else 'not_started' }}"
-  data-today-ot-status="{{ today_ot_request.status if today_ot_request else '' }}"
+  data-overtime-status="{{ today.overtime_status if today else '' }}"
   data-today-ot-created-at="{{ today_ot_request.created_at.isoformat() if today_ot_request and today_ot_request.created_at else '' }}"
   data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
   data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
@@ -311,7 +310,7 @@ data-is-holiday="{{ 1 if today and today.is_holiday else 0 }}"
           <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
           <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-          <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
+          <td>{{ '%.2f'|format((a.main_hours or 0)|float) }} giờ</td>
           <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
           <td>
             {% if a.shift_status == "not_started" %}
@@ -399,8 +398,6 @@ function getOtWindowTimes() {
 }
 
 const state = {
-  shiftStatus: root.dataset.shiftStatus || "not_started",
-
   checkIn: root.dataset.checkin
     ? new Date(root.dataset.checkin)
     : null,
@@ -420,6 +417,7 @@ const state = {
   mainHours: Number(root.dataset.mainHours || 0),
   overtimeHours: Number(root.dataset.overtimeHours || 0),
   attendanceState: root.dataset.attendanceState || "not_started",
+  overtimeStatus: root.dataset.overtimeStatus || "NONE",
   isHalfDay: root.dataset.isHalfDay === "1",
   lateMinutes: Number(root.dataset.lateMinutes || 0),
   lateWarning: root.dataset.lateWarning === "1",
@@ -435,8 +433,6 @@ const state = {
   ========================= */
 
   todayOtRequest: {
-    status: root.dataset.todayOtStatus || "",
-
     createdAt: root.dataset.todayOtCreatedAt
       ? new Date(root.dataset.todayOtCreatedAt)
       : null,
@@ -473,11 +469,11 @@ const state = {
 };
 
 const isApprovedOt =
-  state.todayOtRequest.status === "approved";
+  state.overtimeStatus === "APPROVED";
 
 const hasPendingOt =
-  ["pending_hr", "pending_admin"].includes(
-    state.todayOtRequest.status
+  ["PENDING"].includes(
+    state.overtimeStatus
   );
 
 state.isOvertime = isApprovedOt;
@@ -547,11 +543,11 @@ function renderState() {
   const workHoursText = document.getElementById("workHoursText");
 
   const hasPendingOtApproval =
-    ["pending_hr", "pending_admin"]
-      .includes(state.todayOtRequest.status);
+    ["PENDING"]
+      .includes(state.overtimeStatus);
 
   const hasApprovedOt =
-    state.todayOtRequest.status === "approved";
+    state.overtimeStatus === "APPROVED";
 
   const isDifferentDay = false;
 
@@ -677,7 +673,7 @@ function renderState() {
     };
 
     const currentShiftUi =
-      uiByShiftStatus[state.shiftStatus] || uiByShiftStatus.working;
+      uiByShiftStatus[state.attendanceState] || uiByShiftStatus.working;
 
     const statusPrefix = currentShiftUi.statusPrefix;
     const buttonText = currentShiftUi.buttonText;
@@ -723,7 +719,7 @@ function renderState() {
     const req =
       state.todayOtRequest;
 
-    if (!req.status) {
+    if (!state.overtimeStatus || state.overtimeStatus === "NONE") {
       otRequestStatusBox.style.display =
         "none";
     } else {
@@ -735,17 +731,12 @@ function renderState() {
       let statusLabel =
         "❌ Yêu cầu OT đã bị từ chối";
 
-      if (req.status === "pending_hr") {
+      if (state.overtimeStatus === "PENDING") {
         statusLabel =
-          "⏳ Yêu cầu OT đang chờ HR duyệt";
+          "⏳ Yêu cầu OT đang chờ duyệt";
       }
 
-      if (req.status === "pending_admin") {
-        statusLabel =
-          "⏳ Yêu cầu OT đang chờ Admin duyệt";
-      }
-
-      if (req.status === "approved") {
+      if (state.overtimeStatus === "APPROVED") {
         statusLabel =
           "✅ Yêu cầu OT đã được duyệt";
       }
@@ -956,8 +947,10 @@ async function submitAttendanceFromQR(decodedText) {
           ? new Date(data.check_out)
           : null;
 
-        state.mainHours = Number(data.main_hours || data.regular_hours || 0);
+        state.mainHours = Number(data.main_hours || 0);
         state.overtimeHours = Number(data.overtime_hours || 0);
+        state.attendanceState = data.attendance_state || state.attendanceState;
+        state.overtimeStatus = data.overtime_status || state.overtimeStatus;
         break;
 
       case "done":
@@ -1136,8 +1129,8 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
        SYNC OT REQUEST STATE
     ========================= */
 
-    state.todayOtRequest.status =
-      data.request?.status || "pending_hr";
+    state.overtimeStatus =
+      data.overtime_status || "PENDING";
 
     state.todayOtRequest.requestType =
       requestType;
@@ -1180,11 +1173,9 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     ========================= */
 
     const statusLabel =
-      state.todayOtRequest.status === "pending_hr"
-        ? "Đang chờ HR duyệt"
-        : state.todayOtRequest.status === "pending_admin"
-          ? "Đang chờ Admin duyệt"
-          : state.todayOtRequest.status === "approved"
+      state.overtimeStatus === "PENDING"
+        ? "Đang chờ duyệt"
+        : state.overtimeStatus === "APPROVED"
             ? "Đã được duyệt"
             : "Đã gửi yêu cầu";
 
