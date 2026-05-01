@@ -388,7 +388,7 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 <script>
 const root = document.getElementById("attendanceRoot");

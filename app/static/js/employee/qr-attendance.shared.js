@@ -18,6 +18,34 @@
       isProcessingDecode = false;
       isOpen = false;
     }
+    async function startWithConfig(cameraConfig) {
+      return scanEngine.start(
+        cameraConfig,
+        { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
+        async (decodedText) => {
+          if (isProcessingDecode) return;
+          isProcessingDecode = true;
+
+          if (panelId) {
+            const panel = document.getElementById(panelId);
+            if (panel) panel.classList.add('success-flash');
+          }
+
+          try {
+            await close();
+          } catch (_) {
+            // ignore close errors and keep processing decoded value
+          }
+
+          try {
+            await onDecoded(decodedText);
+          } catch (err) {
+            isProcessingDecode = false;
+            if (onError) await onError(err);
+          }
+        }
+      );
+    }
 
     async function open() {
       if (isOpen) return;
@@ -32,31 +60,21 @@
       scanEngine = new Html5Qrcode(readerId);
 
       try {
-        await scanEngine.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
-          async (decodedText) => {
-            if (isProcessingDecode) return;
-            isProcessingDecode = true;
-            try {
-              if (panelId) {
-                const panel = document.getElementById(panelId);
-                if (panel) panel.classList.add('success-flash');
-              }
-              await close();
-              await onDecoded(decodedText);
-            } catch (err) {
-              if (onError) onError(err);
-            }
+        await startWithConfig({ facingMode: { exact: 'environment' } });
+      } catch (firstErr) {
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (!devices || devices.length === 0) throw firstErr;
+          const backCam = devices.find((d) => /back|rear|sau/i.test(d.label || '')) || devices[0];
+          await startWithConfig({ deviceId: { exact: backCam.id } });
+        } catch (secondErr) {
+          isOpen = false;
+          const msg = String(secondErr || firstErr || '').toLowerCase();
+          if (msg.includes('permission') || msg.includes('notallowederror')) {
+            throw new Error('Không có quyền truy cập camera. Hãy cho phép camera và thử lại.');
           }
-        );
-      } catch (err) {
-        isOpen = false;
-        const msg = String(err || '');
-        if (msg.toLowerCase().includes('permission')) {
-          throw new Error('Không có quyền truy cập camera. Hãy cho phép camera và thử lại.');
+          throw new Error('Không thể khởi động camera hoặc nhận diện QR. Vui lòng thử lại.');
         }
-        throw new Error('Không thể khởi động camera. Vui lòng thử lại.');
       }
     }
 
