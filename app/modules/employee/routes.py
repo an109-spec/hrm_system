@@ -90,14 +90,21 @@ def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> di
     has_checkout = bool(attendance and attendance.check_out)
     has_ot_in = bool(attendance and attendance.overtime_check_in)
     has_ot_out = bool(attendance and attendance.overtime_check_out)
-
+    approved_ot_request = None
+    if attendance:
+        approved_ot_request = OvertimeRequest.query.filter(
+            OvertimeRequest.employee_id == attendance.employee_id,
+            OvertimeRequest.overtime_date == now.date(),
+            OvertimeRequest.is_deleted.is_(False),
+            OvertimeRequest.status == "approved",
+        ).first()
     return {
         "attendance_state": attendance_state,
         "shift_state": shift_state,
         "action_flags": {
             "can_check_in": (UI_CHECKIN_OPEN <= current_time < WORKDAY_END) and (not in_lunch) and (not has_checkin),
             "can_check_out": has_checkin and (not has_checkout) and (not in_lunch) and (current_time >= WORKDAY_END),
-            "can_start_ot": (current_time >= OT_UI_OPEN) and (not has_ot_in) and (not has_ot_out),
+            "can_start_ot": (current_time >= OT_UI_OPEN) and has_checkout and bool(approved_ot_request) and (not has_ot_in) and (not has_ot_out),
             "can_end_ot": has_ot_in and (not has_ot_out) and (current_time >= OT_END),
         },
     }
@@ -1023,7 +1030,7 @@ def check_in_out():
             if approved_ot_request:
                 overtime_status = "APPROVED"
             elif pending_ot_request:
-                overtime_status = "PENDING"
+                overtime_status = str(pending_ot_request.status or "PENDING").upper()
 
             attendance_status = (
                 "HALF_DAY"
@@ -1054,14 +1061,7 @@ def check_in_out():
                 msg += f" • Ca chính quy đổi: {regular_hours_payroll}h • OT quy đổi: {overtime_hours_payroll}h (hệ số x3)"
             else:
                 msg += f" • Ca chính: {regular_hours}h"
-            if approved_ot_request and current_time >= datetime.combine(today, AttendanceService.OT_END):
-                db.session.add(Notification(
-                    user_id=employee.user_id,
-                    title="🔔 Kết thúc ca tăng ca",
-                    content="Ca tăng ca đã kết thúc lúc 22:00. Vui lòng check-out để hoàn tất chấm công.",
-                    type="overtime",
-                    link="/employee/attendance",
-                ))
+
             if early_minutes > 0:
                 msg += f" • Về sớm {early_minutes} phút"
             worked_hours, regular_hours, raw_overtime_hours, raw_total_hours, payroll_overtime_hours = _attendance_metrics(
@@ -1082,7 +1082,7 @@ def check_in_out():
                 "type": "warning" if early_minutes > 0 else "success",
                 "action": "check_out",
                 "message": msg,
-                "attendance_state": attendance.attendance_type,
+                "attendance_state": "half_day" if attendance_status == "HALF_DAY" else "completed",
                 "worked_hours": str(worked_hours),
                 "raw_hours": str(raw_total_hours),
                 "payroll_hours": str(worked_hours),
@@ -1093,11 +1093,12 @@ def check_in_out():
                 "check_out": attendance.check_out.isoformat() if attendance.check_out else None,
                 "status_key": status_key,
                 "main_hours": float(regular_hours_payroll),
-                "total_hours": float(worked_hours),
-                "status": attendance_status,
-                "is_holiday": bool(today_holiday),
-                "is_weekend": bool(today.weekday() >= 5),
-                "overtime_status": overtime_status,
+                "next_event": "offer_overtime" if (
+                    current_time < datetime.combine(today, AttendanceService.OT_END)
+                    and not approved_ot_request
+                    and not pending_ot_request
+                    and effective_check_out >= datetime.combine(today, WORKDAY_END)
+                ) else "",
             })
 
         # =========================

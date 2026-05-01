@@ -404,7 +404,7 @@ function reloadAttendancePage() {
 }
 
 function getOtWindowState() {
-  return root.dataset.otState || "";
+  return root.dataset.overtimeState || "";
 }
 
 function getOtWindowTimes() {
@@ -479,21 +479,12 @@ const state = {
 const isApprovedOt =
   state.overtimeStatus === "APPROVED";
 
-const hasPendingOt =
-  ["PENDING"].includes(
-    state.overtimeStatus
-  );
+const hasPendingOt = ["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus);
 
 state.isOvertime = isApprovedOt;
 
 state.isPreOvertimeRest = state.overtimeState === "resting";
-    state.overtimeStarted = state.overtimeState === "active";
-
-
-const dateKeyOf = (d) => {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+state.overtimeStarted = state.overtimeState === "active";
 
 const fmtHm = (d) => {
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
@@ -522,7 +513,6 @@ function isNewDay(now, lastCheckin) {
     now.getFullYear() !== lastCheckin.getFullYear()
   );
 }
-function maybeNotifyOvertimeWindow() {}
 
 /* ===================== TOAST ===================== */
 async function notifySwal(msg, type = "success") {
@@ -550,14 +540,12 @@ function renderState() {
   const otRequestStatusBox = document.getElementById("otRequestStatusBox");
   const workHoursText = document.getElementById("workHoursText");
 
-  const hasPendingOtApproval =
-    ["PENDING"]
-      .includes(state.overtimeStatus);
+  const hasPendingOtApproval = ["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus);
 
   const hasApprovedOt =
     state.overtimeStatus === "APPROVED";
 
-  const isDifferentDay = false;
+  const isDifferentDay = isNewDay(state.now, state.checkIn);
 
   /*
   =========================
@@ -636,6 +624,12 @@ function renderState() {
     const uiByShiftStatus = {
       working: {
         statusPrefix: "🟢 Đang làm việc",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
+      half_day: {
+        statusPrefix: "🟠 Đi muộn quá 60 phút (nửa ngày công)",
         buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
@@ -739,7 +733,7 @@ function renderState() {
       let statusLabel =
         "❌ Yêu cầu OT đã bị từ chối";
 
-      if (state.overtimeStatus === "PENDING") {
+      if (["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus)) {
         statusLabel =
           "⏳ Yêu cầu OT đang chờ duyệt";
       }
@@ -825,9 +819,6 @@ function renderDate() {
     });
 }
 
-/* ===================== CLOCK ===================== */
-let clockTimer = null;
-
 /* ===================== API ===================== */
 async function submitAttendanceFromQR(decodedText) {
   if (submitState.attendance) return;
@@ -848,6 +839,20 @@ async function submitAttendanceFromQR(decodedText) {
     });
 
     const data = await res.json();
+    if (!res.ok && (data.action === "holiday_ot_prompt" || data.action === "weekend_work_prompt")) {
+      const decision = await Swal.fire({
+        icon: "question",
+        title: data.action === "holiday_ot_prompt" ? "Hôm nay là ngày nghỉ lễ" : "Hôm nay là ngày nghỉ cuối tuần",
+        text: data.message || "Bạn có muốn đi làm không?",
+        showCancelButton: true,
+        confirmButtonText: "Có",
+        cancelButtonText: "Không"
+      });
+      if (decision.isConfirmed) {
+        await submitAttendanceConfirmation(decodedText);
+      }
+      return;
+    }
 
     if (!res.ok) {
       await Swal.fire({
@@ -965,7 +970,8 @@ async function submitAttendanceFromQR(decodedText) {
     ========================= */
 
     if (data.action === "check_out") {
-      const canInviteOt = state.nextEvent === "offer_overtime";
+      state.nextEvent = data.next_event || state.nextEvent;
+      const canInviteOt = state.nextEvent === "offer_overtime" || (state.mainHours >= 8 && state.overtimeStatus === "NONE");
       if (canInviteOt) {
         const otDecision = await Swal.fire({
           icon: "question",
@@ -1152,7 +1158,7 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     ========================= */
 
     const statusLabel =
-      state.overtimeStatus === "PENDING"
+      ["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus)
         ? "Đang chờ duyệt"
         : state.overtimeStatus === "APPROVED"
             ? "Đã được duyệt"
@@ -1466,7 +1472,7 @@ function attachScroll(el, unit) {
 ========================= */
 (function initDemoTime() {
   syncDemoTime().catch(() => {
-    demoState.current = new Date(state.now || new Date());
+    demoState.current = demoState.current || new Date();
     renderDemoTime(demoState.current);
   });
 

@@ -44,12 +44,14 @@ class AttendanceJob:
         """
         Tạo notification trong DB
         """
-
+        employee = Employee.query.get(employee_id)
+        if not employee or not employee.user_id:
+            return
         notification = Notification(
-            employee_id=employee_id,
+            user_id=employee.user_id,
             title=title,
             content=content,
-            notification_type=notification_type,
+            type=notification_type,
             is_read=False,
         )
 
