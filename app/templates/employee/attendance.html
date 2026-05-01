@@ -230,7 +230,7 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
   data-main-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
   data-attendance-state="{{ today.shift_status if today else 'not_started' }}"
-  data-overtime-status="{{ today.overtime_status if today else '' }}"
+  data-overtime-status="{{ (today_ot_request.status|upper) if today_ot_request and today_ot_request.status else (today.overtime_status if today else '') }}"
   data-today-ot-created-at="{{ today_ot_request.created_at.isoformat() if today_ot_request and today_ot_request.created_at else '' }}"
   data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
   data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
@@ -532,7 +532,12 @@ function renderState() {
   }
   const hasApprovedOt =
     state.overtimeStatus === "APPROVED";
-
+  const currentHourForOt = state.now instanceof Date ? state.now.getHours() : 0;
+  if (hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn) {
+    state.attendanceState = currentHourForOt >= 19 ? "ot_unverified" : "pre_ot_rest_pending_checkin";
+  } else if (hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut) {
+    state.attendanceState = currentHourForOt >= 19 ? "overtime_working" : "pre_ot_rest_verified";
+  }
   const isDifferentDay = isNewDay(state.now, state.checkIn);
   if (isDifferentDay) {
     state.hasAttendance = false;
@@ -562,7 +567,8 @@ function renderState() {
 
   if (
     state.hasCheckout &&
-    !isDifferentDay
+    !isDifferentDay &&
+    !(hasApprovedOt && !state.overtimeCheckOut)
   ) {
     btn.textContent =
       "✅ ĐÃ HOÀN THÀNH CÔNG VIỆC";
@@ -689,11 +695,35 @@ function renderState() {
     let buttonText = currentShiftUi.buttonText;
     let buttonDisabled = currentShiftUi.buttonDisabled;
     let buttonClass = currentShiftUi.buttonClass;
+    const nowHour = state.now.getHours();
+    const otApprovedButNotVerified =
+      hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn;
+    const otApprovedAndVerifiedPre19 =
+      hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut && nowHour < 19;
+    const otApprovedAndVerifiedAfter19 =
+      hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut && nowHour >= 19;
 
     if (hasPendingOtApproval) {
       buttonText = "⏳ ĐANG CHỜ DUYỆT OT";
       buttonDisabled = true;
       buttonClass = "btn btn-disabled";
+    } else if (otApprovedButNotVerified) {
+      buttonText = "🔳 XÁC THỰC CHẤM CÔNG TĂNG CA";
+      buttonDisabled = false;
+      buttonClass = "btn btn-primary";
+      currentShiftUi.statusPrefix = nowHour >= 19
+        ? "🔴 Chưa xác thực chấm công cho tăng ca"
+        : "🟡 Nghỉ ngơi trước tăng ca (vui lòng check-in)";
+    } else if (otApprovedAndVerifiedPre19) {
+      buttonText = "⏳ Đã xác thực, chờ đến 19:00";
+      buttonDisabled = true;
+      buttonClass = "btn btn-disabled";
+      currentShiftUi.statusPrefix = "🟡 Nghỉ ngơi trước tăng ca (đã check-in)";
+    } else if (otApprovedAndVerifiedAfter19) {
+      buttonText = "🔳 XÁC NHẬN KẾT THÚC TĂNG CA";
+      buttonDisabled = false;
+      buttonClass = "btn btn-warning";
+      currentShiftUi.statusPrefix = "🟣 Đang làm việc";
     }
 
 
@@ -886,6 +916,9 @@ function getAttendanceStateMeta(rawState) {
     regular_done: { label: "Hoàn thành ca chính", color: "#16a34a" },
     regular_completed: { label: "Hoàn thành ca chính", color: "#16a34a" },
     pre_ot_rest: { label: "Nghỉ trước tăng ca", color: "#d97706" },
+    pre_ot_rest_pending_checkin: { label: "Nghỉ ngơi trước tăng ca (vui lòng check-in)", color: "#d97706" },
+    pre_ot_rest_verified: { label: "Nghỉ ngơi trước tăng ca (đã check-in)", color: "#b45309" },
+    ot_unverified: { label: "Chưa xác thực chấm công cho tăng ca", color: "#dc2626" },
     overtime_working: { label: "Đang tăng ca", color: "#7c3aed" },
     working_overtime: { label: "Đang tăng ca", color: "#7c3aed" },
     completed: { label: "Hoàn tất ngày công", color: "#16a34a" },
@@ -1058,7 +1091,21 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
       case "done":
         state.hasCheckout = true;
         break;
-
+      case "check_in_overtime":
+        state.hasCheckout = true;
+        state.overtimeCheckIn = data.overtime_check_in ? new Date(data.overtime_check_in) : new Date(state.now);
+        state.overtimeCheckOut = data.overtime_check_out ? new Date(data.overtime_check_out) : null;
+        state.attendanceState = data.attendance_state || state.attendanceState;
+        state.overtimeStatus = data.overtime_status || state.overtimeStatus || "APPROVED";
+        break;
+      case "check_out_overtime":
+        state.hasCheckout = true;
+        state.overtimeCheckIn = data.overtime_check_in ? new Date(data.overtime_check_in) : state.overtimeCheckIn;
+        state.overtimeCheckOut = data.overtime_check_out ? new Date(data.overtime_check_out) : new Date(state.now);
+        state.overtimeHours = Number(data.overtime_hours || state.overtimeHours || 0);
+        state.attendanceState = data.attendance_state || "completed";
+        state.overtimeStatus = data.overtime_status || state.overtimeStatus || "APPROVED";
+        break;
       default:
         break;
     }
@@ -1234,7 +1281,7 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     ========================= */
 
     state.overtimeStatus =
-      data.overtime_status || "PENDING";
+      data.overtime_status || data.request?.status?.toUpperCase?.() || "PENDING";
 
     state.todayOtRequest.requestType =
       requestType;
@@ -1554,6 +1601,28 @@ function maybeNotifyCheckoutAt17h() {
     showConfirmButton: false
   });
 }
+function maybeNotifyOtCheckoutAt22h() {
+  const hasApprovedOt = String(state.overtimeStatus || "").toUpperCase() === "APPROVED";
+  if (!hasApprovedOt) return;
+  if (!state.overtimeCheckIn || state.overtimeCheckOut) return;
+  if (!(state.now instanceof Date) || Number.isNaN(state.now.getTime())) return;
+  if (state.now.getHours() < 22) return;
+
+  const dayKey = `${state.now.getFullYear()}-${String(state.now.getMonth() + 1).padStart(2, "0")}-${String(state.now.getDate()).padStart(2, "0")}`;
+  const notifyKey = `hrm_ot_checkout_22h_notified_${dayKey}`;
+  try {
+    if (localStorage.getItem(notifyKey) === "1") return;
+    localStorage.setItem(notifyKey, "1");
+  } catch (_) {}
+
+  Swal.fire({
+    icon: "info",
+    title: "Đã đến 22:00",
+    text: "Đã hết giờ tăng ca. Vui lòng quét QR để check-out tăng ca.",
+    timer: 4000,
+    showConfirmButton: false
+  });
+}
 function advanceDemoClock() {
   if (!demoState.current) return;
 
@@ -1564,6 +1633,7 @@ function advanceDemoClock() {
   renderDate();
   renderState();
   maybeNotifyCheckoutAt17h();
+  maybeNotifyOtCheckoutAt22h();
 }
 
 /* =========================
@@ -1586,6 +1656,7 @@ async function syncDemoTime() {
   renderDate();
   renderState();
   maybeNotifyCheckoutAt17h();
+  maybeNotifyOtCheckoutAt22h();
 }
 
 /* =========================

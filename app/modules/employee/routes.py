@@ -1126,6 +1126,63 @@ def check_in_out():
                     and effective_check_out >= datetime.combine(today, WORKDAY_END)
                 ) else "",
             })
+        approved_ot_request = OvertimeRequest.query.filter(
+            OvertimeRequest.employee_id == employee.id,
+            OvertimeRequest.overtime_date == today,
+            OvertimeRequest.is_deleted.is_(False),
+            OvertimeRequest.status == "approved",
+        ).first()
+        if attendance.check_out and approved_ot_request:
+            ot_start_time = datetime.combine(today, AttendanceService.OT_START)
+            ot_end_time = datetime.combine(today, AttendanceService.OT_END)
+
+            if not attendance.overtime_check_in:
+                attendance.overtime_check_in = current_time
+                attendance.shift_status = "pre_ot_rest" if current_time < ot_start_time else "working_overtime"
+                db.session.commit()
+                return jsonify({
+                    "toast": True,
+                    "type": "success",
+                    "action": "check_in_overtime",
+                    "message": (
+                        "Đã xác thực chấm công tăng ca. "
+                        + ("Trạng thái: Nghỉ ngơi trước tăng ca." if current_time < ot_start_time else "Trạng thái: Đang làm việc tăng ca.")
+                    ),
+                    "attendance_state": attendance.shift_status,
+                    "overtime_check_in": attendance.overtime_check_in.isoformat() if attendance.overtime_check_in else None,
+                    "overtime_check_out": attendance.overtime_check_out.isoformat() if attendance.overtime_check_out else None,
+                    "overtime_status": "APPROVED",
+                })
+
+            if not attendance.overtime_check_out:
+                overtime_check_in_time = attendance.overtime_check_in
+                if overtime_check_in_time and overtime_check_in_time.tzinfo is not None:
+                    overtime_check_in_time = overtime_check_in_time.replace(tzinfo=None)
+                if current_time < overtime_check_in_time:
+                    return jsonify({
+                        "toast": True,
+                        "type": "error",
+                        "message": "Thời gian check-out OT không hợp lệ",
+                    }), 400
+                attendance.overtime_check_out = min(current_time, ot_end_time)
+                attendance.overtime_hours = AttendanceService.calculate_overtime_hours(
+                    attendance.overtime_check_in,
+                    attendance.overtime_check_out,
+                )
+                attendance.shift_status = "completed"
+                db.session.commit()
+                return jsonify({
+                    "toast": True,
+                    "type": "success",
+                    "action": "check_out_overtime",
+                    "message": f"Check-out OT thành công. Tăng ca: {attendance.overtime_hours}h",
+                    "attendance_state": "completed",
+                    "overtime_hours": str(attendance.overtime_hours or 0),
+                    "overtime_check_in": attendance.overtime_check_in.isoformat() if attendance.overtime_check_in else None,
+                    "overtime_check_out": attendance.overtime_check_out.isoformat() if attendance.overtime_check_out else None,
+                    "overtime_status": "APPROVED",
+                })
+
 
         # =========================
         # ALREADY DONE
