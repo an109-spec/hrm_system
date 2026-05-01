@@ -281,10 +281,6 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
     </button>
   </div>
 
-  <!-- STATUS -->
-  <p id="statusText" class="attendance-note">
-    Trạng thái hiện tại: 🟡 Chưa vào ca
-  </p>
 
   <!-- IDENTITY (FIX: dynamic, không hardcode) -->
   <p id="identityText" class="attendance-note" style="display:none;">
@@ -333,30 +329,15 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
           <td>
             {% if a.check_in and a.check_out %}
               <span class="status status-success">🏁 Hoàn tất ngày công</span>
-            {% elif a.shift_status == "not_started" %}
-              <span class="status status-danger">❌ Chưa vào ca</span>
-            {% elif a.shift_status == "late" %}
-              <span class="status status-late">⏰ Đi muộn</span>
-
-            {% elif a.shift_status == "early_leave" %}
-              <span class="status status-early">🏃 Về sớm</span>
-            {% elif a.shift_status in ["working", "working_regular"] %}
-              <span class="status status-warning">🟡 Đang làm ca chính</span>
-
-            {% elif a.shift_status in ["regular_completed", "regular_done"] %}
-              <span class="status status-success">✅ Hoàn thành ca chính</span>
-
-            {% elif a.shift_status == "pre_ot_rest" %}
-              <span class="status status-warning">☕ Nghỉ trước OT</span>
-
-            {% elif a.shift_status in ["overtime_working", "working_overtime"] %}
-              <span class="status status-late">🟣 Đang tăng ca</span>
-
-            {% elif a.shift_status == "completed" %}
-              <span class="status status-success">🏁 Hoàn tất ngày công</span>
-
+            {% elif a.check_in and not a.check_out %}
+              {% set is_before_shift = a.check_in.hour < 8 %}
+              {% if is_before_shift %}
+                <span class="status status-warning">🟡 Chuẩn bị vào ca chính</span>
+              {% else %}
+                <span class="status status-warning">🟡 Đang làm ca chính</span>
+              {% endif %}
             {% else %}
-              <span class="status status-danger">—</span>
+              <span class="status status-danger">❌ Chưa vào ca</span>
             {% endif %}
           </td>
           <td>
@@ -536,7 +517,6 @@ async function notifySwal(msg, type = "success") {
 function renderState() {
 
   const btn = document.getElementById("attendanceBtn");
-  const statusText = document.getElementById("statusText");
   const lateWarning = document.getElementById("lateWarning");
   const identityText = document.getElementById("identityText");
   const otRequestStatusBox = document.getElementById("otRequestStatusBox");
@@ -583,9 +563,6 @@ function renderState() {
     btn.className =
       "btn btn-disabled";
 
-    statusText.textContent =
-      "⚪ Hết ca";
-
     identityText.style.display =
       "block";
   }
@@ -615,11 +592,6 @@ function renderState() {
     pending OT chỉ hiển thị trạng thái,
     không khóa check-in ca chính
     */
-
-    statusText.textContent =
-      hasPendingOtApproval
-        ? "⏳ Đang chờ duyệt yêu cầu tăng ca"
-        : "🟡 Chưa vào ca";
   }
 
   /*
@@ -706,7 +678,6 @@ function renderState() {
     const currentShiftUi =
       uiByShiftStatus[state.attendanceState] || uiByShiftStatus.working;
 
-    const statusPrefix = currentShiftUi.statusPrefix;
     let buttonText = currentShiftUi.buttonText;
     let buttonDisabled = currentShiftUi.buttonDisabled;
     let buttonClass = currentShiftUi.buttonClass;
@@ -728,9 +699,6 @@ function renderState() {
       buttonDisabled
         ? "btn btn-disabled"
         : buttonClass;
-
-    statusText.textContent =
-      `${statusPrefix} (vào ${fmtHm(state.checkIn)})`;
 
     identityText.style.display =
       "block";
@@ -848,9 +816,18 @@ function renderState() {
   }
 }
 function getAttendanceStateMeta(rawState) {
-  const stateKey = String(rawState || "").toLowerCase();
+  let stateKey = String(rawState || "").toLowerCase();
+  if (
+    ["working", "working_regular", "late"].includes(stateKey) &&
+    state.checkIn &&
+    !state.hasCheckout &&
+    state.checkIn.getHours() < 8
+  ) {
+    stateKey = "pre_shift_ready";
+  }
   const map = {
     not_started: { label: "Chưa vào ca", color: "#dc2626" },
+    pre_shift_ready: { label: "Chuẩn bị vào ca chính", color: "#ca8a04" },
     working: { label: "Đang làm ca chính", color: "#ca8a04" },
     working_regular: { label: "Đang làm ca chính", color: "#ca8a04" },
     regular_done: { label: "Hoàn thành ca chính", color: "#16a34a" },
@@ -907,6 +884,8 @@ async function submitAttendanceFromQR(decodedText) {
         cancelButtonText: "Không"
       });
       if (decision.isConfirmed) {
+        submitState.attendance = false;
+        submitState.attendance = false;
         await submitAttendanceConfirmation(decodedText);
       }
       return;
@@ -936,6 +915,8 @@ async function submitAttendanceFromQR(decodedText) {
       });
 
       if (decision.isConfirmed) {
+        submitState.attendance = false;
+        submitState.attendance = false;
         await submitAttendanceConfirmation(decodedText);
       }
       return;
