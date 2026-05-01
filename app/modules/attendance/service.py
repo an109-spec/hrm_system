@@ -163,6 +163,13 @@ class AttendanceService:
         hours = (total_seconds - lunch_seconds) / 3600
 
         return Decimal(str(round(max(0, hours), 2)))
+    @staticmethod
+    def recalculate_hours(check_in: datetime, check_out: datetime) -> Decimal:
+        """
+        Tính lại giờ công cho bản ghi lịch sử dựa trên check-in/check-out ca chính.
+        Giữ tương thích ngược với các nơi đang gọi API cũ `recalculate_hours`.
+        """
+        return AttendanceService.calculate_regular_hours(check_in, check_out)
 
     # =========================================================
     # OVERTIME
