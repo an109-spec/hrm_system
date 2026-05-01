@@ -967,6 +967,7 @@ def check_in_out():
         # =========================
         if attendance.check_in and not attendance.check_out:
             overtime_confirmed = bool(payload.get("overtime_confirmed"))
+            early_checkout_confirmed = bool(payload.get("early_checkout_confirmed"))
             if is_non_working_day and not overtime_confirmed:
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
                 prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
@@ -999,7 +1000,17 @@ def check_in_out():
                 OvertimeRequest.status == "approved",
             ).first()
             raw_check_out_time = current_time
-            effective_check_out = min(raw_check_out_time, datetime.combine(today, WORKDAY_END))
+            end_of_day = datetime.combine(today, WORKDAY_END)
+            if raw_check_out_time < end_of_day and not early_checkout_confirmed:
+                early_minutes_preview = int((end_of_day - raw_check_out_time).total_seconds() // 60)
+                return jsonify({
+                    "toast": False,
+                    "type": "warning",
+                    "action": "early_checkout_prompt",
+                    "early_minutes": early_minutes_preview,
+                    "message": f"Bạn có muốn tan ca nghỉ sớm không? (sớm {early_minutes_preview} phút)"
+                })
+            effective_check_out = min(raw_check_out_time, end_of_day)
             attendance.check_out = raw_check_out_time
 
             # =========================
@@ -1064,7 +1075,6 @@ def check_in_out():
             # =========================
             # EARLY LEAVE CHECK
             # =========================
-            end_of_day = datetime.combine(today, WORKDAY_END)
             early_minutes = 0
 
             if current_time < end_of_day:

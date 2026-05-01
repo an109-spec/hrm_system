@@ -535,7 +535,16 @@ function renderState() {
     state.overtimeStatus === "APPROVED";
 
   const isDifferentDay = isNewDay(state.now, state.checkIn);
-
+  if (isDifferentDay) {
+    state.hasAttendance = false;
+    state.hasCheckout = false;
+    state.checkIn = null;
+    state.checkOut = null;
+    state.mainHours = 0;
+    state.overtimeHours = 0;
+    state.attendanceState = "not_started";
+    state.lateWarning = false;
+  }
   /*
   =========================
   RESET UI MẶC ĐỊNH
@@ -605,19 +614,19 @@ function renderState() {
     const uiByShiftStatus = {
       working: {
         statusPrefix: "🟢 Đang làm việc",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
       working_regular: {
         statusPrefix: "🟢 Đang làm việc",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
       half_day: {
         statusPrefix: "🟠 Đi muộn quá 60 phút (nửa ngày công)",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
@@ -645,19 +654,19 @@ function renderState() {
       },
       overtime_working: {
         statusPrefix: "🟣 Đang tăng ca",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
       working_overtime: {
         statusPrefix: "🟣 Đang tăng ca",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
       late: {
         statusPrefix: "🟢 Đang làm việc",
-        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
@@ -854,7 +863,7 @@ function renderDate() {
 }
 
 /* ===================== API ===================== */
-async function submitAttendanceFromQR(decodedText) {
+async function submitAttendanceFromQR(decodedText, options = {}) {
   if (submitState.attendance) return;
   submitState.attendance = true;
 
@@ -862,7 +871,8 @@ async function submitAttendanceFromQR(decodedText) {
     const payload = {
       qr_text: decodedText,
       overtime_confirmed: false,
-      simulated_now: toLocalISO(state.now)
+      simulated_now: toLocalISO(state.now),
+      early_checkout_confirmed: Boolean(options.earlyCheckoutConfirmed)
     };
 
     const res = await fetch("/employee/attendance/check", {
@@ -934,6 +944,23 @@ async function submitAttendanceFromQR(decodedText) {
 
       if (decision.isConfirmed) {
         await submitAttendanceConfirmation(decodedText);
+      }
+      return;
+    }
+    if (data.action === "early_checkout_prompt") {
+      const earlyMinutes = Number(data.early_minutes || 0);
+      const decision = await Swal.fire({
+        icon: "question",
+        title: "Tan ca nghỉ sớm",
+        text: data.message || `Bạn có muốn tan ca nghỉ sớm không?${earlyMinutes > 0 ? ` (sớm ${earlyMinutes} phút)` : ""}`,
+        showCancelButton: true,
+        confirmButtonText: "Có",
+        cancelButtonText: "Không"
+      });
+
+      if (decision.isConfirmed) {
+        submitState.attendance = false;
+        await submitAttendanceFromQR(decodedText, { earlyCheckoutConfirmed: true });
       }
       return;
     }
@@ -1064,7 +1091,8 @@ async function submitAttendanceConfirmation(decodedText) {
       body: JSON.stringify({
         qr_text: decodedText,
         overtime_confirmed: true,
-        simulated_now: toLocalISO(state.now)
+        simulated_now: toLocalISO(state.now),
+      early_checkout_confirmed: Boolean(options.earlyCheckoutConfirmed)
       })
     });
 
@@ -1503,6 +1531,7 @@ function advanceDemoClock() {
   state.now = new Date(demoState.current);
   saveSharedSimTime(demoState.current);
   renderDate();
+  renderState();
   maybeNotifyCheckoutAt17h();
 }
 
@@ -1523,6 +1552,8 @@ async function syncDemoTime() {
   // đồng bộ state.now để toàn FE dùng chung
   state.now = new Date(demoState.current);
   saveSharedSimTime(demoState.current);
+  renderDate();
+  renderState();
   maybeNotifyCheckoutAt17h();
 }
 
@@ -1593,6 +1624,7 @@ window.addEventListener("storage", (event) => {
   state.now = new Date(parsed);
   renderDemoTime(parsed);
   renderDate();
+  renderState();
 });
 </script>
 
