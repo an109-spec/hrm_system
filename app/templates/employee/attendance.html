@@ -197,6 +197,18 @@
   background: #e0e7ff;
   color: #1e40af;
 }
+.demo-time-display {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+  user-select: none;
+}
+
+.time-part {
+  cursor: ns-resize;
+  padding: 2px 4px;
+}
 </style>
 {% endblock %}
 
@@ -232,12 +244,14 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
 >
 
   <h3>🕒 Chấm công</h3>
-  <div class="attendance-note" style="margin-bottom:10px;">
-    <strong>SYSTEM TIME CONTROL PANEL</strong>
-    <div>Current Demo Time: <span id="systemTimeText">--:--:--</span> <span id="systemDateText">--/--/----</span></div>
-    <div>Day: <span id="systemDayText">--</span> | Mode: <span id="systemModeText">REAL</span></div>
-    <input id="simulatedTimeInput" type="datetime-local" step="1" />
-    <button type="button" class="btn btn-primary" id="applySimTimeBtn">Apply Demo Time</button>
+<div class="attendance-note demo-time-bar">
+  <div class="demo-time-display">
+    <span id="demoTimeHH" class="time-part" data-unit="h">00</span>:
+    <span id="demoTimeMM" class="time-part" data-unit="m">00</span>:
+    <span id="demoTimeSS" class="time-part" data-unit="s">00</span>
+    &nbsp;&nbsp;
+    <span id="demoDateDD" class="time-part" data-unit="d">01</span>/
+    <span id="demoDateMM" class="time-part" data-unit="mo">01</span>
   </div>
   {% if employee %}
     <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
@@ -1370,45 +1384,88 @@ async function resetOtRequestForTest() {
     });
   }
 }
-</script>
-<script>
-(async function systemTimePanelInit() {
-  const timeEl = document.getElementById('systemTimeText');
-  const dateEl = document.getElementById('systemDateText');
-  const dayEl = document.getElementById('systemDayText');
-  const modeEl = document.getElementById('systemModeText');
-  const inputEl = document.getElementById('simulatedTimeInput');
-  const btnEl = document.getElementById('applySimTimeBtn');
-  if (!timeEl || !btnEl) return;
+const demoState = {
+  current: null
+};
 
-  const render = (payload) => {
-    const d = new Date(payload.current_time);
-    timeEl.textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
-    dateEl.textContent = d.toLocaleDateString('vi-VN');
-    dayEl.textContent = payload.day_of_week || '--';
-    modeEl.textContent = payload.mode || 'REAL';
-    inputEl.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
-  };
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
 
-  const loadTime = async () => {
-    const resp = await fetch('/employee/system/time');
-    const payload = await resp.json();
-    render(payload);
-  };
+function renderDemoTime(d) {
+  document.getElementById("demoTimeHH").textContent = pad(d.getHours());
+  document.getElementById("demoTimeMM").textContent = pad(d.getMinutes());
+  document.getElementById("demoTimeSS").textContent = pad(d.getSeconds());
+  document.getElementById("demoDateDD").textContent = pad(d.getDate());
+  document.getElementById("demoDateMM").textContent = pad(d.getMonth() + 1);
+}
 
-  btnEl.addEventListener('click', async () => {
-    if (!inputEl.value) return;
-    const selected = new Date(inputEl.value);
-    await fetch('/employee/system/time', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Simulated-Time': selected.toISOString() },
-      body: JSON.stringify({ simulated_now: selected.toISOString() })
+/* =========================
+   FETCH BACKEND TIME
+========================= */
+async function syncDemoTime() {
+  const res = await fetch("/employee/system/time");
+  const data = await res.json();
+
+  demoState.current = new Date(data.current_time);
+  renderDemoTime(demoState.current);
+
+  // đồng bộ state.now để toàn FE dùng chung
+  state.now = new Date(demoState.current);
+}
+
+/* =========================
+   SCROLL WHEEL EDIT
+========================= */
+function attachScroll(el, unit) {
+  el.addEventListener("wheel", async (e) => {
+    e.preventDefault();
+
+    if (!demoState.current) return;
+
+    const d = new Date(demoState.current);
+
+    const delta = e.deltaY < 0 ? 1 : -1;
+
+    if (unit === "h") d.setHours(d.getHours() + delta);
+    if (unit === "m") d.setMinutes(d.getMinutes() + delta);
+    if (unit === "s") d.setSeconds(d.getSeconds() + delta);
+    if (unit === "d") d.setDate(d.getDate() + delta);
+    if (unit === "mo") d.setMonth(d.getMonth() + delta);
+
+    demoState.current = d;
+
+    await fetch("/employee/system/time", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Simulated-Time": d.toISOString()
+      },
+      body: JSON.stringify({ simulated_now: d.toISOString() })
     });
-    window.location.reload();
-  });
 
-  await loadTime();
-  setInterval(loadTime, 1000);
+    renderDemoTime(d);
+
+    // sync toàn UI ngay lập tức
+    state.now = new Date(d);
+    renderState();
+    renderDate();
+  });
+}
+
+/* =========================
+   INIT
+========================= */
+(function initDemoTime() {
+  syncDemoTime();
+
+  attachScroll(document.getElementById("demoTimeHH"), "h");
+  attachScroll(document.getElementById("demoTimeMM"), "m");
+  attachScroll(document.getElementById("demoTimeSS"), "s");
+  attachScroll(document.getElementById("demoDateDD"), "d");
+  attachScroll(document.getElementById("demoDateMM"), "mo");
+
+  setInterval(syncDemoTime, 1000);
 })();
 </script>
 
