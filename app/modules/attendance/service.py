@@ -475,6 +475,22 @@ class AttendanceService:
 
         if not record:
             raise ValidationError("Không tìm thấy dữ liệu chấm công trong ngày đã chọn")
+        from app.models import Employee, Notification
+
+        employee = Employee.query.filter_by(id=employee_id).first()
+        related_notifications = []
+        if employee and employee.user_id:
+            related_notifications = (
+                Notification.query.filter(
+                    Notification.user_id == employee.user_id,
+                    Notification.is_deleted.is_(False),
+                    Notification.type.in_(["attendance", "overtime"]),
+                    db.func.date(Notification.created_at) == target_date,
+                ).all()
+            )
+
+        for notification in related_notifications:
+            notification.is_deleted = True
 
         db.session.delete(record)
         db.session.commit()
