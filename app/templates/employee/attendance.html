@@ -743,13 +743,9 @@ function renderState() {
           : "--";
 
       let statusLabel = "❌ Yêu cầu OT đã bị từ chối";
-
-      if (state.overtimeStatus === "PENDING" || state.overtimeStatus === "PENDING_MANAGER") {
-        statusLabel = "⏳ Đang chờ HR và Admin duyệt";
-      } else if (state.overtimeStatus === "PENDING_HR") {
-        statusLabel = "⏳ Đang chờ HR duyệt";
-      } else if (state.overtimeStatus === "PENDING_ADMIN") {
-        statusLabel = "⏳ HR đã duyệt, đang chờ Admin duyệt";
+      const normalizedOtStatus = String(state.overtimeStatus || "").toUpperCase();
+      if (["PENDING", "PENDING_MANAGER", "PENDING_HR", "PENDING_ADMIN"].includes(normalizedOtStatus)) {
+        statusLabel = "⏳ Đang chờ duyệt tăng ca";
       }
 
       if (state.overtimeStatus === "APPROVED") {
@@ -803,6 +799,20 @@ function renderState() {
   WORK HOURS
   =========================
   */
+  const getLunchBreakOverlapMs = (startAt, endAt) => {
+    if (!(startAt instanceof Date) || Number.isNaN(startAt.getTime())) return 0;
+    if (!(endAt instanceof Date) || Number.isNaN(endAt.getTime())) return 0;
+    if (endAt <= startAt) return 0;
+
+    const lunchStart = new Date(startAt);
+    lunchStart.setHours(12, 0, 0, 0);
+    const lunchEnd = new Date(startAt);
+    lunchEnd.setHours(13, 0, 0, 0);
+
+    const overlapStart = Math.max(startAt.getTime(), lunchStart.getTime());
+    const overlapEnd = Math.min(endAt.getTime(), lunchEnd.getTime());
+    return Math.max(0, overlapEnd - overlapStart);
+  };
 
   const getRealtimeMainHours = () => {
     if (!(state.checkIn instanceof Date) || Number.isNaN(state.checkIn.getTime())) {
@@ -816,7 +826,9 @@ function renderState() {
     }
     const elapsedMs = state.now.getTime() - state.checkIn.getTime();
     if (elapsedMs <= 0) return 0;
-    return elapsedMs / (1000 * 60 * 60);
+    const lunchOverlapMs = getLunchBreakOverlapMs(state.checkIn, state.now);
+    const workingMs = Math.max(0, elapsedMs - lunchOverlapMs);
+    return workingMs / (1000 * 60 * 60);
   };
 
   const mainHoursDisplay = getRealtimeMainHours();
@@ -1265,15 +1277,11 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     ========================= */
 
     const statusLabel =
-      state.overtimeStatus === "PENDING" || state.overtimeStatus === "PENDING_MANAGER"
-        ? "Đang chờ HR và Admin duyệt"
-        : state.overtimeStatus === "PENDING_HR"
-          ? "Đang chờ HR duyệt"
-          : state.overtimeStatus === "PENDING_ADMIN"
-            ? "Đang chờ Admin duyệt"
-            : state.overtimeStatus === "APPROVED"
-              ? "Đã được duyệt"
-              : "Đã gửi yêu cầu";
+      ["PENDING", "PENDING_MANAGER", "PENDING_HR", "PENDING_ADMIN"].includes(String(state.overtimeStatus || "").toUpperCase())
+        ? "Đang chờ duyệt tăng ca"
+        : state.overtimeStatus === "APPROVED"
+          ? "Đã được duyệt"
+          : "Đã gửi yêu cầu";
 
     await Swal.fire({
       icon: "success",
