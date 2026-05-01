@@ -4,7 +4,7 @@ from decimal import Decimal
 from flask import session
 
 from app.extensions import db
-from app.models import Attendance, AttendanceStatus, Employee
+from app.models import Attendance, AttendanceStatus, Employee, Holiday
 from app.common.exceptions import ValidationError
 
 
@@ -92,7 +92,19 @@ class AttendanceService:
         return AttendanceStatus.query.filter_by(
             status_name=status_name
         ).first()
+    @staticmethod
+    def _is_holiday(target_date):
+        exact_holiday = Holiday.query.filter_by(date=target_date).first()
+        if exact_holiday:
+            return True
 
+        recurring_holiday = (
+            Holiday.query.filter_by(is_recurring=True)
+            .filter(db.extract("month", Holiday.date) == target_date.month)
+            .filter(db.extract("day", Holiday.date) == target_date.day)
+            .first()
+        )
+        return bool(recurring_holiday)
     # =========================================================
     # REGULAR HOURS
     # =========================================================
@@ -211,7 +223,7 @@ class AttendanceService:
     # =========================================================
 
     @staticmethod
-    def check_in(employee_id: int, sim_time_str: str):
+    def check_in(employee_id: int, sim_time_str: str, confirm_work_on_offday: bool = False):
         employee = Employee.query.get(employee_id)
 
         if employee and employee.is_attendance_required is False:
@@ -228,6 +240,21 @@ class AttendanceService:
 
         if record.check_in:
             raise ValidationError("Bạn đã check-in hôm nay.")
+        is_weekend = now_dt.weekday() >= 5
+        is_holiday = AttendanceService._is_holiday(now_dt.date())
+
+        if (is_weekend or is_holiday) and not confirm_work_on_offday:
+            offday_name = "ngày lễ" if is_holiday else "cuối tuần"
+            return {
+                "action": "confirm_offday_work",
+                "requires_confirmation": True,
+                "is_weekend": is_weekend,
+                "is_holiday": is_holiday,
+                "message": f"Hôm nay là {offday_name}. Bạn có muốn đi làm không?"
+            }
+
+        record.is_weekend = is_weekend
+        record.is_holiday = is_holiday
 
         record.check_in = now_dt
         record.shift_status = AttendanceService.SHIFT_STATUS_WORKING
@@ -377,6 +404,8 @@ class AttendanceService:
             Decimal(record.regular_hours or 0)
             + Decimal(record.overtime_hours or 0)
         )
+        if record.is_holiday:
+            total *= Decimal("3.00")
 
         record.working_hours = total
         record.shift_status = (

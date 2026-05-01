@@ -76,7 +76,11 @@ def check_in():
         session["simulated_now"] = simulated_now
 
     try:
-        result = AttendanceService.check_in(employee.id, simulated_now)
+        result = AttendanceService.check_in(
+            employee.id,
+            simulated_now,
+            bool(data.get("confirm_work_on_offday", False))
+        )
         return jsonify({"status": "success", "toast": True, **result})
     except ValidationError as e:
         return jsonify({"status": "error", "message": str(e), "toast": True}), 400
