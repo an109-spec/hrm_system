@@ -232,7 +232,13 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
 >
 
   <h3>🕒 Chấm công</h3>
-
+  <div class="attendance-note" style="margin-bottom:10px;">
+    <strong>SYSTEM TIME CONTROL PANEL</strong>
+    <div>Current Demo Time: <span id="systemTimeText">--:--:--</span> <span id="systemDateText">--/--/----</span></div>
+    <div>Day: <span id="systemDayText">--</span> | Mode: <span id="systemModeText">REAL</span></div>
+    <input id="simulatedTimeInput" type="datetime-local" step="1" />
+    <button type="button" class="btn btn-primary" id="applySimTimeBtn">Apply Demo Time</button>
+  </div>
   {% if employee %}
     <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
   {% endif %}
@@ -1365,4 +1371,45 @@ async function resetOtRequestForTest() {
   }
 }
 </script>
+<script>
+(async function systemTimePanelInit() {
+  const timeEl = document.getElementById('systemTimeText');
+  const dateEl = document.getElementById('systemDateText');
+  const dayEl = document.getElementById('systemDayText');
+  const modeEl = document.getElementById('systemModeText');
+  const inputEl = document.getElementById('simulatedTimeInput');
+  const btnEl = document.getElementById('applySimTimeBtn');
+  if (!timeEl || !btnEl) return;
+
+  const render = (payload) => {
+    const d = new Date(payload.current_time);
+    timeEl.textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+    dateEl.textContent = d.toLocaleDateString('vi-VN');
+    dayEl.textContent = payload.day_of_week || '--';
+    modeEl.textContent = payload.mode || 'REAL';
+    inputEl.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  };
+
+  const loadTime = async () => {
+    const resp = await fetch('/employee/system/time');
+    const payload = await resp.json();
+    render(payload);
+  };
+
+  btnEl.addEventListener('click', async () => {
+    if (!inputEl.value) return;
+    const selected = new Date(inputEl.value);
+    await fetch('/employee/system/time', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Simulated-Time': selected.toISOString() },
+      body: JSON.stringify({ simulated_now: selected.toISOString() })
+    });
+    window.location.reload();
+  });
+
+  await loadTime();
+  setInterval(loadTime, 1000);
+})();
+</script>
+
 {% endblock %}

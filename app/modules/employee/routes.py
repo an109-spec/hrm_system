@@ -29,7 +29,7 @@ from app.models import (
 )
 from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
-from app.utils.time import parse_simulated_time
+from app.utils.time import get_current_time, parse_simulated_time
 from .ess_service import EmployeeESSService
 from .payroll_service import EmployeePayrollService
 from . import employee_bp
@@ -52,7 +52,55 @@ VN_LUNAR_PUBLIC_HOLIDAYS: tuple[tuple[int, int, str], ...] = (
     (1, 3, "Tết Nguyên đán (Mùng 3)"),
     (3, 10, "Giỗ Tổ Hùng Vương"),
 )
+UI_CHECKIN_OPEN = time(6, 0, 0)
+LUNCH_START = time(12, 0, 0)
+LUNCH_END = time(13, 0, 0)
+REST_BEFORE_OT_END = time(19, 0, 0)
+OT_UI_OPEN = time(18, 0, 0)
+OT_END = time(22, 0, 0)
 
+
+def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> dict:
+    current_time = now.time()
+    if current_time < WORKDAY_START:
+        shift_state = "BEFORE_SHIFT"
+    elif LUNCH_START <= current_time < LUNCH_END:
+        shift_state = "LUNCH_BREAK"
+    elif WORKDAY_START <= current_time < WORKDAY_END:
+        shift_state = "WORKING"
+    elif WORKDAY_END <= current_time < REST_BEFORE_OT_END:
+        shift_state = "REST_BEFORE_OT"
+    elif REST_BEFORE_OT_END <= current_time < OT_END:
+        shift_state = "OT_WINDOW"
+    else:
+        shift_state = "OFF"
+
+    attendance_state = "NORMAL"
+    if attendance and attendance.check_in:
+        effective_check_in = max(attendance.check_in, datetime.combine(now.date(), WORKDAY_START))
+        if effective_check_in.time() > HALF_DAY_LATE_CUTOFF:
+            attendance_state = "HALF_DAY"
+        elif effective_check_in.time() > WORKDAY_CHECKIN_NORMAL_END:
+            attendance_state = "LATE"
+        if attendance.check_out and attendance_state == "NORMAL":
+            attendance_state = "FULL_DAY"
+
+    in_lunch = LUNCH_START <= current_time < LUNCH_END
+    has_checkin = bool(attendance and attendance.check_in)
+    has_checkout = bool(attendance and attendance.check_out)
+    has_ot_in = bool(attendance and attendance.overtime_check_in)
+    has_ot_out = bool(attendance and attendance.overtime_check_out)
+
+    return {
+        "attendance_state": attendance_state,
+        "shift_state": shift_state,
+        "action_flags": {
+            "can_check_in": (UI_CHECKIN_OPEN <= current_time < WORKDAY_END) and (not in_lunch) and (not has_checkin),
+            "can_check_out": has_checkin and (not has_checkout) and (not in_lunch) and (current_time >= WORKDAY_END),
+            "can_start_ot": (current_time >= OT_UI_OPEN) and (not has_ot_in) and (not has_ot_out),
+            "can_end_ot": has_ot_in and (not has_ot_out) and (current_time >= OT_END),
+        },
+    }
 
 def _build_lunar_public_holidays_for_year(year: int) -> dict[str, str]:
     lookup: dict[str, str] = {}
@@ -689,7 +737,46 @@ def attendance():
         can_reset_ot_request=can_reset_ot_request,
     )
 
+@employee_bp.route("/system/time", methods=["GET", "POST"])
+def system_time_control():
+    guard = _ensure_login()
+    if guard:
+        return jsonify({"message": "Unauthorized"}), 401
 
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        now = get_current_time(payload)
+        session["simulated_now"] = now.isoformat()
+        session["system_time_mode"] = "SIMULATED"
+    else:
+        now = get_current_time({})
+        session["system_time_mode"] = "SIMULATED" if session.get("simulated_now") else "REAL"
+
+    return jsonify({
+        "mode": session.get("system_time_mode", "REAL"),
+        "current_time": now.isoformat(),
+        "day_of_week": now.strftime("%A"),
+    })
+
+
+@employee_bp.route("/attendance/state", methods=["GET"])
+def attendance_state_api():
+    guard = _ensure_login()
+    if guard:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    employee = _current_employee()
+    if not employee:
+        return jsonify({"message": "Employee not found"}), 404
+
+    now = get_current_time({})
+    today_attendance = Attendance.query.filter_by(employee_id=employee.id, date=now.date()).first()
+    state = _build_shift_and_actions(now, today_attendance)
+    return jsonify({
+        "current_time": now.isoformat(),
+        "mode": "SIMULATED" if session.get("simulated_now") else "REAL",
+        **state,
+    })
 @employee_bp.route("/attendance/check", methods=["POST"])
 def check_in_out():
     # =========================
