@@ -1754,8 +1754,8 @@ class HRService:
         action = (data.action or "").lower()
         if action not in {"approve", "reject"}:
             raise ValueError("Action không hợp lệ")
-        if record.status != "pending_hr":
-            raise ValueError("Yêu cầu OT chưa được quản lý duyệt hoặc đã xử lý")
+        if record.status not in {"pending_hr", "pending", "pending_manager"}:
+            raise ValueError("Yêu cầu OT không ở trạng thái chờ HR duyệt hoặc đã xử lý")
 
         if action == "approve":
             record.status = "pending_admin"

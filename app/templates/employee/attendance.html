@@ -227,9 +227,9 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
-  data-main-hours="{{ (today.main_hours or 0)|float if today else 0 }}"
+  data-main-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
-  data-attendance-state="{{ today.attendance_state if today else 'not_started' }}"
+  data-attendance-state="{{ today.shift_status if today else 'not_started' }}"
   data-overtime-status="{{ today.overtime_status if today else '' }}"
   data-today-ot-created-at="{{ today_ot_request.created_at.isoformat() if today_ot_request and today_ot_request.created_at else '' }}"
   data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
@@ -328,26 +328,28 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
           <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
           <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-          <td>{{ '%.2f'|format((a.main_hours or 0)|float) }} giờ</td>
+          <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
           <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
           <td>
-            {% if a.shift_status == "not_started" %}
+            {% if a.check_in and a.check_out %}
+              <span class="status status-success">🏁 Hoàn tất ngày công</span>
+            {% elif a.shift_status == "not_started" %}
               <span class="status status-danger">❌ Chưa vào ca</span>
             {% elif a.shift_status == "late" %}
               <span class="status status-late">⏰ Đi muộn</span>
 
             {% elif a.shift_status == "early_leave" %}
               <span class="status status-early">🏃 Về sớm</span>
-            {% elif a.shift_status == "working" %}
+            {% elif a.shift_status in ["working", "working_regular"] %}
               <span class="status status-warning">🟡 Đang làm ca chính</span>
 
-            {% elif a.shift_status == "regular_completed" %}
+            {% elif a.shift_status in ["regular_completed", "regular_done"] %}
               <span class="status status-success">✅ Hoàn thành ca chính</span>
 
             {% elif a.shift_status == "pre_ot_rest" %}
               <span class="status status-warning">☕ Nghỉ trước OT</span>
 
-            {% elif a.shift_status == "overtime_working" %}
+            {% elif a.shift_status in ["overtime_working", "working_overtime"] %}
               <span class="status status-late">🟣 Đang tăng ca</span>
 
             {% elif a.shift_status == "completed" %}
@@ -541,7 +543,14 @@ function renderState() {
   const workHoursText = document.getElementById("workHoursText");
 
   const hasPendingOtApproval = ["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus);
-
+  if (
+    (!state.attendanceState || state.attendanceState === "not_started") &&
+    state.checkIn
+  ) {
+    state.attendanceState = state.checkOut
+      ? "completed"
+      : "working_regular";
+  }
   const hasApprovedOt =
     state.overtimeStatus === "APPROVED";
 
@@ -628,6 +637,12 @@ function renderState() {
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
+      working_regular: {
+        statusPrefix: "🟢 Đang làm việc",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
       half_day: {
         statusPrefix: "🟠 Đi muộn quá 60 phút (nửa ngày công)",
         buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
@@ -642,6 +657,14 @@ function renderState() {
         buttonDisabled: true,
         buttonClass: "btn btn-disabled"
       },
+      regular_done: {
+        statusPrefix: "✅ Hoàn thành ca chính",
+        buttonText: hasApprovedOt
+          ? "⏳ Chờ vào ca OT theo lịch đã duyệt"
+          : "✅ Đã hoàn thành ca chính",
+        buttonDisabled: true,
+        buttonClass: "btn btn-disabled"
+      },
       pre_ot_rest: {
         statusPrefix: "🟡 Nghỉ trước tăng ca",
         buttonText: "⏳ Chờ vào ca OT theo lịch đã duyệt",
@@ -649,6 +672,12 @@ function renderState() {
         buttonClass: "btn btn-disabled"
       },
       overtime_working: {
+        statusPrefix: "🟣 Đang tăng ca",
+        buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
+        buttonDisabled: false,
+        buttonClass: "btn btn-warning"
+      },
+      working_overtime: {
         statusPrefix: "🟣 Đang tăng ca",
         buttonText: "🔳 XÁC THỰC CHẤM CÔNG",
         buttonDisabled: false,
@@ -678,9 +707,16 @@ function renderState() {
       uiByShiftStatus[state.attendanceState] || uiByShiftStatus.working;
 
     const statusPrefix = currentShiftUi.statusPrefix;
-    const buttonText = currentShiftUi.buttonText;
-    const buttonDisabled = currentShiftUi.buttonDisabled;
-    const buttonClass = currentShiftUi.buttonClass;
+    let buttonText = currentShiftUi.buttonText;
+    let buttonDisabled = currentShiftUi.buttonDisabled;
+    let buttonClass = currentShiftUi.buttonClass;
+
+    if (hasPendingOtApproval) {
+      buttonText = "⏳ ĐANG CHỜ DUYỆT OT";
+      buttonDisabled = true;
+      buttonClass = "btn btn-disabled";
+    }
+
 
     btn.textContent =
       buttonText;
@@ -730,12 +766,14 @@ function renderState() {
           ? fmtDateTime(req.createdAt)
           : "--";
 
-      let statusLabel =
-        "❌ Yêu cầu OT đã bị từ chối";
+      let statusLabel = "❌ Yêu cầu OT đã bị từ chối";
 
-      if (["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus)) {
-        statusLabel =
-          "⏳ Yêu cầu OT đang chờ duyệt";
+      if (state.overtimeStatus === "PENDING" || state.overtimeStatus === "PENDING_MANAGER") {
+        statusLabel = "⏳ Đang chờ HR và Admin duyệt";
+      } else if (state.overtimeStatus === "PENDING_HR") {
+        statusLabel = "⏳ Đang chờ HR duyệt";
+      } else if (state.overtimeStatus === "PENDING_ADMIN") {
+        statusLabel = "⏳ HR đã duyệt, đang chờ Admin duyệt";
       }
 
       if (state.overtimeStatus === "APPROVED") {
@@ -800,12 +838,31 @@ function renderState() {
     const mm =
       totalMinutes % 60;
 
-    workHoursText.textContent =
-      `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${state.mainHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ, Trạng thái: ${state.attendanceState})`;
+    const attendanceStateMeta = getAttendanceStateMeta(state.attendanceState);
+    workHoursText.innerHTML =
+      `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${state.mainHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ, Trạng thái: <span style="font-weight:700;color:${attendanceStateMeta.color};">${attendanceStateMeta.label}</span>)`;
   } else {
 
-    workHoursText.textContent =      `Công hôm nay: -- giờ -- phút (Công chuẩn: ${state.mainHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ, Trạng thái: ${state.attendanceState})`;
+    const attendanceStateMeta = getAttendanceStateMeta(state.attendanceState);
+    workHoursText.innerHTML = `Công hôm nay: -- giờ -- phút (Công chuẩn: ${state.mainHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ, Trạng thái: <span style="font-weight:700;color:${attendanceStateMeta.color};">${attendanceStateMeta.label}</span>)`;
   }
+}
+function getAttendanceStateMeta(rawState) {
+  const stateKey = String(rawState || "").toLowerCase();
+  const map = {
+    not_started: { label: "Chưa vào ca", color: "#dc2626" },
+    working: { label: "Đang làm ca chính", color: "#ca8a04" },
+    working_regular: { label: "Đang làm ca chính", color: "#ca8a04" },
+    regular_done: { label: "Hoàn thành ca chính", color: "#16a34a" },
+    regular_completed: { label: "Hoàn thành ca chính", color: "#16a34a" },
+    pre_ot_rest: { label: "Nghỉ trước tăng ca", color: "#d97706" },
+    overtime_working: { label: "Đang tăng ca", color: "#7c3aed" },
+    working_overtime: { label: "Đang tăng ca", color: "#7c3aed" },
+    completed: { label: "Hoàn tất ngày công", color: "#16a34a" },
+    late: { label: "Đi muộn", color: "#f59e0b" },
+    early_leave: { label: "Về sớm", color: "#ea580c" }
+  };
+  return map[stateKey] || { label: "Không xác định", color: "#6b7280" };
 }
 
 /* ===================== DATE ===================== */
@@ -932,9 +989,17 @@ async function submitAttendanceFromQR(decodedText) {
           ? new Date(data.check_out)
           : null;
 
-        state.mainHours = Number(data.main_hours || 0);
+        state.mainHours = Number(
+          data.main_hours ??
+          data.regular_hours ??
+          state.mainHours ??
+          0
+        );
         state.overtimeHours = Number(data.overtime_hours || 0);
-        state.attendanceState = data.attendance_state || state.attendanceState;
+        state.attendanceState =
+          data.attendance_state ||
+          data.shift_status ||
+          state.attendanceState;
         state.overtimeStatus = data.overtime_status || state.overtimeStatus;
         break;
 
@@ -1160,11 +1225,15 @@ async function submitAutomaticOvertimeRequest(requestType, options = {}) {
     ========================= */
 
     const statusLabel =
-      ["PENDING", "PENDING_HR", "PENDING_ADMIN", "PENDING_MANAGER"].includes(state.overtimeStatus)
-        ? "Đang chờ duyệt"
-        : state.overtimeStatus === "APPROVED"
-            ? "Đã được duyệt"
-            : "Đã gửi yêu cầu";
+      state.overtimeStatus === "PENDING" || state.overtimeStatus === "PENDING_MANAGER"
+        ? "Đang chờ HR và Admin duyệt"
+        : state.overtimeStatus === "PENDING_HR"
+          ? "Đang chờ HR duyệt"
+          : state.overtimeStatus === "PENDING_ADMIN"
+            ? "Đang chờ Admin duyệt"
+            : state.overtimeStatus === "APPROVED"
+              ? "Đã được duyệt"
+              : "Đã gửi yêu cầu";
 
     await Swal.fire({
       icon: "success",

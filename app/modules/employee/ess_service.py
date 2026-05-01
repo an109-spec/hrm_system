@@ -229,7 +229,7 @@ class EmployeeESSService:
             end_ot_time=end_ot_time,
             reason=reason,
             note=(payload.get("note") or "").strip() or None,
-            status="pending_manager",
+            status="pending_hr",
             is_holiday_ot=is_holiday_ot,
             holiday_multiplier=holiday_multiplier,
             created_at=simulated_now,
