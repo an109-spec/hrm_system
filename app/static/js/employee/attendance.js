@@ -5,7 +5,7 @@ import { AttendanceAPI } from "../api/attendance.api.js";
 export class Attendance {
   static async checkIn() {
     try {
-      const res = await AttendanceAPI.checkIn(state.now.toISOString());
+      const res = await AttendanceAPI.checkIn(new Date().toISOString());
 
       Toast.success("Check-in thành công");
       return res;

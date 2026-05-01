@@ -162,7 +162,7 @@ class AttendanceService:
 
         hours = (total_seconds - lunch_seconds) / 3600
 
-        return Decimal(str(round(max(0, hours), 2)))
+        return Decimal(str(round(max(0, hours), 3)))
     @staticmethod
     def recalculate_hours(check_in: datetime, check_out: datetime) -> Decimal:
         """
