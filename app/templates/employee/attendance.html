@@ -1091,8 +1091,7 @@ async function submitAttendanceConfirmation(decodedText) {
       body: JSON.stringify({
         qr_text: decodedText,
         overtime_confirmed: true,
-        simulated_now: toLocalISO(state.now),
-      early_checkout_confirmed: Boolean(options.earlyCheckoutConfirmed)
+        simulated_now: toLocalISO(state.now)
       })
     });
 
@@ -1326,29 +1325,21 @@ const scanner = HRMQRScanner.createQRScanner({
 
 async function openScannerModal() {
   const btn = document.getElementById("attendanceBtn");
-
-  // chặn khi nút bị disable
-  if (!btn || btn.disabled) return;
-
-  // chặn khi đang submit attendance
-   if (submitState.attendance || submitState.scanner) return;
-
-  // tránh mở nhiều lần
-  if (state.isScannerOpen || submitState.scanner) return;
+  if (!btn || btn.disabled || submitState.attendance || submitState.scanner) return;
 
   try {
     submitState.scanner = true;
     await scanner.open();
     state.isScannerOpen = true;
-    submitState.scanner = false;
   } catch (err) {
-    state.isScannerOpen = false;
-    submitState.scanner = false;
+    state.isScannerOpen = false; // Đảm bảo reset để lần sau bấm lại được
     await Swal.fire({
       icon: "error",
-      title: "Không thể mở camera",
-      text: err.message || "Không thể khởi tạo camera QR"
+      title: "Lỗi Camera",
+      text: err.message
     });
+  } finally {
+    submitState.scanner = false; // Giải phóng khóa
   }
 }
 
