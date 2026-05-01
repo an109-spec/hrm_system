@@ -129,11 +129,6 @@ class AttendanceService:
         lunch_start = datetime.combine(day, AttendanceService.LUNCH_START)
         lunch_end = datetime.combine(day, AttendanceService.LUNCH_END)
 
-        half_day_limit = datetime.combine(
-            day,
-            AttendanceService.HALF_DAY_THRESHOLD
-        )
-
         # check-out capped at 17:00
         actual_end = min(check_out, shift_end)
 
@@ -147,8 +142,10 @@ class AttendanceService:
             return Decimal("0.00")
 
         # sau 09:00 => half day cố định
-        if check_in > half_day_limit:
-            return Decimal("4.00")
+        late_minutes = max(
+            0,
+            int((check_in - shift_start).total_seconds() / 60)
+        )
 
         total_seconds = (actual_end - actual_start).total_seconds()
 
@@ -161,6 +158,9 @@ class AttendanceService:
             lunch_seconds = (overlap_end - overlap_start).total_seconds()
 
         hours = (total_seconds - lunch_seconds) / 3600
+        # Đi trễ hơn 60 phút: chỉ tính nửa ngày công (tối đa 4 giờ)
+        if late_minutes > 60:
+            return Decimal(str(round(max(0, min(hours, 4)), 3)))
 
         return Decimal(str(round(max(0, hours), 3)))
     @staticmethod
@@ -246,7 +246,7 @@ class AttendanceService:
 
         record.late_minutes = late_minutes
 
-        if now_dt.time() > AttendanceService.HALF_DAY_THRESHOLD:
+        if late_minutes > 60:
             record.is_half_day = True
 
         status_name = "LATE" if late_minutes > 0 else "PRESENT"
