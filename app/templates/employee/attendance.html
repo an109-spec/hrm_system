@@ -1395,13 +1395,28 @@ async function resetOtRequestForTest() {
 const demoState = {
   current: null
 };
-
+const SHARED_SIM_TIME_KEY = "hrm_simulated_now";
 function pad(n) {
   return String(n).padStart(2, "0");
 }
 function toLocalISO(dateObj) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${String(dateObj.getMilliseconds()).padStart(3, "0")}`;
+}
+function saveSharedSimTime(dateObj) {
+  try {
+    localStorage.setItem(SHARED_SIM_TIME_KEY, toLocalISO(dateObj));
+  } catch (_) {}
+}
+function readSharedSimTime() {
+  try {
+    const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch (_) {
+    return null;
+  }
 }
 function renderDemoTime(d) {
   document.getElementById("demoTimeHH").textContent = pad(d.getHours());
@@ -1410,13 +1425,35 @@ function renderDemoTime(d) {
   document.getElementById("demoDateDD").textContent = pad(d.getDate());
   document.getElementById("demoDateMM").textContent = pad(d.getMonth() + 1);
 }
+function maybeNotifyCheckoutAt17h() {
+  if (!state.hasAttendance || state.hasCheckout) return;
+  if (!(state.now instanceof Date) || Number.isNaN(state.now.getTime())) return;
+  if (state.now.getHours() < 17) return;
+
+  const dayKey = `${state.now.getFullYear()}-${String(state.now.getMonth() + 1).padStart(2, "0")}-${String(state.now.getDate()).padStart(2, "0")}`;
+  const notifyKey = `hrm_checkout_17h_notified_${dayKey}`;
+  try {
+    if (localStorage.getItem(notifyKey) === "1") return;
+    localStorage.setItem(notifyKey, "1");
+  } catch (_) {}
+
+  Swal.fire({
+    icon: "info",
+    title: "Đã đến 17:00",
+    text: "Bạn chưa tan ca. Vui lòng quét QR để checkout.",
+    timer: 3500,
+    showConfirmButton: false
+  });
+}
 function advanceDemoClock() {
   if (!demoState.current) return;
 
   demoState.current = new Date(demoState.current.getTime() + 1000);
   renderDemoTime(demoState.current);
   state.now = new Date(demoState.current);
+  saveSharedSimTime(demoState.current);
   renderDate();
+  maybeNotifyCheckoutAt17h();
 }
 
 /* =========================
@@ -1427,10 +1464,16 @@ async function syncDemoTime() {
   const data = await res.json();
 
   demoState.current = new Date(data.current_time);
+  const sharedNow = readSharedSimTime();
+  if (sharedNow) {
+    demoState.current = sharedNow;
+  }
   renderDemoTime(demoState.current);
 
   // đồng bộ state.now để toàn FE dùng chung
   state.now = new Date(demoState.current);
+  saveSharedSimTime(demoState.current);
+  maybeNotifyCheckoutAt17h();
 }
 
 /* =========================
@@ -1464,11 +1507,12 @@ function attachScroll(el, unit) {
     });
 
     renderDemoTime(d);
-
+    saveSharedSimTime(d);
     // sync toàn UI ngay lập tức
     state.now = new Date(d);
     renderState();
     renderDate();
+    maybeNotifyCheckoutAt17h();
   });
 }
 
@@ -1490,6 +1534,16 @@ function attachScroll(el, unit) {
   setInterval(advanceDemoClock, 1000);
   setInterval(() => syncDemoTime().catch(() => {}), 15000);
 })();
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== SHARED_SIM_TIME_KEY || !event.newValue) return;
+  const parsed = new Date(event.newValue);
+  if (Number.isNaN(parsed.getTime())) return;
+  demoState.current = parsed;
+  state.now = new Date(parsed);
+  renderDemoTime(parsed);
+  renderDate();
+});
 </script>
 
 {% endblock %}

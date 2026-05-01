@@ -301,7 +301,28 @@ def attendance_meta_api():
     guard = _guard_hr_access()
     if guard:
         return jsonify({"error": "forbidden"}), 403
-    return jsonify(HRService.get_attendance_meta())
+    if hasattr(HRService, "get_attendance_meta"):
+        return jsonify(HRService.get_attendance_meta())
+
+    # Fallback cho môi trường còn dùng service cũ chưa có hàm get_attendance_meta
+    meta = HRService.get_filter_meta()
+    meta["attendance_statuses"] = [
+        {"value": "all", "label": "Tất cả"},
+        {"value": "normal", "label": "Bình thường"},
+        {"value": "late", "label": "Đi muộn"},
+        {"value": "early", "label": "Về sớm"},
+        {"value": "leave_approved", "label": "Nghỉ phép"},
+        {"value": "absent_unexcused", "label": "Vắng không phép"},
+        {"value": "overtime", "label": "Tăng ca"},
+        {"value": "abnormal", "label": "Bất thường"},
+    ]
+    meta["shift_types"] = [
+        {"value": "all", "label": "Tất cả"},
+        {"value": "normal", "label": "Ca chuẩn"},
+        {"value": "overtime", "label": "Ca tăng ca"},
+        {"value": "holiday", "label": "Ca ngày lễ"},
+    ]
+    return jsonify(meta)
 
 
 @hr_bp.route("/api/attendance", methods=["GET"])
@@ -438,13 +459,21 @@ def abnormal_attendance_api():
     guard = _guard_hr_access()
     if guard:
         return jsonify({"error": "forbidden"}), 403
-    return jsonify(
-        HRService.detect_abnormal_attendance(
-            month=request.args.get("month", type=int),
-            year=request.args.get("year", type=int),
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+
+    if hasattr(HRService, "detect_abnormal_attendance"):
+        return jsonify(HRService.detect_abnormal_attendance(month=month, year=year))
+
+    # Fallback cho service cũ: lấy danh sách attendance và tự lọc bất thường
+    data = HRService.get_attendance_list(
+        AttendanceFilterDTO(
+            month=month,
+            year=year,
         )
     )
-
+    items = data.get("items", []) if isinstance(data, dict) else []
+    return jsonify([item for item in items if item.get("is_abnormal")])
 @hr_bp.route("/api/attendance/abnormal/<int:attendance_id>/resolve", methods=["POST"])
 def abnormal_attendance_resolve_api(attendance_id: int):
     guard = _guard_hr_access()

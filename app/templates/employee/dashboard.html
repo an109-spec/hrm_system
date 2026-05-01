@@ -158,6 +158,13 @@ function readSharedSimTime(fallback) {
     }
 }
 
+window.addEventListener('storage', (event) => {
+    if (event.key !== SHARED_SIM_TIME_KEY || !event.newValue) return;
+    const synced = new Date(event.newValue);
+    if (Number.isNaN(synced.getTime())) return;
+    state.now = synced;
+    updateClock();
+});
 function toLocalISO(date) {
     const pad = n => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3,'0')}`;

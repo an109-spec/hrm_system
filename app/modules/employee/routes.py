@@ -843,6 +843,8 @@ def check_in_out():
     try:
         today = current_time.date()
         today_holiday = _get_holiday_for_date(today)
+        is_weekend = today.weekday() >= 5
+        is_non_working_day = bool(today_holiday) or is_weekend
         attendance = Attendance.query.filter_by(
             employee_id=employee.id,
             date=today
@@ -857,8 +859,6 @@ def check_in_out():
         # =========================
         if not attendance:
             overtime_confirmed = bool(payload.get("overtime_confirmed"))
-            is_weekend = today.weekday() >= 5
-            is_non_working_day = bool(today_holiday) or is_weekend
             if is_non_working_day:
                 approved_holiday_ot = OvertimeRequest.query.filter(
                     OvertimeRequest.employee_id == employee.id,
@@ -966,6 +966,22 @@ def check_in_out():
         # CHECK-OUT FLOW
         # =========================
         if attendance.check_in and not attendance.check_out:
+            overtime_confirmed = bool(payload.get("overtime_confirmed"))
+            if is_non_working_day and not overtime_confirmed:
+                off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
+                prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
+                prompt_message = (
+                    "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm không?"
+                    if today_holiday
+                    else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
+                )
+                return jsonify({
+                    "toast": False,
+                    "type": "warning",
+                    "action": prompt_action,
+                    "holiday_name": off_day_name,
+                    "message": prompt_message,
+                })
             check_in_time = attendance.check_in
             if check_in_time.tzinfo is not None:
                 check_in_time = check_in_time.replace(tzinfo=None)
@@ -1106,10 +1122,10 @@ def check_in_out():
         # =========================
         return jsonify({
             "toast": True,
-            "type": "info",
-            "action": "done",
-            "message": "Bạn đã hoàn thành chấm công hôm nay"
-        })
+            "type": "success",
+            "action": "already_recorded",
+            "message": "QR hợp lệ. Hôm nay bạn đã hoàn thành chấm công trước đó."
+        }), 200
 
     except Exception as exc:
         db.session.rollback()
