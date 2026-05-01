@@ -827,7 +827,8 @@ async function submitAttendanceFromQR(decodedText) {
   try {
     const payload = {
       qr_text: decodedText,
-      overtime_confirmed: false
+      overtime_confirmed: false,
+      simulated_now: toLocalISO(state.now)
     };
 
     const res = await fetch("/employee/attendance/check", {
@@ -1016,7 +1017,8 @@ async function submitAttendanceConfirmation(decodedText) {
       },
       body: JSON.stringify({
         qr_text: decodedText,
-          overtime_confirmed: true
+        overtime_confirmed: true,
+        simulated_now: toLocalISO(state.now)
       })
     });
 
@@ -1397,7 +1399,10 @@ const demoState = {
 function pad(n) {
   return String(n).padStart(2, "0");
 }
-
+function toLocalISO(dateObj) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${String(dateObj.getMilliseconds()).padStart(3, "0")}`;
+}
 function renderDemoTime(d) {
   document.getElementById("demoTimeHH").textContent = pad(d.getHours());
   document.getElementById("demoTimeMM").textContent = pad(d.getMinutes());
@@ -1453,9 +1458,9 @@ function attachScroll(el, unit) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Simulated-Time": d.toISOString()
+        "X-Simulated-Time": toLocalISO(d)
       },
-      body: JSON.stringify({ simulated_now: d.toISOString() })
+      body: JSON.stringify({ simulated_now: toLocalISO(d) })
     });
 
     renderDemoTime(d);
