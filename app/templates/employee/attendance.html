@@ -1399,6 +1399,14 @@ function renderDemoTime(d) {
   document.getElementById("demoDateDD").textContent = pad(d.getDate());
   document.getElementById("demoDateMM").textContent = pad(d.getMonth() + 1);
 }
+function advanceDemoClock() {
+  if (!demoState.current) return;
+
+  demoState.current = new Date(demoState.current.getTime() + 1000);
+  renderDemoTime(demoState.current);
+  state.now = new Date(demoState.current);
+  renderDate();
+}
 
 /* =========================
    FETCH BACKEND TIME
@@ -1457,7 +1465,10 @@ function attachScroll(el, unit) {
    INIT
 ========================= */
 (function initDemoTime() {
-  syncDemoTime();
+  syncDemoTime().catch(() => {
+    demoState.current = new Date(state.now || new Date());
+    renderDemoTime(demoState.current);
+  });
 
   attachScroll(document.getElementById("demoTimeHH"), "h");
   attachScroll(document.getElementById("demoTimeMM"), "m");
@@ -1465,7 +1476,8 @@ function attachScroll(el, unit) {
   attachScroll(document.getElementById("demoDateDD"), "d");
   attachScroll(document.getElementById("demoDateMM"), "mo");
 
-  setInterval(syncDemoTime, 1000);
+  setInterval(advanceDemoClock, 1000);
+  setInterval(() => syncDemoTime().catch(() => {}), 15000);
 })();
 </script>
 
