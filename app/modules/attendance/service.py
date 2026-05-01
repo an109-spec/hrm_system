@@ -4,7 +4,7 @@ from decimal import Decimal
 from flask import session
 
 from app.extensions import db
-from app.models import Attendance, AttendanceStatus, Employee, Holiday
+from app.models import Attendance, AttendanceStatus, Employee, Holiday, OvertimeRequest
 from app.common.exceptions import ValidationError
 
 
@@ -343,7 +343,22 @@ class AttendanceService:
             raise ValidationError(
                 "Bạn phải hoàn tất ca chính trước khi OT."
             )
+        if record.check_out.time() < AttendanceService.REGULAR_END:
+            raise ValidationError(
+                "Bạn chỉ có thể bắt đầu OT sau khi checkout ca chính từ 17:00."
+            )
 
+        approved_ot_request = OvertimeRequest.query.filter_by(
+            employee_id=employee_id,
+            overtime_date=now_dt.date(),
+            is_deleted=False,
+        ).filter(
+            OvertimeRequest.status == "approved"
+        ).first()
+        if not approved_ot_request:
+            raise ValidationError(
+                "Bạn chưa có đơn OT đã được HR/Admin duyệt cho hôm nay."
+            )
         if record.overtime_check_in:
             raise ValidationError("Bạn đã check-in OT.")
 
