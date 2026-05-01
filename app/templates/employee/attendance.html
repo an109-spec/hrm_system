@@ -260,8 +260,6 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
   <!-- DATE -->
   <p id="dateText"></p>
 
-  <!-- BREAK INFO -->
-  <p>☕ Nghỉ trưa: 12:00 - 13:00 (60p)</p>
   <p
     id="holidayText"
     class="attendance-note"
@@ -509,8 +507,9 @@ async function notifySwal(msg, type = "success") {
   await Swal.fire({
     icon,
     title: msg,
-    timer: 1400,
-    showConfirmButton: false
+    showConfirmButton: false,
+    allowOutsideClick: true,
+    allowEscapeKey: true
   });
 }
 
@@ -805,8 +804,27 @@ function renderState() {
   =========================
   */
 
-  if (state.hasCheckout) {
-    const totalDone = state.mainHours + state.overtimeHours;
+  const getRealtimeMainHours = () => {
+    if (!(state.checkIn instanceof Date) || Number.isNaN(state.checkIn.getTime())) {
+      return Number(state.mainHours || 0);
+    }
+    if (!(state.now instanceof Date) || Number.isNaN(state.now.getTime())) {
+      return Number(state.mainHours || 0);
+    }
+    if (state.hasCheckout) {
+      return Number(state.mainHours || 0);
+    }
+    const elapsedMs = state.now.getTime() - state.checkIn.getTime();
+    if (elapsedMs <= 0) return 0;
+    return elapsedMs / (1000 * 60 * 60);
+  };
+
+  const mainHoursDisplay = getRealtimeMainHours();
+  const overtimeHoursDisplay = Number(state.overtimeHours || 0);
+
+  const hasCheckedInToday = state.hasAttendance && state.checkIn;
+  if (state.hasCheckout || hasCheckedInToday) {
+    const totalDone = mainHoursDisplay + overtimeHoursDisplay;
     const totalMinutes = Math.round(totalDone * 60);
 
     const hh =
@@ -817,7 +835,7 @@ function renderState() {
 
     const attendanceStateMeta = getAttendanceStateMeta(state.attendanceState);
     workHoursText.innerHTML =
-      `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${state.mainHours.toFixed(2)} giờ, Tăng ca: ${state.overtimeHours.toFixed(2)} giờ, Trạng thái: <span style="font-weight:700;color:${attendanceStateMeta.color};">${attendanceStateMeta.label}</span>)`;
+      `Công hôm nay: ${hh} giờ ${String(mm).padStart(2, "0")} phút (Công chuẩn: ${mainHoursDisplay.toFixed(2)} giờ, Tăng ca: ${overtimeHoursDisplay.toFixed(2)} giờ, Trạng thái: <span style="font-weight:700;color:${attendanceStateMeta.color};">${attendanceStateMeta.label}</span>)`;
   } else {
 
     const attendanceStateMeta = getAttendanceStateMeta(state.attendanceState);
@@ -830,13 +848,27 @@ function getAttendanceStateMeta(rawState) {
     ["working", "working_regular", "late"].includes(stateKey) &&
     state.checkIn &&
     !state.hasCheckout &&
-    state.checkIn.getHours() < 8
+    state.checkIn.getHours() < 8 &&
+    state.now &&
+    state.now.getHours() < 8
   ) {
     stateKey = "pre_shift_ready";
   }
+  if (
+    ["working", "working_regular", "late", "pre_shift_ready"].includes(stateKey) &&
+    state.checkIn &&
+    !state.hasCheckout &&
+    state.now
+  ) {
+    const currentHour = state.now.getHours();
+    if (currentHour >= 12 && currentHour < 13) {
+      stateKey = "lunch_break";
+    }
+  }
   const map = {
-    not_started: { label: "Chưa vào ca", color: "#dc2626" },
+    not_started: { label: "Chưa xác thực chấm công", color: "#dc2626" },
     pre_shift_ready: { label: "Chuẩn bị vào ca chính", color: "#ca8a04" },
+    lunch_break: { label: "Đang giờ nghỉ trưa (12:00 - 13:00)", color: "#0ea5e9" },
     working: { label: "Đang làm ca chính", color: "#ca8a04" },
     working_regular: { label: "Đang làm ca chính", color: "#ca8a04" },
     regular_done: { label: "Hoàn thành ca chính", color: "#16a34a" },

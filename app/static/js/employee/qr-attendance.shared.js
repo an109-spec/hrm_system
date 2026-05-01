@@ -32,9 +32,8 @@
             }
 
             try {
-                // Thực hiện logic chấm công trước khi đóng hẳn camera
-                await onDecoded(decodedText); 
-                await close(); 
+                await close();
+                await onDecoded(decodedText);
             } catch (err) {
                 isProcessingDecode = false; // Reset nếu lỗi để cho phép quét lại
                 if (onError) await onError(err);
