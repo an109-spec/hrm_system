@@ -1058,7 +1058,50 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
       }
       return;
     }
+    if (data.action === "offer_overtime" && data.requires_overtime_decision) {
+      const decision = await Swal.fire({
+        icon: "question",
+        title: "Xác nhận tăng ca",
+        text: data.message || "Bạn có muốn tăng ca hôm nay không?",
+        showCancelButton: true,
+        confirmButtonText: "Có",
+        cancelButtonText: "Không"
+      });
 
+      const followUpRes = await fetch("/employee/attendance/check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          qr_text: decodedText,
+          simulated_now: toLocalISO(state.now),
+          overtime_decision: decision.isConfirmed ? "yes" : "no"
+        })
+      });
+
+      const followUpData = await followUpRes.json();
+      if (!followUpRes.ok) {
+        await Swal.fire({
+          icon: "error",
+          title: "Lỗi chấm công",
+          text: followUpData.message || "Không thể ghi nhận lựa chọn tăng ca"
+        });
+        return;
+      }
+
+      await Swal.fire({
+        icon: followUpData.type === "error" ? "error" : "success",
+        title: "Đã ghi nhận",
+        text: followUpData.message || "Đã cập nhật lựa chọn tăng ca",
+        timer: 1200,
+        showConfirmButton: false
+      });
+
+      state.attendanceState = followUpData.attendance_state || state.attendanceState;
+      reloadAttendancePage();
+      return;
+    }
     state.pendingCheckoutWithoutOT = false;
 
     /* =========================

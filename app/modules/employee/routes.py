@@ -1161,6 +1161,10 @@ def check_in_out():
                 )
                 overtime_multiplier = Decimal(str(approved_ot_request.holiday_multiplier or 1))
                 attendance.overtime_hours = (raw_overtime_hours * overtime_multiplier).quantize(Decimal("0.01"))
+                current_regular_hours = Decimal(str(attendance.regular_hours or 0)).quantize(Decimal("0.01"))
+                attendance.working_hours = (current_regular_hours + attendance.overtime_hours).quantize(Decimal("0.01"))
+                if attendance.overtime_hours > 0 and attendance.attendance_type != "holiday":
+                    attendance.attendance_type = "overtime"
                 attendance.shift_status = "completed"
                 db.session.commit()
                 return jsonify({
