@@ -981,6 +981,16 @@ def check_in_out():
                 OvertimeRequest.overtime_date == today,
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status == "approved",
+                db.or_(
+                    db.and_(
+                        OvertimeRequest.end_ot_time.isnot(None),
+                        db.cast(OvertimeRequest.end_ot_time, db.Time) > WORKDAY_END,
+                    ),
+                    db.and_(
+                        OvertimeRequest.start_ot_time.isnot(None),
+                        db.cast(OvertimeRequest.start_ot_time, db.Time) >= AttendanceService.OT_START,
+                    ),
+                ),
             ).first()
             raw_check_out_time = current_time
             end_of_day = datetime.combine(today, WORKDAY_END)
@@ -1036,6 +1046,16 @@ def check_in_out():
                 OvertimeRequest.overtime_date == today,
                 OvertimeRequest.is_deleted.is_(False),
                 OvertimeRequest.status.in_(["pending_hr", "pending_admin", "pending_manager", "pending"]),
+                db.or_(
+                    db.and_(
+                        OvertimeRequest.end_ot_time.isnot(None),
+                        db.cast(OvertimeRequest.end_ot_time, db.Time) > WORKDAY_END,
+                    ),
+                    db.and_(
+                        OvertimeRequest.start_ot_time.isnot(None),
+                        db.cast(OvertimeRequest.start_ot_time, db.Time) >= AttendanceService.OT_START,
+                    ),
+                ),
             ).first()
             if approved_ot_request:
                 overtime_status = "APPROVED"
@@ -1122,6 +1142,16 @@ def check_in_out():
             OvertimeRequest.overtime_date == today,
             OvertimeRequest.is_deleted.is_(False),
             OvertimeRequest.status == "approved",
+            db.or_(
+                db.and_(
+                    OvertimeRequest.end_ot_time.isnot(None),
+                    db.cast(OvertimeRequest.end_ot_time, db.Time) > WORKDAY_END,
+                ),
+                db.and_(
+                    OvertimeRequest.start_ot_time.isnot(None),
+                    db.cast(OvertimeRequest.start_ot_time, db.Time) >= AttendanceService.OT_START,
+                ),
+            ),
         ).first()
         if attendance.check_out and approved_ot_request:
             ot_start_time = datetime.combine(today, AttendanceService.OT_START)

@@ -555,9 +555,10 @@ function renderState() {
   const hasApprovedOt =
     state.overtimeStatus === "APPROVED";
   const currentHourForOt = state.now instanceof Date ? state.now.getHours() : 0;
-  if (hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn) {
+  const hasVerifiedOtState = ["pre_ot_rest", "pre_ot_rest_verified", "working_overtime", "overtime_working"].includes(String(state.attendanceState || ""));
+  if (hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn && !hasVerifiedOtState) {
     state.attendanceState = currentHourForOt >= 19 ? "ot_unverified" : "pre_ot_rest_pending_checkin";
-  } else if (hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut) {
+  } else if (hasApprovedOt && (state.overtimeCheckIn || hasVerifiedOtState) && !state.overtimeCheckOut) {
     state.attendanceState = currentHourForOt >= 19 ? "overtime_working" : "pre_ot_rest_verified";
   }
   const isDifferentDay = isNewDay(state.now, state.checkIn);
