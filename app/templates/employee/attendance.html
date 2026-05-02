@@ -555,10 +555,12 @@ function renderState() {
   const hasApprovedOt =
     state.overtimeStatus === "APPROVED";
   const currentHourForOt = state.now instanceof Date ? state.now.getHours() : 0;
-  const hasVerifiedOtState = ["pre_ot_rest", "pre_ot_rest_verified", "working_overtime", "overtime_working"].includes(String(state.attendanceState || ""));
-  if (hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn && !hasVerifiedOtState) {
+  const verifiedOtStates = ["pre_ot_rest", "pre_ot_rest_verified", "working_overtime", "overtime_working"];
+  const hasVerifiedOtState = verifiedOtStates.includes(String(state.attendanceState || ""));
+  const isOvertimeVerified = Boolean(state.overtimeCheckIn) || hasVerifiedOtState;
+  if (hasApprovedOt && state.hasCheckout && !isOvertimeVerified) {
     state.attendanceState = currentHourForOt >= 19 ? "ot_unverified" : "pre_ot_rest_pending_checkin";
-  } else if (hasApprovedOt && (state.overtimeCheckIn || hasVerifiedOtState) && !state.overtimeCheckOut) {
+  } else if (hasApprovedOt && isOvertimeVerified && !state.overtimeCheckOut) {
     state.attendanceState = currentHourForOt >= 19 ? "overtime_working" : "pre_ot_rest_verified";
   }
   const isDifferentDay = isNewDay(state.now, state.checkIn);
@@ -719,12 +721,15 @@ function renderState() {
     let buttonDisabled = currentShiftUi.buttonDisabled;
     let buttonClass = currentShiftUi.buttonClass;
     const nowHour = state.now.getHours();
+    const hasVerifiedOtStateForUi = verifiedOtStates.includes(String(state.attendanceState || ""));
+    const isOvertimeVerifiedForUi = Boolean(state.overtimeCheckIn) || hasVerifiedOtStateForUi;
     const otApprovedButNotVerified =
-      hasApprovedOt && state.hasCheckout && !state.overtimeCheckIn;
+      hasApprovedOt && state.hasCheckout && !isOvertimeVerifiedForUi;
     const otApprovedAndVerifiedPre19 =
-      hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut && nowHour < 19;
+      hasApprovedOt && isOvertimeVerifiedForUi && !state.overtimeCheckOut && nowHour < 19;
     const otApprovedAndVerifiedAfter19 =
-      hasApprovedOt && state.overtimeCheckIn && !state.overtimeCheckOut && nowHour >= 19;
+      hasApprovedOt && isOvertimeVerifiedForUi && !state.overtimeCheckOut && nowHour >= 19;
+
 
     if (hasPendingOtApproval) {
       buttonText = "⏳ ĐANG CHỜ DUYỆT OT";

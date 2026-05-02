@@ -1142,17 +1142,7 @@ def check_in_out():
             OvertimeRequest.overtime_date == today,
             OvertimeRequest.is_deleted.is_(False),
             OvertimeRequest.status == "approved",
-            db.or_(
-                db.and_(
-                    OvertimeRequest.end_ot_time.isnot(None),
-                    db.cast(OvertimeRequest.end_ot_time, db.Time) > WORKDAY_END,
-                ),
-                db.and_(
-                    OvertimeRequest.start_ot_time.isnot(None),
-                    db.cast(OvertimeRequest.start_ot_time, db.Time) >= AttendanceService.OT_START,
-                ),
-            ),
-        ).first()
+        ).order_by(OvertimeRequest.updated_at.desc()).first()
         if attendance.check_out and approved_ot_request:
             ot_start_time = datetime.combine(today, AttendanceService.OT_START)
             ot_end_time = datetime.combine(today, AttendanceService.OT_END)
