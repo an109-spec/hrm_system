@@ -194,7 +194,7 @@ class Attendance(BaseModel):
     """
 
     shift_status = db.Column(
-        db.String(30),
+        db.String(64),
         default="not_started",
         nullable=False
     )
