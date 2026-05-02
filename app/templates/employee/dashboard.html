@@ -22,6 +22,17 @@
             <button class="btn" onclick="closeQRModal()" style="margin-top:15px;">Đóng</button>
         </div>
     </div>
+    <div id="overtime-decision-modal" class="modal" style="display:none; position:fixed; z-index:1100; left:0; top:0; width:100%; height:100%; background:rgba(15,23,42,0.55);">
+        <div class="modal-content" style="background:#fff; margin:12% auto; padding:20px; width:90%; max-width:540px; border-radius:14px;">
+            <div style="font-size:.85rem;color:#475569;margin-bottom:6px;">Bước 2/3 · Xác nhận tăng ca</div>
+            <h3 style="margin:0 0 10px;">Xác nhận lựa chọn OT</h3>
+            <p id="overtime-decision-message" style="margin:0 0 16px; color:#0f172a;">Bạn đã check-out ca chính, vui lòng xác nhận lựa chọn OT.</p>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button id="ot-decision-no" class="btn btn-outline">Không tăng ca</button>
+                <button id="ot-decision-yes" class="btn btn-primary">Đăng ký tăng ca</button>
+            </div>
+        </div>
+    </div>
     <div class="dashboard-grid-top">
         <section class="card profile-card">
             <div class="profile-header">
@@ -395,8 +406,17 @@ async function processAttendance(code) {
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.message || d.error || 'Không thể chấm công. Vui lòng thử lại.');
+        const needsOvertimeDecision = Boolean(d.requires_overtime_decision) || d.action === "offer_overtime" || d.action === "check_out";
 
-        if (d.action === "confirm_overtime" && !state.pendingCheckoutWithoutOT) {
+        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
+            const decisionMessage = "Bạn đã check-out ca chính, vui lòng xác nhận lựa chọn OT.";
+            const confirmed = await askOvertimeDecisionModal(decisionMessage);
+
+        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
+            const decisionMessage = "Bạn đã check-out ca chính, vui lòng xác nhận lựa chọn OT.";
+            const confirmed = confirm(decisionMessage);
+
+        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
             const confirmed = confirm(d.message || "Bạn có muốn đăng ký tăng ca không?");
             if (confirmed) {
                 const confirmRes = await fetch("{{ url_for('employee.check_in_out') }}", {
@@ -404,7 +424,7 @@ async function processAttendance(code) {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         ...payload,
-                        overtime_confirmed: true,
+                        overtime_decision: "yes",
                         overtime_start: toLocalISO(now)
                     })
                 });
@@ -418,9 +438,20 @@ async function processAttendance(code) {
             }
 
             state.pendingCheckoutWithoutOT = true;
-            alert("Bạn đã chọn không tăng ca. Vui lòng quét lại QR để check-out.");
-            await scanner.close();
-            setTimeout(() => openQRModal(), 250);
+            const rejectRes = await fetch("{{ url_for('employee.check_in_out') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    ...payload,
+                    overtime_decision: "no",
+                })
+            });
+            const rejectData = await rejectRes.json().catch(() => ({}));
+            if (!rejectRes.ok) throw new Error(rejectData.message || "Không thể ghi nhận lựa chọn không tăng ca");
+            state.pendingCheckoutWithoutOT = false;
+            alert(`Xác nhận danh tính: {{ employee.full_name }} \n${rejectData.message || "Đã ghi nhận không tăng ca hôm nay."}`);
+            persistSimTime();
+            window.location.reload();
             return;
         }
 
@@ -435,6 +466,35 @@ async function processAttendance(code) {
 
 // Thay đổi hàm gọi cũ
 function submitAttendance(btn) { openQRModal(); }
+
+function askOvertimeDecisionModal(message) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('overtime-decision-modal');
+        const msg = document.getElementById('overtime-decision-message');
+        const yesBtn = document.getElementById('ot-decision-yes');
+        const noBtn = document.getElementById('ot-decision-no');
+        if (!modal || !msg || !yesBtn || !noBtn) {
+            resolve(false);
+            return;
+        }
+        msg.textContent = message;
+        modal.style.display = 'block';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            yesBtn.onclick = null;
+            noBtn.onclick = null;
+        };
+        yesBtn.onclick = () => {
+            cleanup();
+            resolve(true);
+        };
+        noBtn.onclick = () => {
+            cleanup();
+            resolve(false);
+        };
+    });
+}
 </script>
 
 {% endblock %}

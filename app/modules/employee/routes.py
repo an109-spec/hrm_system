@@ -1094,7 +1094,7 @@ def check_in_out():
                     "requires_overtime_decision": True,
                     "attendance_state": "regular_done_pending_ot_decision",
                     "message": "Bạn có muốn tăng ca hôm nay không?"
-                }), 409
+         }), 202
             attendance.shift_status = "pre_ot_rest" if overtime_decision == "yes" else "completed"
             db.session.commit()
             return jsonify({
@@ -1117,7 +1117,7 @@ def check_in_out():
                     "requires_overtime_decision": True,
                     "attendance_state": "regular_done_pending_ot_decision",
                     "message": "Bạn có muốn tăng ca hôm nay không?"
-                }), 409
+                }), 202
             ot_start_time = datetime.combine(today, AttendanceService.OT_START)
             ot_end_time = datetime.combine(today, AttendanceService.OT_END)
             if current_time < ot_start_time and not attendance.overtime_check_in:
