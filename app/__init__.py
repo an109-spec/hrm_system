@@ -10,24 +10,7 @@ from app.extensions.jwt import jwt
 from app.extensions.socketio import socketio
 from flask_migrate import Migrate
 from flask_mail import Mail
-from app.modules.jobs import register_jobs
-from apscheduler.schedulers.background import BackgroundScheduler
-# --- IMPORT BLUEPRINTS HRM ---
-from app.modules.auth import auth_bp
-from app.modules.employee import employee_bp
-from app.modules.home import home_bp
-from app.modules.notification import notification_bp
-from app.modules.complaint import complaint_bp
-from app.modules.leave import leave_bp
-from app.modules.attendance import attendance_bp
-from app.modules.dashboard import dashboard_bp  
-from app.modules.history import history_bp
-from app.modules.leave_type import leave_type_bp
-from app.modules.salary import salary_bp
-from app.modules.upload import upload_bp
-from app.modules.manager import manager_bp
-from app.modules.admin import admin_bp
-from app.modules.hr import hr_bp
+
 
 from app.cli import register_cli
 
@@ -108,11 +91,15 @@ def create_app():
     # ======================
     # Scheduler jobs
     # ======================
-    scheduler = BackgroundScheduler()
-    register_jobs(scheduler)
+    if not app.config.get("TESTING", False):
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.modules.jobs import register_jobs
 
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        scheduler.start()
+        scheduler = BackgroundScheduler()
+        register_jobs(scheduler)
+
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            scheduler.start()
     return app
 
 def ensure_default_admin(app):
@@ -147,6 +134,22 @@ def ensure_default_admin(app):
             print(f"Lỗi tạo admin: {e}")
 
 def register_blueprints(app):
+# --- IMPORT BLUEPRINTS HRM ---
+    from app.modules.auth import auth_bp
+    from app.modules.employee import employee_bp
+    from app.modules.home import home_bp
+    from app.modules.notification import notification_bp
+    from app.modules.complaint import complaint_bp
+    from app.modules.leave import leave_bp
+    from app.modules.attendance import attendance_bp
+    from app.modules.dashboard import dashboard_bp  
+    from app.modules.history import history_bp
+    from app.modules.leave_type import leave_type_bp
+    from app.modules.salary import salary_bp
+    from app.modules.upload import upload_bp
+    from app.modules.manager import manager_bp
+    from app.modules.admin import admin_bp
+    from app.modules.hr import hr_bp
     app.register_blueprint(auth_bp) # Đăng nhập/Đăng ký
     app.register_blueprint(employee_bp) # Nhân viên
     app.register_blueprint(home_bp)
