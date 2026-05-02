@@ -145,8 +145,6 @@ class NotificationService:
         employee = Employee.query.filter_by(user_id=user_id, is_deleted=False).first()
         if not employee:
             raise ValidationError("Employee profile not found")
-
-        now_ts = datetime.utcnow()
         try:
             overtime_request = None
             attendance = None
@@ -166,14 +164,15 @@ class NotificationService:
                     is_deleted=False,
                 ).first()
 
-            notification.is_deleted = True
-            if hasattr(notification, "deleted_at"):
-                setattr(notification, "deleted_at", now_ts)
-
             if overtime_request:
-                overtime_request.is_deleted = True
-                if hasattr(overtime_request, "deleted_at"):
-                    setattr(overtime_request, "deleted_at", now_ts)
+                related_notifications = Notification.query.filter(
+                    Notification.overtime_request_id == overtime_request.id
+                ).all()
+                for related_notification in related_notifications:
+                    db.session.delete(related_notification)
+                db.session.delete(overtime_request)
+            else:
+                db.session.delete(notification)
 
             if attendance and overtime_request:
                 attendance.overtime_hours = 0
@@ -185,7 +184,7 @@ class NotificationService:
                     entity_type="notification",
                     entity_id=notification.id,
                     description=(
-                        f"OT cascade delete | notification_id={notification.id} "
+                        f"OT hard delete | notification_id={notification.id} "
                         f"| overtime_request_id={overtime_request.id if overtime_request else None} "
                         f"| attendance_id={attendance.id if attendance else None}"
                     ),

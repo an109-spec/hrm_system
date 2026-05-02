@@ -114,12 +114,12 @@ def delete(noti_id):
             user_id=current_user.id
         )
         after_noti = Notification.query.filter_by(id=noti_id, user_id=current_user.id).first()
-        deleted_notification = bool(after_noti and after_noti.is_deleted)
+        deleted_notification = after_noti is None
 
         deleted_overtime_request = False
         if overtime_request_id:
             ot_after = OvertimeRequest.query.filter_by(id=overtime_request_id).first()
-            deleted_overtime_request = bool(ot_after and ot_after.is_deleted)
+            deleted_overtime_request = ot_after is None
 
         updated_attendance = False
         if attendance_id:

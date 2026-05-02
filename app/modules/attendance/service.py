@@ -171,7 +171,7 @@ class AttendanceService:
 
         hours = (total_seconds - lunch_seconds) / 3600
         # Đi trễ hơn 60 phút: chỉ tính nửa ngày công (tối đa 4 giờ)
-        if late_minutes > 60:
+        if late_minutes >= 60:
             return Decimal(str(round(max(0, min(hours, 4)), 3)))
 
         return Decimal(str(round(max(0, hours), 3)))
@@ -278,7 +278,7 @@ class AttendanceService:
 
         record.late_minutes = late_minutes
 
-        if late_minutes > 60:
+        if late_minutes >= 60:
             record.is_half_day = True
 
         status_name = "LATE" if late_minutes > 0 else "PRESENT"

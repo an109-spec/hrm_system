@@ -957,6 +957,9 @@ function getAttendanceStateMeta(rawState) {
     completed: { label: "Hoàn tất ngày công", color: "#16a34a" },
     late: { label: "Đi muộn", color: "#f59e0b" },
     early_leave: { label: "Về sớm", color: "#ea580c" }
+    ,
+    holiday_off: { label: "Nghỉ lễ", color: "#2563eb" },
+    weekend_off: { label: "Nghỉ cuối tuần", color: "#475569" }
   };
   return map[stateKey] || { label: "Không xác định", color: "#6b7280" };
 }
@@ -994,22 +997,6 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
     });
 
     const data = await res.json();
-    if (!res.ok && (data.action === "holiday_ot_prompt" || data.action === "weekend_work_prompt")) {
-      const decision = await Swal.fire({
-        icon: "question",
-        title: data.action === "holiday_ot_prompt" ? "Hôm nay là ngày nghỉ lễ" : "Hôm nay là ngày nghỉ cuối tuần",
-        text: data.message || "Bạn có muốn đi làm không?",
-        showCancelButton: true,
-        confirmButtonText: "Có",
-        cancelButtonText: "Không"
-      });
-      if (decision.isConfirmed) {
-        submitState.attendance = false;
-        const requestType = data.action === "holiday_ot_prompt" ? "holiday" : "weekend";
-        await submitAutomaticOvertimeRequest(requestType);
-      }
-      return;
-    }
 
     if (!res.ok) {
       await Swal.fire({
@@ -1036,8 +1023,10 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
 
       if (decision.isConfirmed) {
         submitState.attendance = false;
-        const requestType = data.action === "holiday_ot_prompt" ? "holiday" : "weekend";
-        await submitAutomaticOvertimeRequest(requestType);
+        await submitAttendanceConfirmation(decodedText);
+      } else {
+        submitState.attendance = false;
+        await submitAttendanceOffdayDecline(decodedText);
       }
       return;
     }
@@ -1054,7 +1043,10 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
 
       if (decision.isConfirmed) {
         submitState.attendance = false;
-        await submitAutomaticOvertimeRequest("weekend");
+        await submitAttendanceConfirmation(decodedText);
+      } else {
+        submitState.attendance = false;
+        await submitAttendanceOffdayDecline(decodedText);
       }
       return;
     }
@@ -1280,6 +1272,33 @@ async function submitAttendanceConfirmation(decodedText) {
   } finally {
     submitState.attendance = false;
   }
+}
+
+async function submitAttendanceOffdayDecline(decodedText) {
+  const res = await fetch("/employee/attendance/check", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      qr_text: decodedText,
+      decline_offday_work: true,
+      simulated_now: toLocalISO(state.now)
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || "Không thể ghi nhận trạng thái nghỉ ngày lễ/cuối tuần");
+  }
+  state.attendanceState = data.attendance_state || state.attendanceState || "holiday_off";
+  await Swal.fire({
+    icon: "info",
+    title: "Đã ghi nhận",
+    text: data.message || "Đã ghi nhận trạng thái nghỉ hôm nay",
+    timer: 1200,
+    showConfirmButton: false
+  });
+  reloadAttendancePage();
 }
 async function submitAutomaticOvertimeRequest(requestType, options = {}) {
   if (submitState.ot) return;

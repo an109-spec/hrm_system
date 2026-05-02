@@ -81,6 +81,7 @@ class AttendanceJob:
         ).all()
 
         for record in records:
+            record.shift_status = "regular_checkout_required"
             AttendanceJob._create_notification(
                 employee_id=record.employee_id,
                 title="Nhắc nhở checkout",
@@ -135,7 +136,7 @@ class AttendanceJob:
 
             if attendance.overtime_check_in:
                 continue
-
+            attendance.shift_status = "ot_checkin_required"
             AttendanceJob._create_notification(
                 employee_id=request.employee_id,
                 title="Nhắc bắt đầu tăng ca",
