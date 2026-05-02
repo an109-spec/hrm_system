@@ -853,60 +853,16 @@ def check_in_out():
         shift_start = datetime.combine(today, WORKDAY_START)
         normal_checkin_end = datetime.combine(today, WORKDAY_CHECKIN_NORMAL_END)
         checkin_window_start = datetime.combine(today, WORKDAY_CHECKIN_START)
-        overtime_confirmed = bool(payload.get("overtime_confirmed"))
+        confirm_work_on_offday = bool(payload.get("overtime_confirmed")) or bool(payload.get("confirm_work_on_offday"))
         # =========================
         # CHECK-IN FLOW
         # =========================
         if not attendance:
-            if is_non_working_day:
-                approved_holiday_ot = OvertimeRequest.query.filter(
-                    OvertimeRequest.employee_id == employee.id,
-                    OvertimeRequest.overtime_date == today,
-                    OvertimeRequest.is_deleted.is_(False),
-                    OvertimeRequest.status == "approved",
-                ).first()
-                if approved_holiday_ot:
-                    effective_check_in = max(current_time, datetime.combine(today, WORKDAY_START))
-                    attendance = Attendance(
-                        employee_id=employee.id,
-                        date=today,
-                        check_in=current_time,
-                        attendance_type="holiday",
-                    )
-                    db.session.add(attendance)
-                    try:
-                        db.session.commit()
-                    except IntegrityError:
-                        db.session.rollback()
-                        attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
-                        if attendance:
-                            return jsonify({
-                                "toast": True,
-                                "type": "info",
-                                "action": "done",
-                                "message": "Bạn đã hoàn thành chấm công hôm nay"
-                            })
-                    return jsonify({
-                        "toast": True,
-                        "type": "success",
-                        "action": "check_in",
-                        "message": (
-                            f"Check-in lúc {effective_check_in.strftime('%H:%M:%S')} • "
-                            "Bạn đã có yêu cầu OT ngày nghỉ được duyệt."
-                        ),
-                    })
-                if overtime_confirmed:
-                    return jsonify({
-                        "toast": True,
-                        "type": "warning",
-                        "action": "holiday_ot_prompt",
-                        "holiday_name": today_holiday.name if today_holiday else "Cuối tuần",
-                        "message": "Bạn chỉ có thể chấm công ngày nghỉ khi yêu cầu OT đã được duyệt.",
-                    }), 403
+            if is_non_working_day and not confirm_work_on_offday:
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
                 prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
                 prompt_message = (
-                    "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm không?"
+                    "Hôm nay là ngày nghỉ lễ, bạn đang được nghỉ phép. Bạn có muốn đi làm ngày lễ không?"
                     if today_holiday
                     else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
                 )
@@ -916,6 +872,7 @@ def check_in_out():
                     "action": prompt_action,
                     "holiday_name": off_day_name,
                     "message": prompt_message,
+                    "requires_confirmation": True,
                 })
             effective_check_in = max(current_time, datetime.combine(today, WORKDAY_START))
             attendance_type = "normal"
@@ -1015,6 +972,8 @@ def check_in_out():
                 effective_start,
                 min(effective_check_out, datetime.combine(today, AttendanceService.REGULAR_END))
             )
+            if effective_start.time() > HALF_DAY_LATE_CUTOFF:
+                regular_hours = Decimal("4.00")
             ot_policy_start = datetime.combine(today, AttendanceService.OT_START)
             ot_policy_end = datetime.combine(today, AttendanceService.OT_END)
             approved_ot_start = (
