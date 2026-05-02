@@ -1154,6 +1154,12 @@ def check_in_out():
                         "type": "error",
                         "message": "Thời gian check-out OT không hợp lệ",
                     }), 400
+                if current_time < ot_start_time:
+                    return jsonify({
+                        "type": "warning",
+                        "action": "overtime_waiting_19h",
+                        "message": "Chưa đến 19:00 nên chưa thể check-out tăng ca.",
+                    }), 400
                 attendance.overtime_check_out = min(current_time, ot_end_time)
                 raw_overtime_hours = AttendanceService.calculate_overtime_hours(
                     attendance.overtime_check_in,
