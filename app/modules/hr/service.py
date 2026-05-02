@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 import os
 import re
 import uuid
@@ -1631,10 +1631,13 @@ class HRService:
         if record.check_in and record.check_out and record.check_out >= record.check_in:
             record.working_hours = Decimal(str((record.check_out - record.check_in).total_seconds() / 3600)).quantize(Decimal("0.01"))
 
-        if data.status == "overtime" and HRService._decimal(record.overtime_hours) == 0 and record.check_in and record.check_out:
-            overtime_ref = record.check_out.replace(hour=17, minute=30, second=0, microsecond=0)
-            if record.check_out > overtime_ref:
-                record.overtime_hours = Decimal(str((record.check_out - overtime_ref).total_seconds() / 3600)).quantize(Decimal("0.01"))
+        if data.status == "overtime":
+            record.overtime_hours = Decimal("0.00")
+            if record.check_in and record.check_out:
+                overtime_threshold = datetime.combine(record.check_in.date(), time(19, 0))
+                overtime_start = max(record.check_in, overtime_threshold)
+                overtime_delta = (record.check_out - overtime_start).total_seconds() / 3600
+                record.overtime_hours = Decimal(str(max(0, overtime_delta))).quantize(Decimal("0.01"))
         if data.status == "abnormal":
             record.check_out = None
             record.working_hours = 0
