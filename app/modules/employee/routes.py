@@ -330,6 +330,13 @@ def _attendance_metrics(
     else:
         raw_regular = stored_regular.quantize(Decimal("0.01"))
         raw_overtime = stored_overtime.quantize(Decimal("0.01"))
+    if raw_overtime <= Decimal("0.00") and record.check_in and record.check_out:
+        computed_total = _compute_working_hours(record.check_in, record.check_out).quantize(Decimal("0.01"))
+        computed_regular = min(computed_total, Decimal("8.00"))
+        computed_overtime = max(computed_total - computed_regular, Decimal("0.00")).quantize(Decimal("0.01"))
+        if computed_overtime > Decimal("0.00"):
+            raw_regular = computed_regular
+            raw_overtime = computed_overtime
 
     raw_total = (raw_regular + raw_overtime).quantize(Decimal("0.01"))
     payroll_regular = (raw_regular * multiplier).quantize(Decimal("0.01"))
