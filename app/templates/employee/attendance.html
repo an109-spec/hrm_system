@@ -484,15 +484,20 @@ const fmtDateTime = (d) => {
 };
 
 const isLunchBreak = (d) => d.getHours() === 12;
+function isSameDay(a, b) {
+  if (!(a instanceof Date) || Number.isNaN(a.getTime())) return false;
+  if (!(b instanceof Date) || Number.isNaN(b.getTime())) return false;
+  return (
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  );
+}
 
 function isNewDay(now, lastCheckin) {
   if (!lastCheckin) return true;
 
-  return (
-    now.getDate() !== lastCheckin.getDate() ||
-    now.getMonth() !== lastCheckin.getMonth() ||
-    now.getFullYear() !== lastCheckin.getFullYear()
-  );
+  return !isSameDay(now, lastCheckin);
 }
 
 /* ===================== TOAST ===================== */
@@ -763,7 +768,12 @@ function renderState() {
     const req =
       state.todayOtRequest;
 
-    if (!state.overtimeStatus || state.overtimeStatus === "NONE") {
+    const hasTodayOtRequest =
+      req.createdAt instanceof Date &&
+      !Number.isNaN(req.createdAt.getTime()) &&
+      isSameDay(req.createdAt, state.now);
+
+    if (!state.overtimeStatus || state.overtimeStatus === "NONE" || !hasTodayOtRequest) {
       otRequestStatusBox.style.display =
         "none";
     } else {
