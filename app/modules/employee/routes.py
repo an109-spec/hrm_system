@@ -931,7 +931,9 @@ def check_in_out():
             return jsonify({
                 "type": "warning" if late_minutes > 0 else "success",
                 "action": "check_in",
-                "message": msg
+                "message": msg,
+                "attendance_state": "half_day" if effective_check_in.time() >= HALF_DAY_LATE_CUTOFF else "working_regular",
+                "check_in": attendance.check_in.isoformat() if attendance.check_in else None,
             })
 
         # =========================

@@ -675,13 +675,13 @@ function renderState() {
       },
       overtime_working: {
         statusPrefix: "🟣 Đang tăng ca",
-        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
+        buttonText: "🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
       working_overtime: {
         statusPrefix: "🟣 Đang tăng ca",
-        buttonText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
+        buttonText: "🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
         buttonDisabled: false,
         buttonClass: "btn btn-warning"
       },
@@ -722,7 +722,7 @@ function renderState() {
       hasApprovedOt && isOvertimeVerifiedForUi && !state.overtimeCheckOut && nowHour >= 19;
 
 
-    if (hasPendingOtApproval) {
+    if (hasPendingOtApproval && state.hasCheckout) {
       buttonText = "⏳ ĐANG CHỜ DUYỆT OT";
       buttonDisabled = true;
       buttonClass = "btn btn-disabled";
@@ -742,7 +742,7 @@ function renderState() {
       buttonText = "🔳 XÁC NHẬN KẾT THÚC TĂNG CA";
       buttonDisabled = false;
       buttonClass = "btn btn-warning";
-      currentShiftUi.statusPrefix = "🟣 Đang làm việc";
+      currentShiftUi.statusPrefix = "🟣 Đang tăng ca";
     }
 
 
