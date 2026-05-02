@@ -167,8 +167,15 @@ class EmployeeESSService:
         default_end = datetime.combine(ot_date, datetime.strptime("22:00", "%H:%M").time())
 
         if not start_raw and not end_raw:
-            start_ot_time = default_start
-            end_ot_time = default_end
+            if request_type == "holiday" and ot_date == simulated_now.date():
+                office_end_time = datetime.combine(ot_date, datetime.strptime("17:00", "%H:%M").time())
+                start_ot_time = simulated_now.replace(second=0, microsecond=0)
+                end_ot_time = office_end_time
+                if start_ot_time >= end_ot_time:
+                    raise ValueError("Ngày lễ ca hành chính chỉ có thể đăng ký trước 17:00")
+            else:
+                start_ot_time = default_start
+                end_ot_time = default_end
             hours = Decimal(str((end_ot_time - start_ot_time).total_seconds() / 3600)).quantize(Decimal("0.01"))
         elif start_raw and end_raw:
             start_time = datetime.strptime(start_raw, "%H:%M").time()

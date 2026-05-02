@@ -1166,16 +1166,22 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
       state.nextEvent = data.next_event || state.nextEvent;
       const canInviteOt = state.nextEvent === "offer_overtime" || (state.mainHours >= 8 && state.overtimeStatus === "NONE");
       if (canInviteOt) {
+        const requestType = data.overtime_request_type || "after_shift";
         const otDecision = await Swal.fire({
           icon: "question",
           title: "Bạn có muốn đăng ký tăng ca không?",
+          text: requestType === "holiday"
+            ? "Bạn muốn gửi yêu cầu làm việc ngày nghỉ lễ để chờ HR/Admin duyệt không?"
+            : requestType === "weekend"
+              ? "Bạn muốn gửi yêu cầu làm việc cuối tuần để chờ HR/Admin duyệt không?"
+              : "Bạn muốn gửi yêu cầu tăng ca ngoài giờ hành chính để chờ duyệt không?",
           showCancelButton: true,
           confirmButtonText: "Có",
           cancelButtonText: "Không"
         });
 
         if (otDecision.isConfirmed) {
-          await submitAutomaticOvertimeRequest("after_shift");
+          await submitAutomaticOvertimeRequest(requestType);
         }
       }
     }

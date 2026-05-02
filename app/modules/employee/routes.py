@@ -853,12 +853,11 @@ def check_in_out():
         shift_start = datetime.combine(today, WORKDAY_START)
         normal_checkin_end = datetime.combine(today, WORKDAY_CHECKIN_NORMAL_END)
         checkin_window_start = datetime.combine(today, WORKDAY_CHECKIN_START)
-
+        overtime_confirmed = bool(payload.get("overtime_confirmed"))
         # =========================
         # CHECK-IN FLOW
         # =========================
         if not attendance:
-            overtime_confirmed = bool(payload.get("overtime_confirmed"))
             if is_non_working_day:
                 approved_holiday_ot = OvertimeRequest.query.filter(
                     OvertimeRequest.employee_id == employee.id,
@@ -966,23 +965,7 @@ def check_in_out():
         # CHECK-OUT FLOW
         # =========================
         if attendance.check_in and not attendance.check_out:
-            overtime_confirmed = bool(payload.get("overtime_confirmed"))
             early_checkout_confirmed = bool(payload.get("early_checkout_confirmed"))
-            if is_non_working_day and not overtime_confirmed:
-                off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
-                prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
-                prompt_message = (
-                    "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm không?"
-                    if today_holiday
-                    else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
-                )
-                return jsonify({
-                    "toast": False,
-                    "type": "warning",
-                    "action": prompt_action,
-                    "holiday_name": off_day_name,
-                    "message": prompt_message,
-                })
             check_in_time = attendance.check_in
             if check_in_time.tzinfo is not None:
                 check_in_time = check_in_time.replace(tzinfo=None)
@@ -1125,6 +1108,14 @@ def check_in_out():
                     and not pending_ot_request
                     and effective_check_out >= datetime.combine(today, WORKDAY_END)
                 ) else "",
+                "overtime_request_type": (
+                    "holiday" if today_holiday else ("weekend" if today.weekday() >= 5 else "after_shift")
+                ) if (
+                    current_time < datetime.combine(today, AttendanceService.OT_END)
+                    and not approved_ot_request
+                    and not pending_ot_request
+                    and effective_check_out >= datetime.combine(today, WORKDAY_END)
+                ) else "",
             })
         approved_ot_request = OvertimeRequest.query.filter(
             OvertimeRequest.employee_id == employee.id,
@@ -1165,17 +1156,22 @@ def check_in_out():
                         "message": "Thời gian check-out OT không hợp lệ",
                     }), 400
                 attendance.overtime_check_out = min(current_time, ot_end_time)
-                attendance.overtime_hours = AttendanceService.calculate_overtime_hours(
+                raw_overtime_hours = AttendanceService.calculate_overtime_hours(
                     attendance.overtime_check_in,
                     attendance.overtime_check_out,
                 )
+                overtime_multiplier = Decimal(str(approved_ot_request.holiday_multiplier or 1))
+                attendance.overtime_hours = (raw_overtime_hours * overtime_multiplier).quantize(Decimal("0.01"))
                 attendance.shift_status = "completed"
                 db.session.commit()
                 return jsonify({
                     "toast": True,
                     "type": "success",
                     "action": "check_out_overtime",
-                    "message": f"Check-out OT thành công. Tăng ca: {attendance.overtime_hours}h",
+                    "message": (
+                        f"Check-out OT thành công. OT thực tế: {raw_overtime_hours}h"
+                        + (f" • Quy đổi: {attendance.overtime_hours}h (x{overtime_multiplier})" if overtime_multiplier > 1 else "")
+                    ),
                     "attendance_state": "completed",
                     "overtime_hours": str(attendance.overtime_hours or 0),
                     "overtime_check_in": attendance.overtime_check_in.isoformat() if attendance.overtime_check_in else None,

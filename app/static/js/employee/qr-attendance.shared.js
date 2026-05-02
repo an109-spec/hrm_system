@@ -124,7 +124,7 @@
 
       try {
         // Thử lần 1: Camera sau mặc định
-        await startWithConfig({ facingMode: { ideal: 'environment' } });
+        await startWithConfig({ facingMode: 'environment' });
       } catch (firstErr) {
         // Nếu lỗi, thử lấy danh sách camera và mở lại
         try {
