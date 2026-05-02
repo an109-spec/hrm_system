@@ -1,5 +1,24 @@
 (function (global) {
   function createQRScanner({ modalId, readerId, panelId, onDecoded, onError }) {
+    function getUserMediaCompat(constraints) {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+      const legacyGetUserMedia =
+        navigator?.getUserMedia ||
+        navigator?.webkitGetUserMedia ||
+        navigator?.mozGetUserMedia ||
+        navigator?.msGetUserMedia;
+
+      if (!legacyGetUserMedia) {
+        return Promise.reject(new Error('UNSUPPORTED_CAMERA_API'));
+      }
+
+      return new Promise((resolve, reject) => {
+        legacyGetUserMedia.call(navigator, constraints, resolve, reject);
+      });
+    }
+
     let scanEngine = null;
     let isOpen = false;
     let isProcessingDecode = false;
@@ -12,9 +31,15 @@
     }
 
     function normalizeOpenError(err) {
+      // In lỗi thực tế ra console để tiện debug khi phát triển
+      console.error("QR Scanner Error Detail:", err);
+
       const msg = String(err?.message || err || '').toLowerCase();
       if (!global.isSecureContext) {
         return new Error('Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng mở hệ thống bằng đường dẫn bảo mật.');
+      }
+      if (msg.includes('unsupported_camera_api')) {
+        return new Error('Thiết bị/trình duyệt hiện tại chưa hỗ trợ mở camera. Hãy dùng Chrome, Edge, Safari mới nhất hoặc mở bằng ứng dụng trình duyệt hệ thống.');
       }
       if (msg.includes('permission') || msg.includes('notallowed') || msg.includes('denied')) {
         return new Error('Bạn đã từ chối quyền camera. Vui lòng cấp quyền trong cài đặt trình duyệt.');
@@ -22,7 +47,11 @@
       if (msg.includes('notfound') || msg.includes('devicesnotfound')) {
         return new Error('Không tìm thấy camera trên thiết bị này.');
       }
-      return new Error('Không thể khởi động camera. Có thể camera đang bị ứng dụng khác sử dụng.');
+      // Thêm kiểm tra lỗi do thiết bị đang bận
+      if (msg.includes('readable') || msg.includes('concurrent') || msg.includes('in use')) {
+        return new Error('Camera đang bị ứng dụng khác hoặc tab khác sử dụng. Vui lòng tắt các ứng dụng đang dùng camera và thử lại.');
+      }
+      return new Error('Không thể khởi động camera. Vui lòng thử tải lại trang hoặc kiểm tra quyền camera.');
     }
 
     async function close() {
@@ -33,8 +62,14 @@
       }
 
       if (scanEngine) {
-        try { await scanEngine.stop(); } catch (_) {}
-        try { await scanEngine.clear(); } catch (_) {}
+        try {
+          if (scanEngine.isScanning) {
+            await scanEngine.stop();
+          }
+        } catch (_) {}
+        try {
+          await scanEngine.clear();
+        } catch (_) {}
         scanEngine = null;
       }
       isProcessingDecode = false;
@@ -62,34 +97,36 @@
         }
       );
     }
+
     async function open() {
       if (isOpen) return;
       const modal = document.getElementById(modalId);
       if (!modal) throw new Error('Không tìm thấy modal scanner.');
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        throw new Error('Trình duyệt không hỗ trợ camera API. Vui lòng cập nhật trình duyệt.');
+      if (!global.isSecureContext) {
+        throw new Error('Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng mở hệ thống bằng đường dẫn bảo mật.');
       }
+
+      // 1. Hiển thị modal trước
       if (modal.classList.contains('scanner-modal')) modal.classList.add('open');
       else modal.style.display = 'block';
 
       isOpen = true;
       isProcessingDecode = false;
+
+      // 2. Thêm một khoảng trễ nhỏ (300ms) để modal render hoàn tất và camera cũ tắt hẳn
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // 3. Đảm bảo dọn dẹp sạch engine cũ trước khi tạo mới
+      if (scanEngine) {
+        try { await scanEngine.clear(); } catch (_) {}
+      }
       scanEngine = new Html5Qrcode(readerId);
 
-      // Xin quyền camera trước để đảm bảo getCameras có label đầy đủ (đặc biệt iOS/Safari)
-      let warmupStream = null;
       try {
-        warmupStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      } catch (permissionErr) {
-        await close();
-        throw normalizeOpenError(permissionErr);
-      } finally {
-        stopStreamTracks(warmupStream);
-      }
-
-      try {
+        // Thử lần 1: Camera sau mặc định
         await startWithConfig({ facingMode: { ideal: 'environment' } });
       } catch (firstErr) {
+        // Nếu lỗi, thử lấy danh sách camera và mở lại
         try {
           const devices = await Html5Qrcode.getCameras();
           if (!devices || devices.length === 0) throw new Error('Không tìm thấy camera nào.');
