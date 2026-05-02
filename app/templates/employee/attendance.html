@@ -330,8 +330,14 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
           <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
           <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
           <td>
-            {% if a.check_in and a.check_out %}
+            {% if a.check_in and a.check_out and (a.overtime_check_in and a.overtime_check_out) %}
+              <span class="status status-success">🏁 Hoàn tất (bao gồm tăng ca)</span>
+            {% elif a.check_in and a.check_out %}
               <span class="status status-success">🏁 Hoàn tất ngày công</span>
+            {% elif a.overtime_check_in and not a.overtime_check_out %}
+              <span class="status status-warning">🟣 Đang tăng ca</span>
+            {% elif a.overtime_check_in and a.overtime_check_out %}
+              <span class="status status-success">🟣 Hoàn tất tăng ca</span>
             {% elif a.check_in and not a.check_out %}
               {% set is_before_shift = a.check_in.hour < 8 %}
               {% if is_before_shift %}
@@ -889,8 +895,10 @@ function renderState() {
   const overtimeHoursDisplay = Number(state.overtimeHours || 0);
 
   const hasCheckedInToday = state.hasAttendance && state.checkIn && !isDifferentDay;
-  if ((state.hasCheckout && !isDifferentDay) || hasCheckedInToday) {
-    const totalDone = mainHoursDisplay + overtimeHoursDisplay;
+  const hasOvertimeToday = Number(state.overtimeHours || 0) > 0 || Boolean(state.overtimeCheckIn);
+  const hasRecordedHours = Number(state.mainHours || 0) > 0 || Number(state.overtimeHours || 0) > 0;
+  if ((state.hasCheckout && !isDifferentDay) || hasCheckedInToday || hasOvertimeToday || hasRecordedHours) {
+    const totalDone = hasCheckedInToday ? (mainHoursDisplay + overtimeHoursDisplay) : (Number(state.mainHours || 0) + overtimeHoursDisplay);
     const totalMinutes = Math.round(totalDone * 60);
 
     const hh =
