@@ -249,13 +249,16 @@ class AttendanceService:
         is_holiday = AttendanceService._is_holiday(now_dt.date())
 
         if (is_weekend or is_holiday) and not confirm_work_on_offday:
-            offday_name = "ngày lễ" if is_holiday else "cuối tuần"
             return {
-                "action": "confirm_offday_work",
+                "action": "holiday_ot_prompt" if is_holiday else "weekend_work_prompt",
                 "requires_confirmation": True,
                 "is_weekend": is_weekend,
                 "is_holiday": is_holiday,
-                "message": f"Hôm nay là {offday_name}. Bạn có muốn đi làm không?"
+                "message": (
+                    "Hôm nay là ngày nghỉ lễ, bạn đang được nghỉ phép. Bạn có muốn đi làm ngày lễ không?"
+                    if is_holiday
+                    else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
+                )
             }
 
         record.is_weekend = is_weekend
@@ -290,6 +293,7 @@ class AttendanceService:
         db.session.commit()
 
         return {
+            "action": "check_in",
             "message": f"Check-in thành công lúc {now_dt.strftime('%H:%M:%S')}"
         }
 
@@ -328,6 +332,7 @@ class AttendanceService:
         db.session.commit()
 
         return {
+            "action": "check_out",
             "message": f"Check-out ca chính thành công. Công thường: {record.regular_hours}h"
         }
 

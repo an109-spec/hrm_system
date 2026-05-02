@@ -564,16 +564,7 @@ function renderState() {
     state.attendanceState = currentHourForOt >= 19 ? "overtime_working" : "pre_ot_rest_verified";
   }
   const isDifferentDay = isNewDay(state.now, state.checkIn);
-  if (isDifferentDay) {
-    state.hasAttendance = false;
-    state.hasCheckout = false;
-    state.checkIn = null;
-    state.checkOut = null;
-    state.mainHours = 0;
-    state.overtimeHours = 0;
-    state.attendanceState = "not_started";
-    state.lateWarning = false;
-  }
+
   /*
   =========================
   RESET UI MẶC ĐỊNH
@@ -897,8 +888,8 @@ function renderState() {
   const mainHoursDisplay = getRealtimeMainHours();
   const overtimeHoursDisplay = Number(state.overtimeHours || 0);
 
-  const hasCheckedInToday = state.hasAttendance && state.checkIn;
-  if (state.hasCheckout || hasCheckedInToday) {
+  const hasCheckedInToday = state.hasAttendance && state.checkIn && !isDifferentDay;
+  if ((state.hasCheckout && !isDifferentDay) || hasCheckedInToday) {
     const totalDone = mainHoursDisplay + overtimeHoursDisplay;
     const totalMinutes = Math.round(totalDone * 60);
 
@@ -983,7 +974,7 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
   try {
     const payload = {
       qr_text: decodedText,
-      overtime_confirmed: false,
+      confirm_work_on_offday: false,
       simulated_now: toLocalISO(state.now),
       early_checkout_confirmed: Boolean(options.earlyCheckoutConfirmed)
     };
@@ -1011,7 +1002,7 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
        HOLIDAY / WEEKEND PROMPT
     ========================= */
 
-    if (data.action === "holiday_ot_prompt") {
+    if (data.action === "holiday_work_prompt" || data.action === "holiday_ot_prompt") {
       const decision = await Swal.fire({
         icon: "question",
         title: "Hôm nay là ngày nghỉ lễ",
@@ -1213,7 +1204,7 @@ async function submitAttendanceConfirmation(decodedText) {
       },
       body: JSON.stringify({
         qr_text: decodedText,
-        overtime_confirmed: true,
+        confirm_work_on_offday: true,
         simulated_now: toLocalISO(state.now)
       })
     });

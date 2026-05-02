@@ -11,8 +11,7 @@ def _get_current_employee():
     if not user_id:
         return None, jsonify({
             "status": "error",
-            "message": "Bạn chưa đăng nhập",
-            "toast": True
+            "message": "Bạn chưa đăng nhập"
         }), 401
 
     from app.models import Employee
@@ -21,8 +20,7 @@ def _get_current_employee():
     if not employee:
         return None, jsonify({
             "status": "error",
-            "message": "Không tìm thấy nhân viên",
-            "toast": True
+            "message": "Không tìm thấy nhân viên"
         }), 404
 
     return employee, None, None
@@ -81,12 +79,19 @@ def check_in():
             simulated_now,
             bool(data.get("confirm_work_on_offday", False))
         )
-        return jsonify({"status": "success", "toast": True, **result})
+        action = result.get("action")
+        is_prompt = action in {"holiday_work_prompt", "weekend_work_prompt"}
+        response_type = "warning" if is_prompt else "success"
+        return jsonify({
+            "status": "success",
+            "type": response_type,
+            **result
+        })
     except ValidationError as e:
-        return jsonify({"status": "error", "message": str(e), "toast": True}), 400
+        return jsonify({"status": "error", "message": str(e)}), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({"status": "error", "message": f"Lỗi hệ thống: {str(e)}", "toast": True}), 500
+        return jsonify({"status": "error", "message": f"Lỗi hệ thống: {str(e)}"}), 500
 
 
 @attendance_bp.route("/check-out", methods=["POST"])
@@ -100,12 +105,17 @@ def check_out():
 
     try:
         result = AttendanceService.check_out_regular(employee.id, simulated_now)
-        return jsonify({"status": "success", "toast": True, **result})
+        return jsonify({
+            "status": "success",
+            "type": "success",
+            "action": "check_out",
+            **result
+        })
     except ValidationError as e:
-        return jsonify({"status": "error", "message": str(e), "toast": True}), 400
+        return jsonify({"status": "error", "message": str(e)}), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({"status": "error", "message": f"Lỗi hệ thống: {str(e)}", "toast": True}), 500
+        return jsonify({"status": "error", "message": f"Lỗi hệ thống: {str(e)}"}), 500
 
 
 @attendance_bp.route("/today", methods=["GET"])
@@ -120,7 +130,7 @@ def get_today():
         today = AttendanceService.get_today(employee.id, simulated_now)
         return jsonify({"status": "success", "data": today.to_dict() if today else None})
     except ValidationError as e:
-        return jsonify({"status": "error", "message": str(e), "toast": True}), 400
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 
 @attendance_bp.route("/history", methods=["GET"])
@@ -135,7 +145,7 @@ def history():
         records = AttendanceService.get_history(employee.id, simulated_now)
         return jsonify({"status": "success", "data": [record.to_dict() for record in records]})
     except ValidationError as e:
-        return jsonify({"status": "error", "message": str(e), "toast": True}), 400
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 
 @attendance_bp.route("/", methods=["DELETE"])
@@ -149,8 +159,7 @@ def delete_attendance():
     if not date_str:
         return jsonify({
             "status": "error",
-            "message": "Thiếu ngày cần xóa",
-            "toast": True
+            "message": "Thiếu ngày cần xóa"
         }), 400
 
     try:
@@ -165,15 +174,13 @@ def delete_attendance():
         return jsonify({
             "status": "success",
             "message": f"Đã xóa chấm công ngày {date_str}",
-            "toast": True,
             "rollback_date": rollback_date
         })
 
     except ValidationError as e:
         return jsonify({
             "status": "error",
-            "message": str(e),
-            "toast": True
+            "message": str(e)
         }), 400
 
     except Exception as e:
@@ -181,5 +188,4 @@ def delete_attendance():
         return jsonify({
             "status": "error",
             "message": f"Lỗi hệ thống: {str(e)}",
-            "toast": True
         }), 500

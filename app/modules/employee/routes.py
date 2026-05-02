@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+import importlib
 import os
 import re
 import uuid
-from lunardate import LunarDate
 from sqlalchemy.exc import IntegrityError
 from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -58,6 +58,14 @@ LUNCH_END = time(13, 0, 0)
 REST_BEFORE_OT_END = time(19, 0, 0)
 OT_UI_OPEN = time(18, 0, 0)
 OT_END = time(22, 0, 0)
+def _resolve_lunar_date_class():
+    spec = importlib.util.find_spec("lunardate")
+    if spec is None:
+        return None
+    module = importlib.import_module("lunardate")
+    return getattr(module, "LunarDate", None)
+
+LUNAR_DATE_CLASS = _resolve_lunar_date_class()
 
 
 def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> dict:
@@ -114,10 +122,12 @@ def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> di
     }
 
 def _build_lunar_public_holidays_for_year(year: int) -> dict[str, str]:
+    if LUNAR_DATE_CLASS is None:
+        return {}
     lookup: dict[str, str] = {}
     for lunar_month, lunar_day, holiday_name in VN_LUNAR_PUBLIC_HOLIDAYS:
         try:
-            solar_date = LunarDate(year, lunar_month, lunar_day).toSolarDate()
+            solar_date = LUNAR_DATE_CLASS(year, lunar_month, lunar_day).toSolarDate()
         except ValueError:
             continue
         lookup[solar_date.strftime("%m-%d")] = holiday_name
@@ -800,14 +810,12 @@ def check_in_out():
     employee = _current_employee()
     if not employee:
         return jsonify({
-            "toast": True,
             "type": "error",
             "message": "Không tìm thấy nhân viên"
         }), 404
 
     if not _is_attendance_required(employee):
         return jsonify({
-            "toast": True,
             "type": "info",
             "message": "Vai trò hiện tại không áp dụng chấm công bắt buộc."
         }), 200
@@ -819,7 +827,6 @@ def check_in_out():
     qr_text = str(payload.get("qr_text") or payload.get("qr_data") or "").strip()
     if not qr_text:
         return jsonify({
-            "toast": True,
             "type": "error",
             "message": "Không đọc được dữ liệu QR."
         }), 400
@@ -836,7 +843,6 @@ def check_in_out():
 
     except ValueError as e:
         return jsonify({
-            "toast": True,
             "type": "error",
             "message": str(e)
         }), 400
@@ -857,7 +863,7 @@ def check_in_out():
         shift_start = datetime.combine(today, WORKDAY_START)
         normal_checkin_end = datetime.combine(today, WORKDAY_CHECKIN_NORMAL_END)
         checkin_window_start = datetime.combine(today, WORKDAY_CHECKIN_START)
-        confirm_work_on_offday = bool(payload.get("overtime_confirmed")) or bool(payload.get("confirm_work_on_offday"))
+        confirm_work_on_offday = bool(payload.get("confirm_work_on_offday")) or bool(payload.get("overtime_confirmed"))
         decline_offday_work = bool(payload.get("decline_offday_work"))
         overtime_decision = str(payload.get("overtime_decision") or "").strip().lower()
         # =========================
@@ -867,21 +873,19 @@ def check_in_out():
             if is_non_working_day and not confirm_work_on_offday:
                 if decline_offday_work:
                     return jsonify({
-                        "toast": True,
                         "type": "info",
                         "action": "holiday_off" if today_holiday else "weekend_off",
                         "attendance_state": "holiday_off" if today_holiday else "weekend_off",
                         "message": "Đã ghi nhận nghỉ lễ hôm nay." if today_holiday else "Đã ghi nhận nghỉ cuối tuần hôm nay."
                     })
                 off_day_name = today_holiday.name if today_holiday else "Cuối tuần"
-                prompt_action = "holiday_ot_prompt" if today_holiday else "weekend_work_prompt"
+                prompt_action = "holiday_work_prompt" if today_holiday else "weekend_work_prompt"
                 prompt_message = (
                     "Hôm nay là ngày nghỉ lễ, bạn đang được nghỉ phép. Bạn có muốn đi làm ngày lễ không?"
                     if today_holiday
                     else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
                 )
                 return jsonify({
-                    "toast": False,
                     "type": "warning",
                     "action": prompt_action,
                     "holiday_name": off_day_name,
@@ -905,7 +909,6 @@ def check_in_out():
                 attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
                 if attendance:
                     return jsonify({
-                        "toast": True,
                         "type": "info",
                         "action": "done",
                         "message": "Bạn đã hoàn thành chấm công hôm nay"
@@ -926,7 +929,6 @@ def check_in_out():
                 msg += " • Trạng thái vào ca: Đến sớm"
 
             return jsonify({
-                "toast": True,
                 "type": "warning" if late_minutes > 0 else "success",
                 "action": "check_in",
                 "message": msg
@@ -942,7 +944,6 @@ def check_in_out():
                 check_in_time = check_in_time.replace(tzinfo=None)
             if current_time < check_in_time:
                 return jsonify({
-                    "toast": True,
                     "type": "error",
                     "message": "Thời gian check-out không hợp lệ"
                 }), 400
@@ -968,7 +969,6 @@ def check_in_out():
             if raw_check_out_time < end_of_day and not early_checkout_confirmed:
                 early_minutes_preview = int((end_of_day - raw_check_out_time).total_seconds() // 60)
                 return jsonify({
-                    "toast": False,
                     "type": "warning",
                     "action": "early_checkout_prompt",
                     "early_minutes": early_minutes_preview,
@@ -1065,7 +1065,6 @@ def check_in_out():
                 status_key = "early_leave"
 
             return jsonify({
-                "toast": True,
                 "type": "warning" if early_minutes > 0 else "success",
                 "action": "check_out",
                 "message": msg,
@@ -1090,7 +1089,6 @@ def check_in_out():
         if attendance and attendance.check_out and attendance.shift_status == "regular_done_pending_ot_decision":
             if overtime_decision not in {"yes", "no"}:
                 return jsonify({
-                    "toast": True,
                     "type": "warning",
                     "action": "offer_overtime",
                     "requires_overtime_decision": True,
@@ -1100,7 +1098,6 @@ def check_in_out():
             attendance.shift_status = "pre_ot_rest" if overtime_decision == "yes" else "completed"
             db.session.commit()
             return jsonify({
-                "toast": True,
                 "type": "success",
                 "action": "overtime_decision_recorded",
                 "attendance_state": attendance.shift_status,
@@ -1115,7 +1112,6 @@ def check_in_out():
         if attendance.check_out and approved_ot_request:
             if attendance.shift_status == "regular_done_pending_ot_decision":
                 return jsonify({
-                    "toast": True,
                     "type": "warning",
                     "action": "offer_overtime",
                     "requires_overtime_decision": True,
@@ -1126,7 +1122,6 @@ def check_in_out():
             ot_end_time = datetime.combine(today, AttendanceService.OT_END)
             if current_time < ot_start_time and not attendance.overtime_check_in:
                 return jsonify({
-                    "toast": True,
                     "type": "warning",
                     "action": "overtime_waiting_19h",
                     "message": "Chưa đến 19:00. Vui lòng chờ đến giờ tăng ca để check-in."
@@ -1136,7 +1131,6 @@ def check_in_out():
                 attendance.shift_status = "pre_ot_rest" if current_time < ot_start_time else "working_overtime"
                 db.session.commit()
                 return jsonify({
-                    "toast": True,
                     "type": "success",
                     "action": "check_in_overtime",
                     "message": (
@@ -1155,7 +1149,6 @@ def check_in_out():
                     overtime_check_in_time = overtime_check_in_time.replace(tzinfo=None)
                 if current_time < overtime_check_in_time:
                     return jsonify({
-                        "toast": True,
                         "type": "error",
                         "message": "Thời gian check-out OT không hợp lệ",
                     }), 400
@@ -1169,7 +1162,6 @@ def check_in_out():
                 attendance.shift_status = "completed"
                 db.session.commit()
                 return jsonify({
-                    "toast": True,
                     "type": "success",
                     "action": "check_out_overtime",
                     "message": (
@@ -1188,7 +1180,6 @@ def check_in_out():
         # ALREADY DONE
         # =========================
         return jsonify({
-            "toast": True,
             "type": "success",
             "action": "already_recorded",
             "message": "QR hợp lệ. Hôm nay bạn đã hoàn thành chấm công trước đó."
@@ -1197,7 +1188,6 @@ def check_in_out():
     except Exception as exc:
         db.session.rollback()
         return jsonify({
-            "toast": True,
             "type": "error",
             "message": f"Lỗi hệ thống: {str(exc)}"
         }), 500
@@ -1209,7 +1199,6 @@ def delete_attendance_record():
         return jsonify({
             "status": "error",
             "message": "Bạn chưa đăng nhập",
-            "toast": True
         }), 401
 
     employee = _current_employee()
@@ -1217,7 +1206,6 @@ def delete_attendance_record():
         return jsonify({
             "status": "error",
             "message": "Không tìm thấy nhân viên",
-            "toast": True
         }), 404
 
     payload = request.get_json(silent=True) or {}
@@ -1226,7 +1214,6 @@ def delete_attendance_record():
         return jsonify({
             "status": "error",
             "message": "Thiếu ngày cần xóa",
-            "toast": True
         }), 400
 
     try:
@@ -1240,21 +1227,18 @@ def delete_attendance_record():
         return jsonify({
             "status": "success",
             "message": f"Đã xóa chấm công ngày {date_str}",
-            "toast": True,
             "rollback_date": rollback_date
         })
     except ValidationError as e:
         return jsonify({
             "status": "error",
             "message": str(e),
-            "toast": True
         }), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({
             "status": "error",
             "message": f"Lỗi hệ thống: {str(e)}",
-            "toast": True
         }), 500
 
 @employee_bp.route("/leave", methods=["GET", "POST"])
