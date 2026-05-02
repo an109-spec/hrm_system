@@ -289,8 +289,8 @@ def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
     if total_hours <= 0:
         return Decimal("0")
 
-    lunch_start = datetime.combine(checkin.date(), time(12, 0, 0))
-    lunch_end = datetime.combine(checkin.date(), time(13, 0, 0))
+    lunch_start = datetime.combine(checkin.date(), time(12, 0, 0), tzinfo=checkin.tzinfo)
+    lunch_end = datetime.combine(checkin.date(), time(13, 0, 0), tzinfo=checkin.tzinfo)
     overlap_start = max(checkin, lunch_start)
     overlap_end = min(checkout, lunch_end)
     if overlap_end > overlap_start:
