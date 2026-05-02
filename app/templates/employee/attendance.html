@@ -240,6 +240,7 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
   data-server-now="{{ now.isoformat() }}"
   data-overtime-state="{{ today.overtime_state if today else "" }}"
   data-next-event="{{ today.next_event if today else "" }}"
+  data-is-weekend="{{ 1 if now.weekday() >= 5 else 0 }}"
   data-today-ot-request-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
 >
 
@@ -263,9 +264,13 @@ data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
   <p
     id="holidayText"
     class="attendance-note"
-    style="{% if not today_holiday %}display:none;{% endif %}"
+    style="{% if not today_holiday and now.weekday() < 5 %}display:none;{% endif %}"
   >
-    🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name if today_holiday else '' }}
+    {% if today_holiday %}
+      🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}
+    {% elif now.weekday() >= 5 %}
+      🛌 Hôm nay là ngày nghỉ cuối tuần
+    {% endif %}
   </p>
   <!-- ACTION -->
   <div class="attendance-actions">
@@ -419,7 +424,7 @@ const state = {
   isHalfDay: root.dataset.isHalfDay === "1",
   lateMinutes: Number(root.dataset.lateMinutes || 0),
   lateWarning: root.dataset.lateWarning === "1",
-
+  isWeekend: root.dataset.isWeekend === "1",
   now: new Date(root.dataset.serverNow),
   overtimeState: root.dataset.overtimeState || "",
   nextEvent: root.dataset.nextEvent || "",
@@ -523,6 +528,18 @@ function renderState() {
   const btn = document.getElementById("attendanceBtn");
   const lateWarning = document.getElementById("lateWarning");
   const identityText = document.getElementById("identityText");
+  const holidayText = document.getElementById("holidayText");
+
+  if (holidayText) {
+    if (holidayText.textContent.trim()) {
+      holidayText.style.display = "block";
+    } else if (state.isWeekend) {
+      holidayText.textContent = "🛌 Hôm nay là ngày nghỉ cuối tuần";
+      holidayText.style.display = "block";
+    } else {
+      holidayText.style.display = "none";
+    }
+  }
   const otRequestStatusBox = document.getElementById("otRequestStatusBox");
   const workHoursText = document.getElementById("workHoursText");
 
@@ -982,8 +999,8 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
       });
       if (decision.isConfirmed) {
         submitState.attendance = false;
-        submitState.attendance = false;
-        await submitAttendanceConfirmation(decodedText);
+        const requestType = data.action === "holiday_ot_prompt" ? "holiday" : "weekend";
+        await submitAutomaticOvertimeRequest(requestType);
       }
       return;
     }
@@ -1013,8 +1030,8 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
 
       if (decision.isConfirmed) {
         submitState.attendance = false;
-        submitState.attendance = false;
-        await submitAttendanceConfirmation(decodedText);
+        const requestType = data.action === "holiday_ot_prompt" ? "holiday" : "weekend";
+        await submitAutomaticOvertimeRequest(requestType);
       }
       return;
     }
@@ -1030,7 +1047,8 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
       });
 
       if (decision.isConfirmed) {
-        await submitAttendanceConfirmation(decodedText);
+        submitState.attendance = false;
+        await submitAutomaticOvertimeRequest("weekend");
       }
       return;
     }
