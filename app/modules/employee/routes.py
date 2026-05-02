@@ -826,7 +826,7 @@ def check_in_out():
         # normalize timezone
         if current_time.tzinfo is not None:
             from datetime import timezone
-            current_time = current_time.astimezone(timezone.utc)
+            current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
 
         session["simulated_now"] = current_time.isoformat()
 

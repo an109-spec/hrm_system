@@ -202,6 +202,11 @@ class AttendanceService:
 
         if not overtime_check_in or not overtime_check_out:
             return Decimal("0.00")
+        # Chuẩn hoá để tránh so sánh/trừ giữa aware và naive datetime.
+        if overtime_check_in.tzinfo is not None:
+            overtime_check_in = overtime_check_in.replace(tzinfo=None)
+        if overtime_check_out.tzinfo is not None:
+            overtime_check_out = overtime_check_out.replace(tzinfo=None)
 
         day = overtime_check_in.date()
 
