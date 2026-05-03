@@ -1337,6 +1337,21 @@ class HRService:
         if record.check_in and record.check_out:
             return float(HRService._decimal((record.check_out - record.check_in).total_seconds() / 3600))
         return 0.0
+    @staticmethod
+    def _calculate_overtime_from_check_window(check_in: datetime | None, check_out: datetime | None) -> Decimal:
+        """
+        OT được tính theo rule:
+        - OT_start = 19:00 nếu check_in <= 19:00
+        - OT_start = check_in nếu check_in > 19:00
+        - OT = max(0, check_out - OT_start)
+        """
+        if not check_in or not check_out:
+            return Decimal("0.00")
+
+        overtime_threshold = datetime.combine(check_in.date(), time(19, 0))
+        overtime_start = max(check_in, overtime_threshold)
+        overtime_delta = (check_out - overtime_start).total_seconds() / 3600
+        return Decimal(str(max(0, overtime_delta))).quantize(Decimal("0.01"))
 
     @staticmethod
     def _attendance_row_payload(
@@ -1632,12 +1647,10 @@ class HRService:
             record.working_hours = Decimal(str((record.check_out - record.check_in).total_seconds() / 3600)).quantize(Decimal("0.01"))
 
         if data.status == "overtime":
-            record.overtime_hours = Decimal("0.00")
-            if record.check_in and record.check_out:
-                overtime_threshold = datetime.combine(record.check_in.date(), time(19, 0))
-                overtime_start = max(record.check_in, overtime_threshold)
-                overtime_delta = (record.check_out - overtime_start).total_seconds() / 3600
-                record.overtime_hours = Decimal(str(max(0, overtime_delta))).quantize(Decimal("0.01"))
+            record.overtime_hours = HRService._calculate_overtime_from_check_window(
+                record.check_in,
+                record.check_out,
+            )
         if data.status == "abnormal":
             record.check_out = None
             record.working_hours = 0

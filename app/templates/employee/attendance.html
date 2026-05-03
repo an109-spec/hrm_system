@@ -719,13 +719,15 @@ function renderState() {
     let buttonClass = currentShiftUi.buttonClass;
     const nowHour = state.now.getHours();
     const hasVerifiedOtStateForUi = verifiedOtStates.includes(String(state.attendanceState || ""));
-    const isOvertimeVerifiedForUi = Boolean(state.overtimeCheckIn) || hasVerifiedOtStateForUi;
+    const hasOtCheckIn = Boolean(state.overtimeCheckIn);
     const otApprovedButNotVerified =
-      hasApprovedOt && state.hasCheckout && !isOvertimeVerifiedForUi;
-    const otApprovedAndVerifiedPre19 =
-      hasApprovedOt && isOvertimeVerifiedForUi && !state.overtimeCheckOut && nowHour < 19;
-    const otApprovedAndVerifiedAfter19 =
-      hasApprovedOt && isOvertimeVerifiedForUi && !state.overtimeCheckOut && nowHour >= 19;
+      hasApprovedOt && state.hasCheckout && !hasOtCheckIn && !hasVerifiedOtStateForUi;
+    const otApprovedPre19CheckedIn =
+      hasApprovedOt && hasOtCheckIn && !state.overtimeCheckOut && nowHour < 19;
+    const otApprovedReadyToCheckout =
+      hasApprovedOt && hasOtCheckIn && !state.overtimeCheckOut && nowHour >= 19;
+    const otApprovedWaitingCheckInAfter19 =
+      hasApprovedOt && !hasOtCheckIn && !state.overtimeCheckOut && nowHour >= 19;
 
 
     if (hasPendingOtApproval && state.hasCheckout) {
@@ -739,16 +741,21 @@ function renderState() {
       currentShiftUi.statusPrefix = nowHour >= 19
         ? "🔴 Chưa xác thực chấm công cho tăng ca"
         : "🟡 Nghỉ ngơi trước tăng ca (vui lòng check-in)";
-    } else if (otApprovedAndVerifiedPre19) {
+    } else if (otApprovedPre19CheckedIn) {
       buttonText = "⏳ Đã xác thực, chờ đến 19:00";
       buttonDisabled = true;
       buttonClass = "btn btn-disabled";
       currentShiftUi.statusPrefix = "🟡 Nghỉ ngơi trước tăng ca (đã check-in)";
-    } else if (otApprovedAndVerifiedAfter19) {
+    } else if (otApprovedReadyToCheckout) {
       buttonText = "🔳 XÁC NHẬN KẾT THÚC TĂNG CA";
       buttonDisabled = false;
       buttonClass = "btn btn-warning";
       currentShiftUi.statusPrefix = "🟣 Đang tăng ca";
+    } else if (otApprovedWaitingCheckInAfter19) {
+      buttonText = "🔳 XÁC THỰC CHẤM CÔNG TĂNG CA";
+      buttonDisabled = false;
+      buttonClass = "btn btn-primary";
+      currentShiftUi.statusPrefix = "🔴 Chưa xác thực chấm công cho tăng ca";
     }
 
 
