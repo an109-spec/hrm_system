@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, time
+from decimal import Decimal
 
 from app.extensions.db import db
 from app.models import (
@@ -12,7 +13,7 @@ from app.models import (
     Notification,  # nếu chưa có model này thì phải tạo
 )
 from app.common.exceptions import ValidationError
-
+from app.modules.attendance.service import AttendanceService
 
 class AttendanceJob:
     """
@@ -196,7 +197,54 @@ class AttendanceJob:
                 f"Đã gửi {len(records)} thông báo checkout OT lúc 22h"
             )
         }
+    @staticmethod
+    def run_22h_ot_auto_close():
+        """
+        22:00+:
+        Tự động đóng OT cho các bản ghi đang mở.
+        """
+        today = date.today()
+        ot_cutoff = datetime.combine(today, time(22, 0, 0))
 
+        records = Attendance.query.filter(
+            Attendance.date == today,
+            Attendance.overtime_check_in.isnot(None),
+            Attendance.overtime_check_out.is_(None),
+        ).all()
+
+        closed = 0
+        for record in records:
+            approved_ot = OvertimeRequest.query.filter(
+                OvertimeRequest.employee_id == record.employee_id,
+                OvertimeRequest.overtime_date == today,
+                OvertimeRequest.is_deleted.is_(False),
+                OvertimeRequest.status == "approved",
+            ).order_by(OvertimeRequest.updated_at.desc()).first()
+            if not approved_ot:
+                continue
+
+            record.overtime_check_out = ot_cutoff
+            raw_overtime_hours = AttendanceService.calculate_overtime_hours(
+                record.overtime_check_in,
+                record.overtime_check_out,
+            )
+            overtime_multiplier = Decimal(str(approved_ot.holiday_multiplier or 1))
+            record.overtime_hours = (raw_overtime_hours * overtime_multiplier).quantize(Decimal("0.01"))
+            current_regular_hours = Decimal(str(record.regular_hours or 0)).quantize(Decimal("0.01"))
+            record.working_hours = (current_regular_hours + record.overtime_hours).quantize(Decimal("0.01"))
+            if record.overtime_hours > 0 and record.attendance_type != "holiday":
+                record.attendance_type = "overtime"
+            record.shift_status = "completed"
+            AttendanceJob._create_notification(
+                employee_id=record.employee_id,
+                title="Hệ thống đã tự động chốt tăng ca",
+                content="Đã đến 22:00, hệ thống tự động checkout OT cho bạn.",
+                notification_type="overtime",
+            )
+            closed += 1
+
+        db.session.commit()
+        return {"message": f"Đã tự động chốt {closed} bản ghi OT lúc 22h"}
     # =========================================================
     # DAILY FINALIZE
     # =========================================================

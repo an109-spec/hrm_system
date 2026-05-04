@@ -1155,44 +1155,17 @@ def check_in_out():
                 }), 400
             if not attendance.overtime_check_in:
                 if current_time >= ot_end_time:
-                    approved_start_value = approved_ot_request.start_ot_time
-                    if isinstance(approved_start_value, datetime):
-                        approved_start_clock = approved_start_value.time()
-                    else:
-                        approved_start_clock = approved_start_value
-                    request_start_dt = (
-                        datetime.combine(today, approved_start_clock)
-                        if approved_start_clock
-                        else ot_start_time
-                    )
-                    inferred_ot_check_in = max(ot_start_time, request_start_dt)
-                    attendance.overtime_check_in = inferred_ot_check_in
-                    attendance.overtime_check_out = ot_end_time
-                    raw_overtime_hours = AttendanceService.calculate_overtime_hours(
-                        attendance.overtime_check_in,
-                        attendance.overtime_check_out,
-                    )
-                    overtime_multiplier = Decimal(str(approved_ot_request.holiday_multiplier or 1))
-                    attendance.overtime_hours = (raw_overtime_hours * overtime_multiplier).quantize(Decimal("0.01"))
-                    current_regular_hours = Decimal(str(attendance.regular_hours or 0)).quantize(Decimal("0.01"))
-                    attendance.working_hours = (current_regular_hours + attendance.overtime_hours).quantize(Decimal("0.01"))
-                    if attendance.overtime_hours > 0 and attendance.attendance_type != "holiday":
-                        attendance.attendance_type = "overtime"
-                    attendance.shift_status = "completed"
-                    db.session.commit()
+
                     return jsonify({
-                        "type": "success",
-                        "action": "check_out_overtime",
+                        "type": "warning",
+                        "action": "ot_window_expired",
                         "message": (
-                            f"Check-out OT thành công. OT thực tế: {raw_overtime_hours}h"
-                            + (f" • Quy đổi: {attendance.overtime_hours}h (x{overtime_multiplier})" if overtime_multiplier > 1 else "")
+                            "Đã quá 22:00 và bạn chưa check-in tăng ca. "
+                            "Vui lòng gửi yêu cầu điều chỉnh công nếu cần ghi nhận OT."
                         ),
                         "attendance_state": "completed",
-                        "overtime_hours": str(attendance.overtime_hours or 0),
-                        "overtime_check_in": attendance.overtime_check_in.isoformat() if attendance.overtime_check_in else None,
-                        "overtime_check_out": attendance.overtime_check_out.isoformat() if attendance.overtime_check_out else None,
                         "overtime_status": "APPROVED",
-                    })
+                    }), 400
                 attendance.overtime_check_in = current_time
                 attendance.shift_status = "pre_ot_rest" if current_time < ot_start_time else "working_overtime"
                 db.session.commit()
