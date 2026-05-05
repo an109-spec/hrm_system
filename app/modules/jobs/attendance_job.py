@@ -6,34 +6,10 @@ from datetime import datetime, date, time
 from decimal import Decimal
 
 from app.extensions.db import db
-from app.models import (
-    Attendance,
-    Employee,
-    OvertimeRequest,
-    Notification,  # nếu chưa có model này thì phải tạo
-)
-from app.common.exceptions import ValidationError
+from app.models import Attendance, Employee, OvertimeRequest, Notification
 from app.modules.attendance.service import AttendanceService
 
 class AttendanceJob:
-    """
-    Server-side scheduled jobs cho attendance
-
-    KHÔNG được phụ thuộc frontend popup.
-
-    Phải chạy bằng:
-    APScheduler / Celery / Cron / Background Job
-
-    Bao gồm:
-    - 17h nhắc checkout ca chính
-    - 19h nhắc bắt đầu OT
-    - 22h nhắc checkout OT
-    - daily finalize attendance
-    """
-
-    # =========================================================
-    # INTERNAL HELPER
-    # =========================================================
 
     @staticmethod
     def _create_notification(
@@ -42,9 +18,6 @@ class AttendanceJob:
         content: str,
         notification_type: str = "attendance",
     ):
-        """
-        Tạo notification trong DB
-        """
         employee = Employee.query.get(employee_id)
         if not employee or not employee.user_id:
             return
@@ -57,22 +30,8 @@ class AttendanceJob:
         )
 
         db.session.add(notification)
-
-    # =========================================================
-    # 17:00 CHECKOUT NOTIFICATION
-    # =========================================================
-
     @staticmethod
     def run_17h_notification():
-        """
-        17:00:
-        Nhắc nhân viên chưa checkout ca chính
-
-        Điều kiện:
-        - có check_in
-        - chưa check_out
-        """
-
         today = date.today()
 
         records = Attendance.query.filter(
@@ -82,38 +41,17 @@ class AttendanceJob:
         ).all()
 
         for record in records:
-            record.shift_status = "regular_checkout_required"
+            record.set_shift_status(Attendance.ShiftStatus.REGULAR_CHECKOUT_REQUIRED)
             AttendanceJob._create_notification(
                 employee_id=record.employee_id,
                 title="Nhắc nhở checkout",
-                content=(
-                    "Đã 17:00, vui lòng checkout ca làm việc "
-                    "để hoàn tất ngày công."
-                ),
+                content="Đã 17:00, vui lòng checkout ca làm việc để hoàn tất ngày công.",
             )
 
         db.session.commit()
-
-        return {
-            "message": f"Đã gửi {len(records)} thông báo checkout 17h"
-        }
-
-    # =========================================================
-    # 19:00 OT START NOTIFICATION
-    # =========================================================
-
+        return {"message": f"Đã gửi {len(records)} thông báo checkout 17h"}
     @staticmethod
     def run_19h_ot_notification():
-        """
-        19:00:
-        Nhắc nhân viên có đơn OT approved bắt đầu tăng ca
-
-        Điều kiện:
-        - đơn OT approved
-        - attendance đã checkout ca chính
-        - chưa overtime_check_in
-        """
-
         today = date.today()
 
         approved_requests = OvertimeRequest.query.filter_by(
@@ -124,27 +62,15 @@ class AttendanceJob:
         count = 0
 
         for request in approved_requests:
-            attendance = Attendance.query.filter_by(
-                employee_id=request.employee_id,
-                date=today,
-            ).first()
-
-            if not attendance:
+            attendance = Attendance.query.filter_by(employee_id=request.employee_id, date=today).first()
+            if not attendance or not attendance.check_out or attendance.overtime_check_in:
                 continue
 
-            if not attendance.check_out:
-                continue
-
-            if attendance.overtime_check_in:
-                continue
-            attendance.shift_status = "ot_checkin_required"
+            attendance.set_shift_status(Attendance.ShiftStatus.OT_CHECKIN_REQUIRED)
             AttendanceJob._create_notification(
                 employee_id=request.employee_id,
                 title="Nhắc bắt đầu tăng ca",
-                content=(
-                    "Đã 19:00. Bạn có đơn tăng ca đã được duyệt. "
-                    "Vui lòng check-in OT."
-                ),
+                content="Đã 19:00. Bạn có đơn tăng ca đã được duyệt. Vui lòng check-in OT.",
                 notification_type="overtime",
             )
 
@@ -152,25 +78,10 @@ class AttendanceJob:
 
         db.session.commit()
 
-        return {
-            "message": f"Đã gửi {count} thông báo bắt đầu OT lúc 19h"
-        }
-
-    # =========================================================
-    # 22:00 OT CHECKOUT NOTIFICATION
-    # =========================================================
+        return {"message": f"Đã gửi {count} thông báo bắt đầu OT lúc 19h"}
 
     @staticmethod
     def run_22h_ot_checkout_notification():
-        """
-        22:00:
-        Nhắc nhân viên đang OT phải checkout
-
-        Điều kiện:
-        - đã overtime_check_in
-        - chưa overtime_check_out
-        """
-
         today = date.today()
 
         records = Attendance.query.filter(
@@ -183,26 +94,15 @@ class AttendanceJob:
             AttendanceJob._create_notification(
                 employee_id=record.employee_id,
                 title="Nhắc checkout tăng ca",
-                content=(
-                    "Đã 22:00. Vui lòng checkout OT để hoàn tất "
-                    "ghi nhận tăng ca hôm nay."
-                ),
+                content="Đã 22:00. Vui lòng checkout OT để hoàn tất ghi nhận tăng ca hôm nay.",
                 notification_type="overtime",
             )
 
         db.session.commit()
+        return {"message": f"Đã gửi {len(records)} thông báo checkout OT lúc 22h"}
 
-        return {
-            "message": (
-                f"Đã gửi {len(records)} thông báo checkout OT lúc 22h"
-            )
-        }
     @staticmethod
     def run_22h_ot_auto_close():
-        """
-        22:00+:
-        Tự động đóng OT cho các bản ghi đang mở.
-        """
         today = date.today()
         ot_cutoff = datetime.combine(today, time(22, 0, 0))
 
@@ -224,17 +124,10 @@ class AttendanceJob:
                 continue
 
             record.overtime_check_out = ot_cutoff
-            raw_overtime_hours = AttendanceService.calculate_overtime_hours(
-                record.overtime_check_in,
-                record.overtime_check_out,
-            )
+            raw_overtime_hours = AttendanceService.calculate_overtime_hours(record.overtime_check_in, record.overtime_check_out)
             overtime_multiplier = Decimal(str(approved_ot.holiday_multiplier or 1))
             record.overtime_hours = (raw_overtime_hours * overtime_multiplier).quantize(Decimal("0.01"))
-            current_regular_hours = Decimal(str(record.regular_hours or 0)).quantize(Decimal("0.01"))
-            record.working_hours = (current_regular_hours + record.overtime_hours).quantize(Decimal("0.01"))
-            if record.overtime_hours > 0 and record.attendance_type != "holiday":
-                record.attendance_type = "overtime"
-            record.shift_status = "completed"
+            AttendanceService.finalize_attendance(record, finalize_status=True)
             AttendanceJob._create_notification(
                 employee_id=record.employee_id,
                 title="Hệ thống đã tự động chốt tăng ca",
@@ -245,50 +138,52 @@ class AttendanceJob:
 
         db.session.commit()
         return {"message": f"Đã tự động chốt {closed} bản ghi OT lúc 22h"}
-    # =========================================================
-    # DAILY FINALIZE
-    # =========================================================
 
     @staticmethod
     def run_daily():
-        """
-        Job tổng cuối ngày
-
-        Có thể chạy lúc 23:30:
-        - finalize attendance
-        - khóa dữ liệu ngày công
-        - auto absent nếu chưa check-in
-        - sync payroll
-        """
-
         today = date.today()
-
-        employees = Employee.query.filter_by(
-            is_active=True
-        ).all()
+        employees = Employee.query.filter_by(is_active=True).all()
 
         processed = 0
-
+        auto_absent = 0
+        auto_completed = 0
         for employee in employees:
-            attendance = Attendance.query.filter_by(
-                employee_id=employee.id,
-                date=today,
-            ).first()
-
-            # chưa có attendance → có thể auto absent
-            if not attendance:
+            if employee.is_attendance_required is False:
                 continue
 
-            # nếu cần:
-            # gọi AttendanceService.finalize_attendance()
+            attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
+            if not attendance:
+                attendance = Attendance(
+                    employee_id=employee.id,
+                    date=today,
+                    is_weekend=(today.weekday() >= 5),
+                    is_holiday=AttendanceService._is_holiday(today),
+                    working_hours=Decimal("0.00"),
+                    regular_hours=Decimal("0.00"),
+                    overtime_hours=Decimal("0.00"),
+                )
+                attendance.set_shift_status(Attendance.ShiftStatus.ABSENT)
+                attendance.set_attendance_type(Attendance.Type.ABSENT)
+                db.session.add(attendance)
+                auto_absent += 1
+                processed += 1
+                continue
+            if attendance.check_in and not attendance.check_out:
+                attendance.check_out = datetime.combine(today, AttendanceService.REGULAR_END)
+                attendance.regular_hours = AttendanceService.calculate_regular_hours(attendance.check_in, attendance.check_out)
+
+            if attendance.overtime_check_in and not attendance.overtime_check_out:
+                attendance.overtime_check_out = datetime.combine(today, AttendanceService.OT_END)
+                attendance.overtime_hours = AttendanceService.calculate_overtime_hours(attendance.overtime_check_in, attendance.overtime_check_out)
+            AttendanceService.finalize_attendance(attendance, finalize_status=True)
+            auto_completed += 1
 
             processed += 1
 
         db.session.commit()
 
         return {
-            "message": (
-                f"Daily attendance finalize hoàn tất: "
-                f"{processed} records processed"
-            )
+            "message": f"Daily attendance finalize hoàn tất: {processed} records processed",
+            "auto_absent": auto_absent,
+            "auto_completed": auto_completed,
         }
