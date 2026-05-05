@@ -83,19 +83,13 @@ def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> di
     else:
         shift_state = "OFF"
 
-    attendance_state = "NORMAL"
+    attendance_state = Attendance.ShiftStatus.NOT_STARTED
     today_holiday = _get_holiday_for_date(now.date())
     is_weekend = now.weekday() >= 5
     if not attendance and (today_holiday or is_weekend):
-        attendance_state = "HOLIDAY_OFF" if today_holiday else "WEEKEND_OFF"
-    if attendance and attendance.check_in:
-        effective_check_in = max(attendance.check_in, datetime.combine(now.date(), WORKDAY_START))
-        if effective_check_in.time() >= HALF_DAY_LATE_CUTOFF:
-            attendance_state = "HALF_DAY"
-        elif effective_check_in.time() > WORKDAY_CHECKIN_NORMAL_END:
-            attendance_state = "LATE"
-        if attendance.check_out and attendance_state == "NORMAL":
-            attendance_state = "FULL_DAY"
+        attendance_state = Attendance.ShiftStatus.HOLIDAY_OFF if today_holiday else Attendance.ShiftStatus.WEEKEND_OFF
+    elif attendance:
+        attendance_state = Attendance.ShiftStatus.normalize(attendance.shift_status)
 
     in_lunch = LUNCH_START <= current_time < LUNCH_END
     has_checkin = bool(attendance and attendance.check_in)
