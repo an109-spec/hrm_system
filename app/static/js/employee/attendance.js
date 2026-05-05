@@ -17,6 +17,32 @@ function toLocalISO(dateObj = new Date()) {
   return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${String(dateObj.getMilliseconds()).padStart(3, "0")}`;
 }
 export class Attendance {
+  static resolveActionFromState(state = {}) {
+    const shiftStatus = state.shift_status || state.attendance_state || "not_started";
+    const hasCheckIn = Boolean(state.check_in);
+    const hasCheckOut = Boolean(state.check_out);
+    const hasOtCheckIn = Boolean(state.overtime_check_in);
+    const hasOtCheckOut = Boolean(state.overtime_check_out);
+    const requiresDecision = Boolean(state.requires_overtime_decision || state.requires_confirmation);
+
+    if (requiresDecision) return "ask_decision";
+    if (!hasCheckIn || shiftStatus === "not_started") return "check_in";
+    if (hasCheckIn && !hasCheckOut) return "check_out";
+    if (hasCheckOut && !hasOtCheckIn) return "check_in_ot";
+    if (hasOtCheckIn && !hasOtCheckOut) return "check_out_ot";
+    return "ask_decision";
+  }
+
+  static async fetchCurrentState() {
+    try {
+      const remoteState = await AttendanceAPI.getEmployeeAttendanceState();
+      const payload = remoteState?.data || remoteState || {};
+      attendanceStore.setToday(payload);
+      return attendanceStore.getToday();
+    } catch (_err) {
+      return attendanceStore.getToday();
+    }
+  }
   static async submitEmployeeAttendance(payload = {}) {
     attendanceStore.setSubmitting(true);
     attendanceStore.setError(null);
@@ -93,6 +119,30 @@ export class Attendance {
       simulated_now: simulatedNow,
       overtime_decision: decision,
     });
+  }
+
+  static async executeAction(action, qrText, simulatedNow, options = {}) {
+    switch (action) {
+      case "check_in":
+      case "check_in_ot":
+        return this.checkIn(simulatedNow, qrText);
+      case "check_out":
+      case "check_out_ot":
+        return this.checkOut(simulatedNow, qrText, options);
+      default:
+        return {
+          type: "warning",
+          action: "ask_decision",
+          message: "Cần xác nhận thêm trước khi chấm công.",
+        };
+    }
+  }
+
+  static async handleQrAttendance(qrText, simulatedNow, options = {}) {
+    const state = await this.fetchCurrentState();
+    const action = this.resolveActionFromState(state);
+    const response = await this.executeAction(action, qrText, simulatedNow, options);
+    return { action, response, state };
   }
 
   static async createOvertimeRequest(payload = {}) {

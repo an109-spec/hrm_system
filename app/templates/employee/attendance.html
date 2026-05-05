@@ -408,9 +408,11 @@ function toLocalISO(dateObj = new Date()) {
   return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${String(dateObj.getMilliseconds()).padStart(3, "0")}`;
 }
 
-/* ===================== API ===================== */
-async function submitAttendanceFromQR(decodedText, options = {}) {
-  const response = await Attendance.checkOut(toLocalISO(new Date(root?.dataset.serverNow || new Date())), decodedText, options);
+async function submitAttendanceFromQR(decodedText) {
+  const simulatedNow = toLocalISO(new Date(root?.dataset.serverNow || new Date()));
+  const result = await Attendance.handleQrAttendance(decodedText, simulatedNow);
+  const response = result?.response;
+
   if (response?.action === "early_checkout_prompt") {
     const confirmEarly = await Swal.fire({
       icon: "question",
@@ -422,7 +424,7 @@ async function submitAttendanceFromQR(decodedText, options = {}) {
     });
 
     if (confirmEarly.isConfirmed) {
-      await Attendance.checkOut(toLocalISO(new Date(root?.dataset.serverNow || new Date())), decodedText, { earlyCheckoutConfirmed: true });
+      await Attendance.checkOut(simulatedNow, decodedText, { earlyCheckoutConfirmed: true });
       window.location.reload();
     }
     return;
