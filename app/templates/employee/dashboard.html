@@ -143,10 +143,7 @@ const attendanceByDate = new Map([
         hasCheckedOut: {{ 'true' if attendance.check_out else 'false' }},
         shiftStatus: "{{ attendance.shift_status if attendance else 'not_started' }}",
         checkIn: "{{ attendance.check_in.isoformat() if attendance.check_in else '' }}",
-        workingHours: {{ (attendance.working_hours or 0)|fl    {% for a in attendance_history %}
-    ["{{ a.date.isoformat() }}", {
-        hasAttendance: {{ 'true' if a.check_in else 'false' }},
-        hasCheckedOut: {{ 'true' if a.check_out else 'false' }}}}
+        workingHours: {{ (attendance.working_hours or 0)|float }}
     }],
     {% endif %}
     {% for a in attendance_history %}
@@ -287,7 +284,6 @@ function syncAttendanceStateByDate() {
             <div class="profile-info">
                 <p>
                     Trạng thái:
-                    {% if attendance and not attendance.check_out %}
                     {% if attendance and attendance.shift_status == 'completed' %}
                         <span id="attendance-status-label" class="status offline">Đã hoàn tất ngày công</span>
                     {% elif attendance and attendance.check_out %}
