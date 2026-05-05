@@ -850,98 +850,13 @@ def check_in_out():
         return jsonify({"type": "error", "message": str(e)}), 400
 
     try:
-        today = current_time.date()
-        attendance = Attendance.query.filter_by(employee_id=employee.id, date=today).first()
-
-
-        if attendance and attendance.check_out:
-            approved_ot_request = OvertimeRequest.query.filter(
-                OvertimeRequest.employee_id == employee.id,
-                OvertimeRequest.overtime_date == today,
-                OvertimeRequest.is_deleted.is_(False),
-                OvertimeRequest.status == "approved",
-            ).order_by(OvertimeRequest.updated_at.desc()).first()
-
-            overtime_decision = str(payload.get("overtime_decision") or "").strip().lower()
-            if attendance.shift_status == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
-                if overtime_decision not in {"yes", "no"}:
-                    return jsonify({
-                        "type": "warning",
-                        "action": "offer_overtime",
-                        "requires_overtime_decision": True,
-                        "attendance_state": Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
-                        "message": "Bạn có muốn tăng ca hôm nay không?",
-                    }), 202
-                attendance.set_shift_status(
-                    Attendance.ShiftStatus.PRE_OT_REST if overtime_decision == "yes" else Attendance.ShiftStatus.COMPLETED
-                )
-                db.session.commit()
-                return jsonify({
-                    "type": "success",
-                    "action": "overtime_decision_recorded",
-                    "attendance_state": attendance.shift_status,
-                    "message": "Đã ghi nhận lựa chọn tăng ca." if overtime_decision == "yes" else "Đã ghi nhận không tăng ca hôm nay.",
-                }), 200
-            if approved_ot_request:
-                if not attendance.overtime_check_in:
-                    result = AttendanceService.check_in_overtime(employee.id, simulated_now)
-                    return jsonify({"type": "success", **result}), 200
-                if not attendance.overtime_check_out:
-                    result = AttendanceService.check_out_overtime(employee.id, simulated_now)
-                    return jsonify({"type": "success", **result}), 200
-
-
-            return jsonify({
-                "type": "success",
-                "action": "already_recorded",
-                "attendance_state": attendance.shift_status,
-                "message": "QR hợp lệ. Hôm nay bạn đã hoàn thành chấm công trước đó.",
-            }), 200
-
-        # 2) Nếu đã checkin nhưng chưa checkout -> checkout flow do service xử lý
-        if attendance and attendance.check_in and not attendance.check_out:
-            end_of_day = datetime.combine(today, WORKDAY_END)
-            early_checkout_confirmed = bool(payload.get("early_checkout_confirmed"))
-            if current_time < end_of_day and not early_checkout_confirmed:
-                early_minutes_preview = int((end_of_day - current_time).total_seconds() // 60)
-                return jsonify({
-                    "type": "warning",
-                    "action": "early_checkout_prompt",
-                    "early_minutes": early_minutes_preview,
-                    "message": f"Bạn có muốn tan ca nghỉ sớm không? (sớm {early_minutes_preview} phút)",
-                }), 200
-
-            result = AttendanceService.check_out_regular(employee.id, simulated_now)
-            # check-out xong luôn mở nhánh xác nhận OT giống luồng cũ
-            if attendance.shift_status != Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
-                attendance.set_shift_status(Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION)
-                db.session.commit()
-            result["attendance_state"] = Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION
-            result["next_event"] = "offer_overtime"
-            result["requires_overtime_decision"] = True
-            return jsonify({"type": "success", **result}), 200
-
-        # 3) Trường hợp check-in mới (bao gồm prompt nghỉ lễ/cuối tuần)
-        confirm_work_on_offday = bool(payload.get("confirm_work_on_offday")) or bool(payload.get("overtime_confirmed"))
-        decline_offday_work = bool(payload.get("decline_offday_work"))
-        if decline_offday_work:
-            today_holiday = _get_holiday_for_date(today)
-            is_weekend = today.weekday() >= 5
-            if today_holiday or is_weekend:
-                return jsonify({
-                    "type": "info",
-                    "action": "holiday_off" if today_holiday else "weekend_off",
-                    "attendance_state": "holiday_off" if today_holiday else "weekend_off",
-                    "message": "Đã ghi nhận nghỉ lễ hôm nay." if today_holiday else "Đã ghi nhận nghỉ cuối tuần hôm nay.",
-                }), 200
-
-        result = AttendanceService.check_in(employee.id, simulated_now, confirm_work_on_offday)
-        response_type = "warning" if result.get("action") in {
-            AttendanceService.ACTION_HOLIDAY_WORK_PROMPT,
-            AttendanceService.ACTION_WEEKEND_WORK_PROMPT,
-        } else "success"
-        return jsonify({"type": response_type, **result}), 200
-
+        result = AttendanceService.process_employee_action(employee.id, payload, current_time)
+        status_code = result.pop("status_code", 200)
+        flags = result.pop("flags", {}) or {}
+        state = result.pop("state", None)
+        if state is not None and "attendance_state" not in result:
+            result["attendance_state"] = state
+        return jsonify({**result, **flags}), status_code
     except ValidationError as exc:
         return jsonify({"type": "error", "message": str(exc)}), 400
 

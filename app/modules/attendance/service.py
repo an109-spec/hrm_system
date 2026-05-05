@@ -27,7 +27,13 @@ class AttendanceService:
     ACTION_CHECK_OUT_OT = "check_out_overtime"
     ACTION_HOLIDAY_WORK_PROMPT = "holiday_work_prompt"
     ACTION_WEEKEND_WORK_PROMPT = "weekend_work_prompt"
-
+    ACTION_EARLY_CHECKOUT_PROMPT = "early_checkout_prompt"
+    ACTION_OFFER_OVERTIME = "offer_overtime"
+    ACTION_ALREADY_RECORDED = "already_recorded"
+    ACTION_OVERTIME_DECISION_RECORDED = "overtime_decision_recorded"
+    ACTION_HOLIDAY_OFF = "holiday_off"
+    ACTION_WEEKEND_OFF = "weekend_off"
+    
     @staticmethod
     def parse_time(sim_time_str: str | None = None) -> datetime:
         if not sim_time_str:
@@ -151,6 +157,108 @@ class AttendanceService:
         if is_weekend:
             return Attendance.Type.WEEKEND
         return Attendance.Type.NORMAL
+
+    @staticmethod
+    def process_employee_action(employee_id: int, payload: dict, current_time: datetime) -> dict:
+        today = current_time.date()
+        sim_time_str = current_time.isoformat()
+        attendance = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
+
+        if attendance and attendance.check_out:
+            approved_ot_request = OvertimeRequest.query.filter(
+                OvertimeRequest.employee_id == employee_id,
+                OvertimeRequest.overtime_date == today,
+                OvertimeRequest.is_deleted.is_(False),
+                OvertimeRequest.status == "approved",
+            ).order_by(OvertimeRequest.updated_at.desc()).first()
+
+            overtime_decision = str(payload.get("overtime_decision") or "").strip().lower()
+            if attendance.shift_status == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
+                if overtime_decision not in {"yes", "no"}:
+                    return {
+                        "type": "warning",
+                        "status_code": 202,
+                        "action": AttendanceService.ACTION_OFFER_OVERTIME,
+                        "state": Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+                        "message": "Bạn có muốn tăng ca hôm nay không?",
+                        "flags": {"requires_overtime_decision": True},
+                    }
+                attendance.set_shift_status(
+                    Attendance.ShiftStatus.PRE_OT_REST if overtime_decision == "yes" else Attendance.ShiftStatus.COMPLETED
+                )
+                db.session.commit()
+                return {
+                    "type": "success",
+                    "status_code": 200,
+                    "action": AttendanceService.ACTION_OVERTIME_DECISION_RECORDED,
+                    "state": attendance.shift_status,
+                    "message": "Đã ghi nhận lựa chọn tăng ca." if overtime_decision == "yes" else "Đã ghi nhận không tăng ca hôm nay.",
+                    "flags": {},
+                }
+            if approved_ot_request:
+                if not attendance.overtime_check_in:
+                    result = AttendanceService.check_in_overtime(employee_id, sim_time_str)
+                    return {"type": "success", "status_code": 200, **result, "state": result.get("attendance_state"), "flags": {}}
+                if not attendance.overtime_check_out:
+                    result = AttendanceService.check_out_overtime(employee_id, sim_time_str)
+                    return {"type": "success", "status_code": 200, **result, "state": result.get("attendance_state"), "flags": {}}
+
+            return {
+                "type": "success",
+                "status_code": 200,
+                "action": AttendanceService.ACTION_ALREADY_RECORDED,
+                "state": attendance.shift_status,
+                "message": "QR hợp lệ. Hôm nay bạn đã hoàn thành chấm công trước đó.",
+                "flags": {},
+            }
+
+        if attendance and attendance.check_in and not attendance.check_out:
+            end_of_day = datetime.combine(today, AttendanceService.REGULAR_END)
+            early_checkout_confirmed = bool(payload.get("early_checkout_confirmed"))
+            if current_time < end_of_day and not early_checkout_confirmed:
+                early_minutes_preview = int((end_of_day - current_time).total_seconds() // 60)
+                return {
+                    "type": "warning",
+                    "status_code": 200,
+                    "action": AttendanceService.ACTION_EARLY_CHECKOUT_PROMPT,
+                    "state": attendance.shift_status,
+                    "message": f"Bạn có muốn tan ca nghỉ sớm không? (sớm {early_minutes_preview} phút)",
+                    "flags": {"early_minutes": early_minutes_preview},
+                }
+
+            result = AttendanceService.check_out_regular(employee_id, sim_time_str)
+            if attendance.shift_status != Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
+                attendance.set_shift_status(Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION)
+                db.session.commit()
+            result["attendance_state"] = Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION
+            return {
+                "type": "success",
+                "status_code": 200,
+                **result,
+                "state": Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+                "flags": {"next_event": AttendanceService.ACTION_OFFER_OVERTIME, "requires_overtime_decision": True},
+            }
+
+        confirm_work_on_offday = bool(payload.get("confirm_work_on_offday")) or bool(payload.get("overtime_confirmed"))
+        if bool(payload.get("decline_offday_work")):
+            today_holiday = AttendanceService._is_holiday(today)
+            is_weekend = today.weekday() >= 5
+            if today_holiday or is_weekend:
+                return {
+                    "type": "info",
+                    "status_code": 200,
+                    "action": AttendanceService.ACTION_HOLIDAY_OFF if today_holiday else AttendanceService.ACTION_WEEKEND_OFF,
+                    "state": Attendance.ShiftStatus.HOLIDAY_OFF if today_holiday else Attendance.ShiftStatus.WEEKEND_OFF,
+                    "message": "Đã ghi nhận nghỉ lễ hôm nay." if today_holiday else "Đã ghi nhận nghỉ cuối tuần hôm nay.",
+                    "flags": {},
+                }
+
+        result = AttendanceService.check_in(employee_id, sim_time_str, confirm_work_on_offday)
+        response_type = "warning" if result.get("action") in {
+            AttendanceService.ACTION_HOLIDAY_WORK_PROMPT,
+            AttendanceService.ACTION_WEEKEND_WORK_PROMPT,
+        } else "success"
+        return {"type": response_type, "status_code": 200, **result, "state": result.get("attendance_state"), "flags": {}}
     @staticmethod
     def check_in(employee_id: int, sim_time_str: str | None, confirm_work_on_offday: bool = False):
         employee = Employee.query.get(employee_id)
