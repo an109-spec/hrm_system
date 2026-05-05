@@ -56,12 +56,16 @@
             <div class="profile-info">
                 <p>
                     Trạng thái:
-                    {% if attendance and not attendance.check_out %}
+                    {% if attendance and attendance.shift_status == 'completed' %}
+                        <span id="attendance-status-label" class="status offline">Đã hoàn tất ngày công</span>
+                    {% elif attendance and attendance.check_out %}
+                        <span id="attendance-status-label" class="status online" style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px;">
+                            Đã checkout ca chính (chờ chốt ngày công)
+                        </span>
+                    {% elif attendance and not attendance.check_out %}
                         <span id="attendance-status-label" class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
                             Đang làm việc
                         </span>
-                    {% elif attendance and attendance.check_out %}
-                        <span id="attendance-status-label" class="status offline">Đã hoàn thành ca</span>
                     {% else %}
                         <span id="attendance-status-label" class="status offline">Chưa vào ca</span>
                     {% endif %}
@@ -105,8 +109,10 @@
                     {% elif not attendance.check_out %}
                         <button class="btn btn-orange" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
                         <p class="msg">Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}</p>
+                            {% elif attendance.shift_status == 'completed' %}
+                        <div class="status-success">✅ ĐÃ HOÀN TẤT NGÀY CÔNG</div>
                     {% else %}
-                        <div class="status-success">✅ ĐÃ HOÀN THÀNH</div>
+                        <div class="msg">🕒 Đã checkout ca chính, đang chờ chốt ngày công.</div>
                     {% endif %}
                 </div>
             </div>
@@ -135,14 +141,19 @@ const attendanceByDate = new Map([
     ["{{ attendance.date.isoformat() }}", {
         hasAttendance: {{ 'true' if attendance.check_in else 'false' }},
         hasCheckedOut: {{ 'true' if attendance.check_out else 'false' }},
+        shiftStatus: "{{ attendance.shift_status if attendance else 'not_started' }}",
         checkIn: "{{ attendance.check_in.isoformat() if attendance.check_in else '' }}",
-        workingHours: {{ (attendance.working_hours or 0)|float }}
+        workingHours: {{ (attendance.working_hours or 0)|fl    {% for a in attendance_history %}
+    ["{{ a.date.isoformat() }}", {
+        hasAttendance: {{ 'true' if a.check_in else 'false' }},
+        hasCheckedOut: {{ 'true' if a.check_out else 'false' }}}}
     }],
     {% endif %}
     {% for a in attendance_history %}
     ["{{ a.date.isoformat() }}", {
         hasAttendance: {{ 'true' if a.check_in else 'false' }},
         hasCheckedOut: {{ 'true' if a.check_out else 'false' }},
+        shiftStatus: "{{ a.shift_status if a.shift_status else 'not_started' }}",
         checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
         workingHours: {{ (a.working_hours or 0)|float }}
     }],
@@ -152,6 +163,7 @@ const state = {
     now: readSharedSimTime(new Date("{{ now.isoformat() if now else '' }}")),
     hasAttendance: {{ 'true' if attendance else 'false' }},
     hasCheckedOut: {{ 'true' if attendance and attendance.check_out else 'false' }},
+    shiftStatus: "{{ attendance.shift_status if attendance else 'not_started' }}",
     checkIn: "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}",
     attendanceDate: "{{ attendance.date.isoformat() if attendance else '' }}",
     workingHours: Number("{{ (attendance.working_hours or 0)|float if attendance else 0 }}"),
@@ -240,6 +252,7 @@ function syncAttendanceStateByDate() {
     if (!record) {
         state.hasAttendance = false;
         state.hasCheckedOut = false;
+        state.shiftStatus = "not_started";
         state.checkIn = "";
         state.workingHours = 0;
         renderAttendanceAction();
@@ -248,6 +261,202 @@ function syncAttendanceStateByDate() {
     }
     state.hasAttendance = Boolean(record.hasAttendance);
     state.hasCheckedOut = Boolean(record.hasCheckedOut);
+@@ -34,146 +34,155 @@
+        </div>
+    </div>
+    <div class="dashboard-grid-top">
+        <section class="card profile-card">
+            <div class="profile-header">
+                <div class="avatar-lg">
+                     {% if employee.avatar %}
+                      <img src="{{ employee.avatar }}?v={{ (employee.updated_at.timestamp()|int) if employee.updated_at else current_year }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                    {% else %}
+                      {{ employee.full_name[0] }}
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="name">{{ employee.full_name }}</div>
+                    <div class="meta">
+                        Mã NV: #{{ employee.id }} • 
+                        {{ employee.user.role.name if employee.user and employee.user.role else 'Nhân viên' }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-info">
+                <p>
+                    Trạng thái:
+                    {% if attendance and not attendance.check_out %}
+                    {% if attendance and attendance.shift_status == 'completed' %}
+                        <span id="attendance-status-label" class="status offline">Đã hoàn tất ngày công</span>
+                    {% elif attendance and attendance.check_out %}
+                        <span id="attendance-status-label" class="status online" style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px;">
+                            Đã checkout ca chính (chờ chốt ngày công)
+                        </span>
+                    {% elif attendance and not attendance.check_out %}
+                        <span id="attendance-status-label" class="status online" style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px;">
+                            Đang làm việc
+                        </span>
+                    {% elif attendance and attendance.check_out %}
+                        <span id="attendance-status-label" class="status offline">Đã hoàn thành ca</span>
+                    {% else %}
+                        <span id="attendance-status-label" class="status offline">Chưa vào ca</span>
+                    {% endif %}
+                </p>
+            </div>
+        </section>
+
+        <section class="card attendance-card">
+            <div class="summary-item">
+                <h4>Công hôm nay</h4>
+                <div class="value" id="realtime-work-hours">0.00h</div>
+            </div>
+            <div class="attendance-body">
+                <p class="timer" id="clock"></p>
+                <div class="sim-editor" style="background:#f9fafb;border:1px solid #cbd5e1;padding:10px 14px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;margin:10px 0;">
+                    <div>
+                        <span class="time-part" data-unit="hours" id="dash-edit-h" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">GIỜ</span>
+                    </div> :
+                    <div>
+                        <span class="time-part" data-unit="minutes" id="dash-edit-m" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">PHÚT</span>
+                    </div> :
+                    <div>
+                        <span class="time-part" data-unit="seconds" id="dash-edit-s" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">00</span>
+                        <span style="font-size:.65rem;color:#334155;">GIÂY</span>
+                    </div>
+                    &nbsp;&nbsp;
+                    <div>
+                        <span class="time-part" data-unit="date" id="dash-edit-d" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">01</span>
+                        <span style="font-size:.65rem;color:#334155;">NGÀY</span>
+                    </div> /
+                    <div>
+                        <span class="time-part" data-unit="month" id="dash-edit-mo" style="cursor:ns-resize;font-weight:600;color:#1e3a8a;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">01</span>
+                        <span style="font-size:.65rem;color:#334155;">THÁNG</span>
+                    </div>
+                </div>               
+                <div id="attendance-action-slot">
+                    {% if not attendance %}
+                        <button class="btn btn-green" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-IN</button>
+                    {% elif not attendance.check_out %}
+                        <button class="btn btn-orange" onclick="submitAttendance(this)">🔳 QUÉT QR CHECK-OUT</button>
+                        <p class="msg">Giờ vào: {{ attendance.check_in.strftime('%H:%M') }}</p>
+                    {% elif attendance.shift_status == 'completed' %}
+                        <div class="status-success">✅ ĐÃ HOÀN TẤT NGÀY CÔNG</div>
+                    {% else %}
+                        <div class="status-success">✅ ĐÃ HOÀN THÀNH</div>
+                        <div class="msg">🕒 Đã checkout ca chính, đang chờ chốt ngày công.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+
+        <div class="summary-item">
+            <h4>Phép còn lại</h4>
+            <div class="value">{{ leave_balance.remaining }} ngày</div>
+        </div>
+
+        <div class="summary-item">
+            <h4>Lương</h4>
+            <div class="value">{{ '{:,.0f}'.format(latest_salary.net_salary) if latest_salary else '0' }} VND</div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
+<script>
+const SHARED_SIM_TIME_KEY = 'hrm_simulated_now';
+const attendanceByDate = new Map([
+    {% if attendance %}
+    ["{{ attendance.date.isoformat() }}", {
+        hasAttendance: {{ 'true' if attendance.check_in else 'false' }},
+        hasCheckedOut: {{ 'true' if attendance.check_out else 'false' }},
+        shiftStatus: "{{ attendance.shift_status if attendance else 'not_started' }}",
+        checkIn: "{{ attendance.check_in.isoformat() if attendance.check_in else '' }}",
+        workingHours: {{ (attendance.working_hours or 0)|float }}
+    }],
+    {% endif %}
+    {% for a in attendance_history %}
+    ["{{ a.date.isoformat() }}", {
+        hasAttendance: {{ 'true' if a.check_in else 'false' }},
+        hasCheckedOut: {{ 'true' if a.check_out else 'false' }},
+        shiftStatus: "{{ a.shift_status if a.shift_status else 'not_started' }}",
+        checkIn: "{{ a.check_in.isoformat() if a.check_in else '' }}",
+        workingHours: {{ (a.working_hours or 0)|float }}
+    }],
+    {% endfor %}
+]);
+const state = {
+    now: readSharedSimTime(new Date("{{ now.isoformat() if now else '' }}")),
+    hasAttendance: {{ 'true' if attendance else 'false' }},
+    hasCheckedOut: {{ 'true' if attendance and attendance.check_out else 'false' }},
+    shiftStatus: "{{ attendance.shift_status if attendance else 'not_started' }}",
+    checkIn: "{{ attendance.check_in.isoformat() if attendance and attendance.check_in else '' }}",
+    attendanceDate: "{{ attendance.date.isoformat() if attendance else '' }}",
+    workingHours: Number("{{ (attendance.working_hours or 0)|float if attendance else 0 }}"),
+    pendingCheckoutWithoutOT: false,
+};
+
+function readSharedSimTime(fallback) {
+    try {
+        const raw = localStorage.getItem(SHARED_SIM_TIME_KEY);
+        if (!raw) return fallback;
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+window.addEventListener('storage', (event) => {
+    if (event.key !== SHARED_SIM_TIME_KEY || !event.newValue) return;
+    const synced = new Date(event.newValue);
+    if (Number.isNaN(synced.getTime())) return;
+    state.now = synced;
+    updateClock();
+});
+function toLocalISO(date) {
+@@ -218,99 +227,110 @@ function updateClock() {
+
+function tickClock() {
+    state.now = new Date(state.now.getTime() + 1000);
+    persistSimTime();
+    updateClock();
+}
+
+setInterval(tickClock, 1000);
+updateClock();
+persistSimTime();
+function dateKeyOf(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+}
+
+function syncAttendanceStateByDate() {
+    const selectedDateKey = dateKeyOf(getSimulatedDate());
+    if (state.attendanceDate === selectedDateKey) return;
+
+    state.attendanceDate = selectedDateKey;
+    const record = attendanceByDate.get(selectedDateKey);
+
+    if (!record) {
+        state.hasAttendance = false;
+        state.hasCheckedOut = false;
+        state.shiftStatus = "not_started";
+        state.checkIn = "";
+        state.workingHours = 0;
+        renderAttendanceAction();
+        renderAttendanceStatus();
+        return;
+    }
+    state.hasAttendance = Boolean(record.hasAttendance);
+    state.hasCheckedOut = Boolean(record.hasCheckedOut);
+    state.shiftStatus = String(record.shiftStatus || "not_started");
     state.checkIn = record.checkIn || "";
     state.workingHours = Number(record.workingHours || 0);
     renderAttendanceAction();
@@ -273,7 +482,11 @@ function renderAttendanceAction() {
         return;
     }
 
-    slot.innerHTML = `<div class="status-success">✅ ĐÃ HOÀN THÀNH</div>`;
+    if (state.shiftStatus === "completed") {
+        slot.innerHTML = `<div class="status-success">✅ ĐÃ HOÀN TẤT NGÀY CÔNG</div>`;
+        return;
+    }
+    slot.innerHTML = `<div class="msg">🕒 Đã checkout ca chính, đang chờ chốt ngày công.</div>`;
 }
 
 function renderAttendanceStatus() {
@@ -284,9 +497,14 @@ function renderAttendanceStatus() {
         statusEl.className = "status offline";
         return;
     }
-    if (state.hasCheckedOut) {
-        statusEl.textContent = "Đã hoàn thành ca";
+    if (state.shiftStatus === "completed") {
+        statusEl.textContent = "Đã hoàn tất ngày công";
         statusEl.className = "status offline";
+        return;
+    }
+    if (state.hasCheckedOut) {
+        statusEl.textContent = "Đã checkout ca chính (chờ chốt ngày công)";
+        statusEl.className = "status online";
         return;
     }
     statusEl.textContent = "Đang làm việc";

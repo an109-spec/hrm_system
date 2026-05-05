@@ -1272,6 +1272,7 @@ class HRService:
         "late": "Đi muộn",
         "early": "Về sớm",
         "late_early": "Đi muộn / Về sớm",
+        "regular_done_pending_completion": "Đã checkout ca chính (chưa chốt ngày công)",
         "leave_approved": "Nghỉ phép",
         "absent_unexcused": "Vắng không phép",
         "overtime": "Tăng ca",
@@ -1283,6 +1284,7 @@ class HRService:
         "late": "badge-warning",
         "early": "badge-warning",
         "late_early": "badge-warning",
+        "regular_done_pending_completion": "badge-warning",
         "leave_approved": "badge-info",
         "absent_unexcused": "badge-danger",
         "overtime": "badge-primary",
@@ -1310,6 +1312,14 @@ class HRService:
             return "leave_approved"
         if not record:
             return "absent_unexcused"
+        shift_status = Attendance.ShiftStatus.normalize(record.shift_status)
+        if shift_status in {
+            Attendance.ShiftStatus.REGULAR_DONE,
+            Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+            Attendance.ShiftStatus.PRE_OT_REST,
+            Attendance.ShiftStatus.OT_CHECKIN_REQUIRED,
+        }:
+            return "regular_done_pending_completion"
         if not record.check_in or not record.check_out:
             return "abnormal"
 

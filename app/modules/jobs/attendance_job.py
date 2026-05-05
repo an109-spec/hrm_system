@@ -63,7 +63,12 @@ class AttendanceJob:
 
         for request in approved_requests:
             attendance = Attendance.query.filter_by(employee_id=request.employee_id, date=today).first()
-            if not attendance or not attendance.check_out or attendance.overtime_check_in:
+            if (
+                not attendance
+                or not attendance.check_out
+                or attendance.overtime_check_in
+                or Attendance.ShiftStatus.normalize(attendance.shift_status) in Attendance.ShiftStatus.TERMINAL_STATUSES
+            ):
                 continue
 
             attendance.set_shift_status(Attendance.ShiftStatus.OT_CHECKIN_REQUIRED)
