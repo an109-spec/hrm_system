@@ -67,10 +67,10 @@ export const AttendanceAPI = {
     return postJson(ENDPOINTS.employee.overtimeRequest, payload);
   },
 
-  resetOvertimeRequest() {
+  resetOvertimeRequest(date = null) {
     return request(ENDPOINTS.employee.overtimeRequestReset, {
       method: "DELETE",
-      body: JSON.stringify({ date: date })
+      body: JSON.stringify({ date })
     });
   },
 
