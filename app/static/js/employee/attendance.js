@@ -24,12 +24,12 @@ export class Attendance {
     const hasOtCheckIn = Boolean(state.overtime_check_in);
     const hasOtCheckOut = Boolean(state.overtime_check_out);
     const requiresDecision = Boolean(state.requires_overtime_decision || state.requires_confirmation);
-
+    const flags = state.action_flags || {};
     if (requiresDecision) return "ask_decision";
-    if (!hasCheckIn || shiftStatus === "not_started") return "check_in";
-    if (hasCheckIn && !hasCheckOut) return "check_out";
-    if (hasCheckOut && !hasOtCheckIn) return "check_in_ot";
-    if (hasOtCheckIn && !hasOtCheckOut) return "check_out_ot";
+    if (flags.can_check_in && (!hasCheckIn || shiftStatus === "not_started")) return "check_in";
+    if (flags.can_check_out && hasCheckIn && !hasCheckOut) return "check_out";
+    if (flags.can_start_ot && hasCheckOut && !hasOtCheckIn) return "check_in_ot";
+    if (flags.can_end_ot && hasOtCheckIn && !hasOtCheckOut) return "check_out_ot";
     return "ask_decision";
   }
 
