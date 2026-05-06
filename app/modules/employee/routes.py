@@ -67,9 +67,17 @@ def _resolve_lunar_date_class():
 
 LUNAR_DATE_CLASS = _resolve_lunar_date_class()
 
-
-def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> dict:
+def _build_shift_and_actions(now: datetime, attendance: "Attendance | None") -> dict:
+    """
+    Tính shift_state (thời điểm trong ngày) và attendance_state (trạng thái nhân viên),
+    đồng thời tính action_flags để frontend biết nút nào được bấm.
+ 
+    Nguồn sự thật cho attendance_state là Attendance.ShiftStatus từ model/service.
+    Không tự đặt tên lệch ở đây.
+    """
     current_time = now.time()
+ 
+    # ── Xác định shift_state (slot thời gian) ─────────────────
     if current_time < WORKDAY_START:
         shift_state = "BEFORE_SHIFT"
     elif LUNCH_START <= current_time < LUNCH_END:
@@ -82,20 +90,30 @@ def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> di
         shift_state = "OT_WINDOW"
     else:
         shift_state = "OFF"
-
-    attendance_state = Attendance.ShiftStatus.NOT_STARTED
+ 
+    # ── Xác định attendance_state từ record (nguồn sự thật) ───
     today_holiday = _get_holiday_for_date(now.date())
-    is_weekend = now.weekday() >= 5
-    if not attendance and (today_holiday or is_weekend):
-        attendance_state = Attendance.ShiftStatus.HOLIDAY_OFF if today_holiday else Attendance.ShiftStatus.WEEKEND_OFF
-    elif attendance:
+    is_weekend    = now.weekday() >= 5
+ 
+    if not attendance:
+        # Chưa có bản ghi → xem ngày nghỉ/cuối tuần
+        if today_holiday:
+            attendance_state = Attendance.ShiftStatus.HOLIDAY_OFF
+        elif is_weekend:
+            attendance_state = Attendance.ShiftStatus.WEEKEND_OFF
+        else:
+            attendance_state = Attendance.ShiftStatus.NOT_STARTED
+    else:
+        # Dùng normalize để đọc đúng cả legacy alias
         attendance_state = Attendance.ShiftStatus.normalize(attendance.shift_status)
-
-    in_lunch = LUNCH_START <= current_time < LUNCH_END
-    has_checkin = bool(attendance and attendance.check_in)
+ 
+    # ── Tính action_flags ──────────────────────────────────────
+    in_lunch     = LUNCH_START <= current_time < LUNCH_END
+    has_checkin  = bool(attendance and attendance.check_in)
     has_checkout = bool(attendance and attendance.check_out)
-    has_ot_in = bool(attendance and attendance.overtime_check_in)
-    has_ot_out = bool(attendance and attendance.overtime_check_out)
+    has_ot_in    = bool(attendance and attendance.overtime_check_in)
+    has_ot_out   = bool(attendance and attendance.overtime_check_out)
+ 
     approved_ot_request = None
     if attendance:
         approved_ot_request = OvertimeRequest.query.filter(
@@ -104,15 +122,50 @@ def _build_shift_and_actions(now: datetime, attendance: Attendance | None) -> di
             OvertimeRequest.is_deleted.is_(False),
             OvertimeRequest.status == "approved",
         ).first()
+ 
+    # OT check-in mở từ 18:30
+    ot_checkin_open = current_time >= time(18, 30, 0)
+ 
     return {
         "attendance_state": attendance_state,
-        "shift_state": shift_state,
+        "shift_state":      shift_state,
         "action_flags": {
-            "can_check_in": (UI_CHECKIN_OPEN <= current_time < WORKDAY_END) and (not in_lunch) and (not has_checkin),
-            "can_check_out": has_checkin and (not has_checkout) and (not in_lunch) and (current_time >= WORKDAY_END),
-            "can_start_ot": (current_time >= OT_UI_OPEN) and has_checkout and bool(approved_ot_request) and (not has_ot_in) and (not has_ot_out),
-            "can_end_ot": has_ot_in and (not has_ot_out) and (current_time >= OT_END),
+            # Có thể check-in: từ 06:00 đến trước 17:00, không trong giờ trưa, chưa check-in
+            "can_check_in":  (
+                UI_CHECKIN_OPEN <= current_time < WORKDAY_END
+                and not in_lunch
+                and not has_checkin
+                and attendance_state not in {
+                    Attendance.ShiftStatus.HOLIDAY_OFF,
+                    Attendance.ShiftStatus.WEEKEND_OFF,
+                    Attendance.ShiftStatus.ABSENT,
+                    Attendance.ShiftStatus.LEAVE,
+                    Attendance.ShiftStatus.COMPLETED,
+                }
+            ),
+            # Có thể check-out ca chính: đã check-in, chưa check-out, không giờ trưa
+            "can_check_out": (
+                has_checkin
+                and not has_checkout
+                and not in_lunch
+            ),
+            # Có thể check-in OT: từ 18:30, đã checkout ca chính, có OT approved, chưa OT check-in
+            "can_start_ot":  (
+                ot_checkin_open
+                and has_checkout
+                and bool(approved_ot_request)
+                and not has_ot_in
+            ),
+            # Có thể check-out OT: đã OT check-in, chưa OT check-out
+            "can_end_ot":    (
+                has_ot_in
+                and not has_ot_out
+            ),
         },
+        # Thêm context để frontend render đúng
+        "today_holiday":      today_holiday.name if today_holiday else None,
+        "is_weekend":         is_weekend,
+        "has_approved_ot":    bool(approved_ot_request),
     }
 
 def _build_lunar_public_holidays_for_year(year: int) -> dict[str, str]:
@@ -699,11 +752,19 @@ def attendance():
     guard = _ensure_login()
     if guard:
         return guard
-
+ 
     employee = _current_employee()
+    if not employee:
+        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
+        return _redirect_when_missing_employee()
+ 
     now = parse_simulated_time({})
+ 
+    # Nếu simulated_now vượt ngày thực tế → điều chỉnh về ngày cuối cùng có data
     latest_attendance = (
-        Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).first()
+        Attendance.query.filter_by(employee_id=employee.id)
+        .order_by(Attendance.date.desc())
+        .first()
         if employee
         else None
     )
@@ -719,52 +780,63 @@ def attendance():
         )
         now = datetime.combine(latest_attendance.date, fallback_time)
         session["simulated_now"] = now.isoformat()
-    today = EmployeeDashboardService.get_today_attendance(employee.id, now.date()) if employee else None
+ 
+    # ── Lấy data hôm nay và lịch sử ──────────────────────────
+    today = (
+        EmployeeDashboardService.get_today_attendance(employee.id, now.date())
+        if employee
+        else None
+    )
     history = (
-        Attendance.query.filter_by(employee_id=employee.id).order_by(Attendance.date.desc()).limit(10).all()
+        Attendance.query.filter_by(employee_id=employee.id)
+        .order_by(Attendance.date.desc())
+        .limit(10)
+        .all()
         if employee
         else []
     )
-    if today:
-        _, today.regular_hours, _, _, today.overtime_hours = _attendance_metrics(
-            today,
-            is_holiday=(today.attendance_type == "holiday"),
-            is_weekend=bool(today.date.weekday() >= 5),
-        )
-    for record in history:
-        _, record.regular_hours, _, _, record.overtime_hours = _attendance_metrics(
-            record,
-            is_holiday=(record.attendance_type == "holiday"),
-            is_weekend=bool(record.date.weekday() >= 5),
-        )
-    today_holiday = _get_holiday_for_date(now.date())
-    holiday_lookup = _get_holiday_lookup()
+ 
+    # ── Lấy OT request hôm nay ───────────────────────────────
     today_ot_request = (
         OvertimeRequest.query.filter_by(
             employee_id=employee.id,
             overtime_date=now.date(),
             is_deleted=False,
-        ).order_by(OvertimeRequest.id.desc()).first()
+        )
+        .order_by(OvertimeRequest.id.desc())
+        .first()
         if employee
         else None
     )
+ 
+    # ── Preview giờ OT từ đơn đã duyệt (nếu chưa chốt thật) ─
+    # Chỉ dùng để hiển thị UI, KHÔNG ghi vào DB
+    ot_preview_hours = Decimal("0.00")
     if (
         today
         and today_ot_request
         and (today_ot_request.status or "").lower() in {"approved", "pending_admin"}
         and Decimal(str(today.overtime_hours or 0)) <= Decimal("0.00")
     ):
-        approved_preview_hours = Decimal(
-            str(today_ot_request.approved_hours or today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)
+        ot_preview_hours = Decimal(
+            str(
+                today_ot_request.approved_hours
+                or today_ot_request.requested_hours
+                or today_ot_request.overtime_hours
+                or 0
+            )
         ).quantize(Decimal("0.01"))
-        today.overtime_hours = approved_preview_hours
-        for record in history:
-            if record.date == today.date and Decimal(str(record.overtime_hours or 0)) <= Decimal("0.00"):
-                record.overtime_hours = approved_preview_hours
-                break
-    user = _current_user()
-    role_name = (user.role.name.lower() if user and user.role else "")
+ 
+    # ── Build shift & action state để pass xuống template ─────
+    shift_info = _build_shift_and_actions(now, today)
+ 
+    today_holiday  = _get_holiday_for_date(now.date())
+    holiday_lookup = _get_holiday_lookup()
+ 
+    user       = _current_user()
+    role_name  = (user.role.name.lower() if user and user.role else "")
     can_reset_ot_request = role_name == "admin" or _is_dev_or_test_env()
+ 
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -774,6 +846,8 @@ def attendance():
         today_holiday=today_holiday,
         holiday_lookup=holiday_lookup,
         today_ot_request=today_ot_request,
+        ot_preview_hours=ot_preview_hours,       # ← mới, thay cho override trực tiếp
+        shift_info=shift_info,                    # ← mới, pass nguyên block xuống template
         can_reset_ot_request=can_reset_ot_request,
     )
 
@@ -804,65 +878,35 @@ def attendance_state_api():
     guard = _ensure_login()
     if guard:
         return jsonify({"message": "Unauthorized"}), 401
-
+ 
     employee = _current_employee()
     if not employee:
         return jsonify({"message": "Employee not found"}), 404
-
-    now = get_current_time({})
-    today_attendance = Attendance.query.filter_by(employee_id=employee.id, date=now.date()).first()
+ 
+    now              = get_current_time({})
+    today_attendance = Attendance.query.filter_by(
+        employee_id=employee.id, date=now.date()
+    ).first()
+ 
     state = _build_shift_and_actions(now, today_attendance)
+ 
+    # Lấy trạng thái OT request hiện tại
+    today_ot_request = OvertimeRequest.query.filter_by(
+        employee_id=employee.id,
+        overtime_date=now.date(),
+        is_deleted=False,
+    ).order_by(OvertimeRequest.id.desc()).first()
+ 
     return jsonify({
         "current_time": now.isoformat(),
-        "mode": "SIMULATED" if session.get("simulated_now") else "REAL",
+        "mode":         "SIMULATED" if session.get("simulated_now") else "REAL",
+        "today": AttendanceService.build_attendance_payload(today_attendance),
+        "today_ot_request": {
+            "id":     today_ot_request.id     if today_ot_request else None,
+            "status": today_ot_request.status if today_ot_request else None,
+        },
         **state,
     })
-@employee_bp.route("/attendance/check", methods=["POST"])
-def check_in_out():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
-    if not employee:
-        return jsonify({"type": "error", "message": "Không tìm thấy nhân viên"}), 404
-
-    if not _is_attendance_required(employee):
-        return jsonify({"type": "info", "message": "Vai trò hiện tại không áp dụng chấm công bắt buộc."}), 200
-
-    payload = request.get_json(silent=True) or {}
-
-    qr_text = str(payload.get("qr_text") or payload.get("qr_data") or "").strip()
-    if not qr_text:
-        return jsonify({"type": "error", "message": "Không đọc được dữ liệu QR."}), 400
-
-    try:
-        current_time = parse_simulated_time(payload)
-
-        if current_time.tzinfo is not None:
-            from datetime import timezone
-            current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
-
-        simulated_now = current_time.isoformat()
-        session["simulated_now"] = simulated_now
-
-    except ValueError as e:
-        return jsonify({"type": "error", "message": str(e)}), 400
-
-    try:
-        result = AttendanceService.process_employee_action(employee.id, payload, current_time)
-        status_code = result.pop("status_code", 200)
-        flags = result.pop("flags", {}) or {}
-        state = result.pop("state", None)
-        if state is not None and "attendance_state" not in result:
-            result["attendance_state"] = state
-        return jsonify({**result, **flags}), status_code
-    except ValidationError as exc:
-        return jsonify({"type": "error", "message": str(exc)}), 400
-
-    except Exception as exc:
-        db.session.rollback()
-        return jsonify({"type": "error", "message": f"Lỗi hệ thống: {str(exc)}"}), 500
 
 @employee_bp.route("/attendance/delete", methods=["DELETE"])
 def delete_attendance_record():

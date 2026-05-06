@@ -12,7 +12,7 @@ from app.models import (
     OvertimeRequest,  # nếu model này chưa có thì phải tạo
 )
 from app.common.exceptions import ValidationError
-
+from app.modules.attendance.service import AttendanceService
 
 class OvertimeService:
     """
@@ -184,65 +184,12 @@ class OvertimeService:
     # CALCULATE OVERTIME
     # =========================================================
 
-    @staticmethod
-    def calculate_overtime(
-        overtime_check_in: datetime,
-        overtime_check_out: datetime,
-    ) -> Decimal:
-        """
-        Tính số giờ OT thực tế
-
-        Rule chuẩn:
-
-        start = max(19:00, overtime_check_in)
-        end   = min(22:00, overtime_check_out)
-
-        nếu end <= start:
-            OT = 0
-        """
-
-        if not overtime_check_in or not overtime_check_out:
-            return Decimal("0.00")
-
-        if overtime_check_in.tzinfo is not None:
-            overtime_check_in = overtime_check_in.replace(
-                tzinfo=None
-            )
-
-        if overtime_check_out.tzinfo is not None:
-            overtime_check_out = overtime_check_out.replace(
-                tzinfo=None
-            )
-
-        day = overtime_check_in.date()
-
-        ot_start_dt = datetime.combine(
-            day,
-            OvertimeService.OT_START
-        )
-
-        ot_end_dt = datetime.combine(
-            day,
-            OvertimeService.OT_END
-        )
-
-        actual_start = max(
-            overtime_check_in,
-            ot_start_dt
-        )
-
-        actual_end = min(
-            overtime_check_out,
-            ot_end_dt
-        )
-
-        if actual_end <= actual_start:
-            return Decimal("0.00")
-
-        total_seconds = (
-            actual_end - actual_start
-        ).total_seconds()
-
-        hours = round(total_seconds / 3600, 2)
-
-        return Decimal(str(hours))
+@staticmethod
+def calculate_overtime(
+    overtime_check_in: datetime,
+    overtime_check_out: datetime,
+) -> Decimal:
+    return AttendanceService.calculate_overtime_hours(
+        overtime_check_in,
+        overtime_check_out
+    )

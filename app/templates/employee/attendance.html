@@ -4,31 +4,18 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
 <style>
 :root {
-  /* ===== CORE HRM (đậm hơn, có chiều sâu) ===== */
-  --primary: #1e3a8a;        /* xanh navy HRM chuẩn enterprise */
-  --primary-soft: #c7d2fe;   /* nền xanh rõ hơn (không bị nhạt) */
-
+  --primary: #1e3a8a;
+  --primary-soft: #c7d2fe;
   --success: #14532d;
   --warning: #92400e;
   --danger: #7f1d1d;
-
-  /* ===== BACKGROUND (giảm “trắng toát”) ===== */
   --bg-main: #f1f5f9;
   --bg-card: #ffffff;
   --border: #cbd5e1;
-
-  /* ===== TEXT (đậm hơn, contrast cao) ===== */
   --text-main: #0b1220;
   --text-muted: #334155;
 }
 
-.time-part {
-  font-size: 1.05rem;   /* nhỏ lại cho tinh gọn */
-}
-
-.unit-label {
-  font-size: 0.6rem;
-}
 /* ===== CARD ===== */
 .emp-card {
   background: var(--bg-card);
@@ -40,29 +27,36 @@
   color: var(--text-main);
 }
 
+/* ===== DEMO TIME ===== */
+.demo-time-display {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--primary);
+  user-select: none;
+}
 .time-part {
   cursor: ns-resize;
+  padding: 2px 4px;
   font-weight: 600;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   color: var(--primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
-
 .unit-label {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
   letter-spacing: .5px;
 }
 
-/* ===== TEXT STATUS ===== */
+/* ===== NOTE BOXES ===== */
 .attendance-note {
   background: #f9fafb;
   border: 1px solid var(--border);
   padding: 10px 14px;
   border-radius: 8px;
   color: var(--text-main);
+  margin-top: 8px;
 }
-
 .attendance-warning {
   background: #fef2f2;
   border: 1px solid #fecaca;
@@ -70,9 +64,18 @@
   padding: 10px 14px;
   border-radius: 8px;
   font-weight: 600;
+  margin-top: 8px;
+}
+.attendance-info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-top: 8px;
 }
 
-/* ===== BUTTON (HRM standard) ===== */
+/* ===== BUTTON ===== */
 .btn {
   padding: 10px 18px;
   border-radius: 8px;
@@ -80,83 +83,16 @@
   border: 1px solid transparent;
   cursor: pointer;
   transition: all .15s ease;
+  font-size: 15px;
 }
-
-.btn-primary {
-  background: var(--primary);
-  color: #fff;
-}
-
-.btn-warning {
-  background: #f59e0b;
-  color: #fff;
-}
-
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
-}
-
-.btn:hover {
+.btn-primary  { background: var(--primary); color: #fff; }
+.btn-success  { background: #16a34a; color: #fff; }
+.btn-warning  { background: #f59e0b; color: #fff; }
+.btn-danger   { background: #dc2626; color: #fff; }
+.btn-disabled { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.btn:not(.btn-disabled):hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.08);
-}
-
-/* ===== TABLE HRM STYLE ===== */
-.emp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.emp-table th {
-  text-align: left;
-  padding: 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-  background: #f9fafb;
-}
-
-.emp-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-main);
-}
-
-.emp-table tr:hover td {
-  background: #f9fafb;
-}
-
-.scanner-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.6);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 999999; 
-}
-.scanner-modal.open { display:flex; }
-.scanner-panel {
-  background: #fff;
-  width: 420px;
-  max-width: 92vw;
-  border-radius: 12px;
-  padding: 16px;
-  z-index: 1000000;
-  position: relative;
-}
-/* QR area clean */
-#qr-reader {
-  width: 100% !important;
-  min-height: 280px !important;
-  border-radius: 10px;
-}
-/* overlay scan box nhẹ hơn */
-.scanner-box {
-  border: 2px solid var(--primary);
-  box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
 }
 
 /* ===== STATUS BADGE ===== */
@@ -166,331 +102,427 @@
   font-size: 12px;
   font-weight: 600;
   display: inline-block;
+  margin-top: 6px;
 }
+.status-success { background: #dcfce7; color: #166534; }
+.status-warning { background: #fef3c7; color: #92400e; }
+.status-danger  { background: #fee2e2; color: #991b1b; }
+.status-info    { background: #e0e7ff; color: #1e40af; }
 
-/* chuẩn */
-.status-success {
-  background: #dcfce7;
-  color: #166534;
+/* ===== TABLE ===== */
+.emp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
+.emp-table th {
+  text-align: left;
+  padding: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+.emp-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-main);
+}
+.emp-table tr:hover td { background: #f9fafb; }
 
-/* đang làm */
-.status-warning {
-  background: #fef3c7;
-  color: #92400e;
+/* ===== SCANNER MODAL ===== */
+.scanner-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
 }
-
-/* vắng */
-.status-danger {
-  background: #fee2e2;
-  color: #991b1b;
+.scanner-modal.open { display: flex; }
+.scanner-panel {
+  background: #fff;
+  width: 420px;
+  max-width: 92vw;
+  border-radius: 12px;
+  padding: 16px;
+  z-index: 1000000;
+  position: relative;
 }
-
-/* đi muộn */
-.status-late {
-  background: #fde68a;
-  color: #92400e;
+#qr-reader {
+  width: 100% !important;
+  min-height: 280px !important;
+  border-radius: 10px;
 }
-
-/* về sớm */
-.status-early {
-  background: #e0e7ff;
-  color: #1e40af;
-}
-.demo-time-display {
-  font-family: monospace;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--primary);
-  user-select: none;
-}
-
-.time-part {
-  cursor: ns-resize;
-  padding: 2px 4px;
-}
+.btn-sm { padding: 6px 12px; font-size: 13px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div 
-  class="emp-card emp-center" 
+
+{#
+  ── DATA BOOTSTRAP ──────────────────────────────────────────
+  Toàn bộ state từ server được truyền qua data-* attributes.
+  JS đọc một lần khi load, không tự tính lại.
+#}
+<div
   id="attendanceRoot"
+  class="emp-card"
 
-
-data-overtime-checkin="{{ today.overtime_check_in.isoformat() if today and today.overtime_check_in else '' }}"
-data-overtime-checkout="{{ today.overtime_check_out.isoformat() if today and today.overtime_check_out else '' }}"
-
-data-is-half-day="{{ 1 if today and today.is_half_day else 0 }}"
-data-late-minutes="{{ (today.late_minutes or 0) if today else 0 }}"
-data-late-warning="{{ 1 if today and (today.late_minutes or 0) > 0 else 0 }}"
+  data-attendance-state="{{ shift_info.attendance_state if shift_info else (today.shift_status if today else 'not_started') }}"
+  data-shift-state="{{ shift_info.shift_state if shift_info else 'BEFORE_SHIFT' }}"
 
   data-checkin="{{ today.check_in.isoformat() if today and today.check_in else '' }}"
   data-checkout="{{ today.check_out.isoformat() if today and today.check_out else '' }}"
-  data-main-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
+  data-overtime-checkin="{{ today.overtime_check_in.isoformat() if today and today.overtime_check_in else '' }}"
+  data-overtime-checkout="{{ today.overtime_check_out.isoformat() if today and today.overtime_check_out else '' }}"
+
+  data-regular-hours="{{ (today.regular_hours or 0)|float if today else 0 }}"
   data-overtime-hours="{{ (today.overtime_hours or 0)|float if today else 0 }}"
-  data-attendance-state="{{ today.shift_status if today else 'not_started' }}"
-  data-overtime-status="{{ (today_ot_request.status|upper) if today_ot_request and today_ot_request.status else (today.overtime_status if today else '') }}"
-  data-today-ot-created-at="{{ today_ot_request.created_at.isoformat() if today_ot_request and today_ot_request.created_at else '' }}"
-  data-today-ot-hours="{{ (today_ot_request.requested_hours or today_ot_request.overtime_hours or 0)|float if today_ot_request else 0 }}"
-  data-today-ot-start="{{ today_ot_request.start_ot_time.isoformat() if today_ot_request and today_ot_request.start_ot_time else '' }}"
-  data-today-ot-end="{{ today_ot_request.end_ot_time.isoformat() if today_ot_request and today_ot_request.end_ot_time else '' }}"
-  data-today-ot-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
-  data-can-reset-ot-request="{{ 1 if can_reset_ot_request else 0 }}"
-  data-server-now="{{ now.isoformat() }}"
-  data-overtime-state="{{ today.overtime_state if today else "" }}"
-  data-next-event="{{ today.next_event if today else "" }}"
+  data-ot-preview-hours="{{ ot_preview_hours|float if ot_preview_hours else 0 }}"
+
+  data-late-minutes="{{ (today.late_minutes or 0) if today else 0 }}"
+  data-is-half-day="{{ 1 if today and today.is_half_day else 0 }}"
   data-is-weekend="{{ 1 if now.weekday() >= 5 else 0 }}"
-  data-today-ot-request-type="{{ 'holiday' if today_ot_request and today_ot_request.is_holiday_ot else 'after_shift' if today_ot_request else '' }}"
+  data-is-holiday="{{ 1 if today_holiday else 0 }}"
+
+  data-ot-status="{{ (today_ot_request.status|upper) if today_ot_request and today_ot_request.status else '' }}"
+  data-has-approved-ot="{{ 1 if shift_info and shift_info.has_approved_ot else 0 }}"
+
+  data-can-check-in="{{ 1 if shift_info and shift_info.action_flags.can_check_in else 0 }}"
+  data-can-check-out="{{ 1 if shift_info and shift_info.action_flags.can_check_out else 0 }}"
+  data-can-start-ot="{{ 1 if shift_info and shift_info.action_flags.can_start_ot else 0 }}"
+  data-can-end-ot="{{ 1 if shift_info and shift_info.action_flags.can_end_ot else 0 }}"
+
+  data-server-now="{{ now.isoformat() }}"
+  data-can-reset-ot="{{ 1 if can_reset_ot_request else 0 }}"
 >
 
   <h3>🕒 Chấm công</h3>
-<div class="attendance-note demo-time-bar">
-  <div class="demo-time-display">
-    <span id="demoTimeHH" class="time-part" data-unit="h">00</span>:
-    <span id="demoTimeMM" class="time-part" data-unit="m">00</span>:
-    <span id="demoTimeSS" class="time-part" data-unit="s">00</span>
-    &nbsp;&nbsp;
-    <span id="demoDateDD" class="time-part" data-unit="d">01</span>/
-    <span id="demoDateMM" class="time-part" data-unit="mo">01</span>
-  </div>
-  {% if employee %}
-    <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
-  {% endif %}
 
-  <!-- DATE -->
-  <p id="dateText"></p>
+  {# ── ĐỒNG HỒ GIẢ LẬP ────────────────────────────────────── #}
+  <div class="attendance-note demo-time-bar">
+    <div class="demo-time-display">
+      <span id="demoTimeHH" class="time-part" data-unit="h">00</span>:
+      <span id="demoTimeMM" class="time-part" data-unit="m">00</span>:
+      <span id="demoTimeSS" class="time-part" data-unit="s">00</span>
+      &nbsp;&nbsp;
+      <span id="demoDateDD" class="time-part" data-unit="d">01</span>/
+      <span id="demoDateMM" class="time-part" data-unit="mo">01</span>
+    </div>
 
-  <p
-    id="holidayText"
-    class="attendance-note"
-    style="{% if not today_holiday and now.weekday() < 5 %}display:none;{% endif %}"
-  >
-    {% if today_holiday %}
-      🎉 Hôm nay là ngày nghỉ lễ: {{ today_holiday.name }}
-    {% elif now.weekday() >= 5 %}
-      🛌 Hôm nay là ngày nghỉ cuối tuần
-    {% endif %}
-  </p>
-  <!-- ACTION -->
-  <div class="attendance-actions">
-<button 
-  type="button"
-  id="attendanceBtn" 
-  class="btn btn-primary" 
-  onclick="openScannerModal()"
->
-🔳 XÁC THỰC CHẤM CÔNG
-    </button>
-  </div>
-
-
-  <!-- IDENTITY (FIX: dynamic, không hardcode) -->
-  <p id="identityText" class="attendance-note" style="display:none;">
-    Xác nhận danh tính: 
-    <strong>{{ employee.full_name if employee else '' }}</strong>
     {% if employee %}
-      - MSNV: {{ employee.id }}
+      <p>👤 Chào, <strong>{{ employee.full_name }}</strong>!</p>
     {% endif %}
-  </p>
 
-  <!-- WARNING (OPTIONAL UI, không phải toast chính) -->
-  <p id="lateWarning" class="attendance-warning" style="display:none;"></p>
+    <p id="dateText"></p>
 
-  <!-- WORK HOURS -->
-  <p id="workHoursText" class="attendance-note">
-    Công hôm nay: 0 giờ 00 phút
-  </p>
-  <div id="otRequestStatusBox" class="attendance-note" style="display:none;margin-top:10px;"></div>
-</div>
+    {# ── NGÀY LỄ / CUỐI TUẦN ─────────────────────────────── #}
+    {% if today_holiday %}
+      <p class="attendance-info">🎉 Hôm nay là ngày nghỉ lễ: <strong>{{ today_holiday.name }}</strong></p>
+    {% elif now.weekday() >= 5 %}
+      <p class="attendance-info">🛌 Hôm nay là ngày nghỉ cuối tuần</p>
+    {% endif %}
 
-<section class="emp-card">
-  <h3>Lịch sử gần đây</h3>
+    {# ── BADGE TRẠNG THÁI ────────────────────────────────── #}
+    <div id="attendanceStateBadge" class="status" style="display:none;"></div>
 
-  <table class="emp-table">
-    <thead>
-      <tr>
-        <th>Ngày</th>
-        <th>Giờ vào</th>
-        <th>Giờ ra</th>
-        <th>Công chuẩn</th>
-        <th>Tăng ca</th>
-        <th>Trạng thái</th>
-        <th>Hành động</th>
-      </tr>
-    </thead>
+    {# ── NÚT HÀNH ĐỘNG CHÍNH ─────────────────────────────── #}
+    <div class="attendance-actions" style="margin-top:14px;">
+      {%- set s = shift_info.attendance_state if shift_info else (today.shift_status if today else 'not_started') -%}
 
-    <tbody>
-      {% if history %}
-        {% for a in history %}
-        <tr>
-          <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-          <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
-          <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-          <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }} giờ</td>
-          <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }} giờ</td>
-          <td>
-            {% if a.check_in and a.check_out and (a.overtime_check_in and a.overtime_check_out) %}
-              <span class="status status-success">🏁 Hoàn tất (bao gồm tăng ca)</span>
-            {% elif a.check_in and a.check_out %}
-              <span class="status status-success">🏁 Hoàn tất ngày công</span>
-            {% elif a.overtime_check_in and not a.overtime_check_out %}
-              <span class="status status-warning">🟣 Đang tăng ca</span>
-            {% elif a.overtime_check_in and a.overtime_check_out %}
-              <span class="status status-success">🟣 Hoàn tất tăng ca</span>
-            {% elif a.check_in and not a.check_out %}
-              {% set is_before_shift = a.check_in.hour < 8 %}
-              {% if is_before_shift %}
-                <span class="status status-warning">🟡 Chuẩn bị vào ca chính</span>
-              {% else %}
-                <span class="status status-warning">🟡 Đang làm ca chính</span>
-              {% endif %}
-            {% else %}
-              <span class="status status-danger">❌ Chưa vào ca</span>
-            {% endif %}
-          </td>
-          <td>
-            <button  type="button" class="btn btn-sm btn-danger" onclick="deleteRecord('{{ a.date.isoformat() }}')">Xóa</button>
-          </td>
-        </tr>
-        {% endfor %}
+      {%- if s == 'not_started' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">
+          🔳 XÁC THỰC CHẤM CÔNG
+        </button>
+
+      {%- elif s == 'working_regular' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">
+          🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH
+        </button>
+
+      {%- elif s == 'regular_done' -%}
+        {# REGULAR_DONE: trạng thái tạm, JS sẽ hỏi OT ngay #}
+        <button type="button" id="attendanceBtn" class="btn btn-success btn-disabled" disabled>
+          ✅ Đã hoàn thành ca chính
+        </button>
+
+      {%- elif s == 'regular_done_pending_ot_decision' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-warning btn-disabled" disabled>
+          ⏳ ĐANG CHỜ DUYỆT OT
+        </button>
+
+      {%- elif s == 'pre_ot_rest' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-warning btn-disabled" disabled>
+          ⏳ Đã xác thực, chờ đến 19:00
+        </button>
+
+      {%- elif s == 'working_overtime' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">
+          🔳 XÁC NHẬN KẾT THÚC TĂNG CA
+        </button>
+
+      {%- elif s == 'completed' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-success btn-disabled" disabled>
+          ✅ ĐÃ HOÀN THÀNH CÔNG VIỆC
+        </button>
+
+      {%- elif s in ('holiday_off', 'weekend_off') -%}
+        {# Ngày nghỉ chưa có attendance record → cho phép scan nếu muốn đi làm #}
+        <button type="button" id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">
+          🔳 XÁC THỰC CHẤM CÔNG
+        </button>
+
+      {%- elif s == 'absent' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-danger btn-disabled" disabled>
+          ❌ Vắng mặt
+        </button>
+
+      {%- elif s == 'leave' -%}
+        <button type="button" id="attendanceBtn" class="btn btn-warning btn-disabled" disabled>
+          📋 Đang nghỉ phép
+        </button>
+
+      {%- else -%}
+        <button type="button" id="attendanceBtn" class="btn btn-primary" onclick="openScannerModal()">
+          🔳 XÁC THỰC CHẤM CÔNG
+        </button>
+      {%- endif -%}
+    </div>
+
+    {# ── CẢNH BÁO ĐI MUỘN ───────────────────────────────── #}
+    {% if today and today.late_minutes and today.late_minutes > 0 %}
+      <p class="attendance-warning">
+        ⚠️ Bạn đi muộn {{ today.late_minutes }} phút
+        {% if today.is_half_day %} — tính nửa ngày công{% endif %}
+      </p>
+    {% endif %}
+
+    {# ── CÔNG HÔM NAY ─────────────────────────────────────── #}
+    <p id="workHoursText" class="attendance-note">
+      Công hôm nay:
+      {% if today and today.regular_hours and today.regular_hours > 0 %}
+        {{ '%.2f'|format((today.regular_hours or 0)|float) }} giờ
+        {% if (today.overtime_hours or ot_preview_hours) > 0 %}
+          + OT {{ '%.2f'|format(((today.overtime_hours or 0)|float) or (ot_preview_hours|float)) }} giờ
+        {% endif %}
       {% else %}
-        <tr>
-          <td colspan="7">Chưa có dữ liệu chấm công.</td>
-        </tr>
+        0 giờ 00 phút
       {% endif %}
-    </tbody>
-  </table>
-</section>
+    </p>
 
+    {# ── HỘP TRẠNG THÁI OT REQUEST ───────────────────────── #}
+    <div id="otRequestStatusBox" class="attendance-info" style="display:none; margin-top:10px;"></div>
+
+    {# ── THÔNG TIN OT REQUEST HIỆN TẠI ───────────────────── #}
+    {% if today_ot_request %}
+      <div class="attendance-note" style="margin-top:10px; font-size:13px;">
+        {% set ot_status = today_ot_request.status|lower %}
+        {% if ot_status in ('pending', 'pending_hr', 'pending_admin') %}
+          ⏳ Đơn tăng ca đang chờ duyệt
+        {% elif ot_status == 'approved' %}
+          ✅ Đơn tăng ca đã được duyệt
+          {% if today_ot_request.approved_hours or today_ot_request.requested_hours %}
+            ({{ '%.1f'|format(((today_ot_request.approved_hours or today_ot_request.requested_hours or 0)|float)) }}h)
+          {% endif %}
+        {% elif ot_status == 'rejected' %}
+          ❌ Đơn tăng ca bị từ chối
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {# ── NÚT RESET OT (DEV/ADMIN) ────────────────────────── #}
+    {% if can_reset_ot_request and today_ot_request %}
+      <div style="margin-top:10px;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="resetOtRequest()">
+          🔁 [DEV] Reset OT Request
+        </button>
+      </div>
+    {% endif %}
+
+  </div>{# end demo-time-bar #}
+
+
+  {# ── LỊCH SỬ CHẤM CÔNG ─────────────────────────────────── #}
+  <section class="emp-card" style="margin-top:20px;">
+    <h3>Lịch sử gần đây</h3>
+    <table class="emp-table">
+      <thead>
+        <tr>
+          <th>Ngày</th>
+          <th>Giờ vào</th>
+          <th>Giờ ra</th>
+          <th>Công chuẩn</th>
+          <th>Tăng ca</th>
+          <th>Trạng thái</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if history %}
+          {% for a in history %}
+          <tr>
+            <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
+            <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
+            <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
+            <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }}h</td>
+            <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }}h</td>
+            <td>
+              {%- set ss = a.normalized_shift_status if a.normalized_shift_status else a.shift_status -%}
+              {% if ss == 'completed' %}
+                <span class="status status-success">🏁 Hoàn tất</span>
+              {% elif ss == 'working_regular' %}
+                <span class="status status-warning">🟢 Đang làm ca chính</span>
+              {% elif ss == 'working_overtime' %}
+                <span class="status status-warning">🟣 Đang tăng ca</span>
+              {% elif ss == 'regular_done' %}
+                <span class="status status-success">✅ Ca chính xong</span>
+              {% elif ss == 'regular_done_pending_ot_decision' %}
+                <span class="status status-warning">⏳ Chờ duyệt OT</span>
+              {% elif ss == 'pre_ot_rest' %}
+                <span class="status status-warning">🟡 Nghỉ trước OT</span>
+              {% elif ss == 'absent' %}
+                <span class="status status-danger">❌ Vắng mặt</span>
+              {% elif ss == 'leave' %}
+                <span class="status status-info">📋 Nghỉ phép</span>
+              {% elif ss == 'holiday_off' %}
+                <span class="status status-info">🎉 Nghỉ lễ</span>
+              {% elif ss == 'weekend_off' %}
+                <span class="status status-info">🛌 Nghỉ cuối tuần</span>
+              {% elif a.check_in and not a.check_out %}
+                <span class="status status-warning">🟢 Đang làm</span>
+              {% else %}
+                <span class="status status-danger">❌ Chưa vào ca</span>
+              {% endif %}
+            </td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm"
+                onclick="deleteRecord('{{ a.date.isoformat() }}')">
+                Xóa
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="7">Chưa có dữ liệu chấm công.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </section>
+
+</div>{# end attendanceRoot #}
+
+
+{# ── QR SCANNER MODAL ──────────────────────────────────────── #}
 <div class="scanner-modal" id="scannerModal">
   <div class="scanner-panel" id="scannerPanel">
     <h4>Đưa QR vào khung để xác thực</h4>
-    <div class="scanner-view">
-      <div id="qr-reader"></div>
-      <div class="scanner-overlay">
-        <div class="scanner-box"><div class="scan-line"></div></div>
-      </div>
-    </div>
+    <div id="qr-reader"></div>
     <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:10px;">
-      <button  type="button" class="btn" onclick="closeScannerModal()">Đóng</button>
+      <button type="button" class="btn" onclick="closeScannerModal()">Đóng</button>
     </div>
   </div>
 </div>
+
 {% endblock %}
 
+
 {% block scripts %}
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="{{ url_for('static', filename='js/employee/qr-attendance.shared.js') }}"></script>
 
 <script type="module">
 import { Attendance } from "{{ url_for('static', filename='js/employee/attendance.js') }}";
 import { attendanceStore } from "{{ url_for('static', filename='js/store/attendance.store.js') }}";
+
+// ── Bootstrap state từ data-attributes ───────────────────────
 const root = document.getElementById("attendanceRoot");
 
-const bootstrap = {
-  check_in: root?.dataset.checkin || null,
-  check_out: root?.dataset.checkout || null,
-  overtime_check_in: root?.dataset.overtimeCheckin || null,
-  overtime_check_out: root?.dataset.overtimeCheckout || null,
-  regular_hours: Number(root?.dataset.mainHours || 0),
-  overtime_hours: Number(root?.dataset.overtimeHours || 0),
-  working_hours: Number(root?.dataset.mainHours || 0) + Number(root?.dataset.overtimeHours || 0),
-  shift_status: root?.dataset.attendanceState || "not_started",
-  attendance_type: root?.dataset.todayOtType || "normal",
-  late_minutes: Number(root?.dataset.lateMinutes || 0),
-  is_half_day: root?.dataset.isHalfDay === "1",
-  is_weekend: root?.dataset.isWeekend === "1",
-};
-attendanceStore.setToday(bootstrap);
-function toLocalISO(dateObj = new Date()) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}.${String(dateObj.getMilliseconds()).padStart(3, "0")}`;
-}
+const serverNow = root?.dataset.serverNow || null;
 
-async function submitAttendanceFromQR(decodedText) {
-  const simulatedNow = toLocalISO(new Date(root?.dataset.serverNow || new Date()));
-  const result = await Attendance.handleQrAttendance(decodedText, simulatedNow);
-  const response = result?.response;
+// Nạp state vào store để Attendance class dùng
+attendanceStore.setToday({
+  shift_status:        root?.dataset.attendanceState || "not_started",
+  check_in:            root?.dataset.checkin || null,
+  check_out:           root?.dataset.checkout || null,
+  overtime_check_in:   root?.dataset.overtimeCheckin || null,
+  overtime_check_out:  root?.dataset.overtimeCheckout || null,
+  regular_hours:       Number(root?.dataset.regularHours || 0),
+  overtime_hours:      Number(root?.dataset.overtimeHours || 0),
+  late_minutes:        Number(root?.dataset.lateMinutes || 0),
+  is_half_day:         root?.dataset.isHalfDay === "1",
+  is_weekend:          root?.dataset.isWeekend === "1",
+  action_flags: {
+    can_check_in:  root?.dataset.canCheckIn  === "1",
+    can_check_out: root?.dataset.canCheckOut === "1",
+    can_start_ot:  root?.dataset.canStartOt  === "1",
+    can_end_ot:    root?.dataset.canEndOt    === "1",
+  },
+});
 
-  if (response?.action === "early_checkout_prompt") {
-    const confirmEarly = await Swal.fire({
-      icon: "question",
-      title: "Tan ca nghỉ sớm",
-      text: response.message || "Bạn có muốn tan ca nghỉ sớm không?",
-      showCancelButton: true,
-      confirmButtonText: "Có",
-      cancelButtonText: "Không"
-    });
-
-    if (confirmEarly.isConfirmed) {
-      await Attendance.checkOut(simulatedNow, decodedText, { earlyCheckoutConfirmed: true });
-      window.location.reload();
-    }
-    return;
-  }
-
-  if (!response || response.action === "check_out") {
-    const checkInRes = await Attendance.checkIn(toLocalISO(new Date(root?.dataset.serverNow || new Date())), decodedText);
-    if (checkInRes?.action === "holiday_work_prompt" || checkInRes?.action === "weekend_work_prompt") {
-      const decision = await Swal.fire({
-        icon: "question",
-        title: "Xác nhận đi làm ngày nghỉ",
-        text: checkInRes.message || "Bạn có muốn đi làm không?",
-        showCancelButton: true,
-        confirmButtonText: "Có",
-        cancelButtonText: "Không"
-      });
-
-      if (decision.isConfirmed) {
-        await Attendance.submitOffdayConfirmation(decodedText, toLocalISO(new Date(root?.dataset.serverNow || new Date())));
-      } else {
-        await Attendance.submitOffdayDecline(decodedText, toLocalISO(new Date(root?.dataset.serverNow || new Date())));
-      }
-
-    }
-    window.location.reload();
-  }
-}
-
-
+// ── QR Scanner setup ─────────────────────────────────────────
 const scanner = HRMQRScanner.createQRScanner({
-  modalId: "scannerModal",
+  modalId:  "scannerModal",
   readerId: "qr-reader",
-  panelId: "scannerPanel",
+  panelId:  "scannerPanel",
 
   onDecoded: async (decodedText) => {
-    await submitAttendanceFromQR(decodedText);
+    // Dùng serverNow để simulated_now khớp với giờ server
+    await Attendance.handleQrScan(decodedText, serverNow);
   },
 
   onError: async (err) => {
-    await Swal.fire({ icon: "error", title: "Lỗi camera", text: err?.message || "Không thể truy cập camera" });
-  }
+    await Swal.fire({
+      icon: "error",
+      title: "Lỗi camera",
+      text: err?.message || "Không thể truy cập camera",
+    });
+  },
 });
 
-window.openScannerModal = async function openScannerModal() {
-  await scanner.open();
-};
-window.closeScannerModal = async function closeScannerModal() {
-  await scanner.close();
-};
-window.deleteRecord = async function deleteRecord(dateIso) {
+window.openScannerModal  = async () => await scanner.open();
+window.closeScannerModal = async () => await scanner.close();
 
-  const confirmDelete = await Swal.fire({
+// ── Xóa bản ghi ──────────────────────────────────────────────
+window.deleteRecord = async (dateIso) => {
+  const confirm = await Swal.fire({
     icon: "warning",
     title: "Xóa bản ghi chấm công?",
-    text: dateIso,
+    text: `Ngày: ${dateIso}`,
     showCancelButton: true,
     confirmButtonText: "Xóa",
     cancelButtonText: "Hủy",
-    confirmButtonColor: "#d33"
+    confirmButtonColor: "#d33",
   });
-
-  if (!confirmDelete.isConfirmed) return;
-
+  if (!confirm.isConfirmed) return;
   await Attendance.deleteRecord(dateIso);
   window.location.reload();
 };
-</script>
 
+// ── Reset OT Request (DEV/ADMIN) ──────────────────────────────
+window.resetOtRequest = async () => {
+  const confirm = await Swal.fire({
+    icon: "warning",
+    title: "[DEV] Reset OT Request?",
+    text: "Sẽ xóa OT request hôm nay để test lại luồng.",
+    showCancelButton: true,
+    confirmButtonText: "Reset",
+    cancelButtonText: "Hủy",
+    confirmButtonColor: "#d33",
+  });
+  if (!confirm.isConfirmed) return;
+  try {
+    const res = await fetch("/employee/attendance/overtime-request/reset", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await res.json();
+    await Swal.fire({ icon: "success", title: data.message || "Đã reset" });
+    window.location.reload();
+  } catch (err) {
+    await Swal.fire({ icon: "error", title: "Lỗi", text: err.message });
+  }
+};
+</script>
 {% endblock %}
