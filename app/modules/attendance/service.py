@@ -178,7 +178,7 @@ class AttendanceService:
             # Giờ nghỉ trưa → disable
             if LUNCH_START <= current_time < LUNCH_END:
                 return AttendanceStateResult(
-                    state="working_regular",
+                    state="lunch_break",
                     button_enabled=False,
                     button_text="🍽️ ĐANG NGHỈ TRƯA",
                     can_scan=False,
@@ -215,27 +215,24 @@ class AttendanceService:
 
         # ── OT đã duyệt, nghỉ ngơi trước tăng ca ────────────────────────
         if raw_state == Attendance.ShiftStatus.PRE_OT_REST:
-            # Sau khi approved: có thể check-in OT ngay (giờ hiệu lực vẫn 19:00)
+            if not attendance.overtime_check_in and current_time < OT_CHECKIN_OPEN:
+                return AttendanceStateResult(
+                    state="pre_ot_rest",
+                    button_enabled=False,
+                    button_text="⏳ ĐÃ XÁC THỰC - CHỜ ĐẾN 19:00",
+                    can_scan=False,
+                    message="OT đã được duyệt. Vui lòng nghỉ ngơi, đến 19:00 mới bắt đầu tăng ca.",
+                    overtime_status="APPROVED",
+                )
             if not attendance.overtime_check_in:
                 return AttendanceStateResult(
                     state="pre_ot_rest",
                     button_enabled=True,
                     button_text="🔳 XÁC THỰC TĂNG CA",
                     can_scan=True,
-                    message="OT đã được duyệt. Xác thực để bắt đầu tăng ca (công tính từ 19:00)",
+                    message="Đã đến giờ tăng ca, vui lòng xác thực check-in OT.",
                     overtime_status="APPROVED",
                 )
-            # Đã check-in OT nhưng chưa đến 19:00 → waiting
-            if current_time < OT_CHECKIN_OPEN:
-                return AttendanceStateResult(
-                    state="pre_ot_rest",
-                    button_enabled=False,
-                    button_text=f"⏳ Đã xác thực — chờ đến 19:00",
-                    can_scan=False,
-                    message="Đã xác thực tăng ca. Công OT bắt đầu tính từ 19:00.",
-                    overtime_status="APPROVED",
-                )
-            # Đã qua 19:00 → chuyển sang working_overtime
             return AttendanceStateResult(
                 state="working_overtime",
                 button_enabled=True,
@@ -969,8 +966,17 @@ class AttendanceService:
         if attendance.shift_status == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
             approved_ot = AttendanceService._get_approved_ot(employee_id, current_time.date())
             if approved_ot:
-                # OT approved → có thể check-in OT ngay (không cần đợi 19:00)
-                return AttendanceService.check_in_overtime(employee_id, sim_time)
+                # OT approved: chuyển sang pre_ot_rest, chỉ cho check-in OT khi tới 19:00
+                attendance.set_shift_status(Attendance.ShiftStatus.PRE_OT_REST)
+                db.session.commit()
+                return {
+                    "type":             "info",
+                    "action":           "ot_approved_wait",
+                    "attendance_state": attendance.shift_status,
+                    "overtime_status":  "APPROVED",
+                    "message":          "Yêu cầu tăng ca đã được duyệt. Vui lòng chờ đến 19:00 để xác thực vào ca OT.",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
+                }
 
             pending_ot = OvertimeRequest.query.filter(
                 OvertimeRequest.employee_id == employee_id,
@@ -1034,7 +1040,17 @@ class AttendanceService:
                     "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
-            # Chưa check-in OT → cho phép scan
+            # Chưa check-in OT: chỉ cho scan từ 19:00 trở đi
+            if current_time.time() < OT_CHECKIN_OPEN:
+                return {
+                    "type":             "info",
+                    "action":           "pre_ot_rest",
+                    "attendance_state": attendance.shift_status,
+                    "overtime_status":  "APPROVED",
+                    "message":          "Đang nghỉ trước tăng ca. Đến 19:00 sẽ mở xác thực check-in OT.",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
+                }
+
             return AttendanceService.check_in_overtime(employee_id, sim_time)
 
         # ── WORKING_OVERTIME ──────────────────────────────────────────────
@@ -1353,7 +1369,12 @@ class AttendanceService:
         multiplier          = AttendanceService._day_multiplier(
             bool(record.is_holiday), bool(record.is_weekend)
         )
-        record.regular_hours = (raw_regular * multiplier).quantize(Decimal("0.01"))
+        regular_hours_raw = raw_regular
+        if record.is_half_day and not record.is_weekend and not record.is_holiday:
+            # Rule mới: đi muộn >60p thì lấy 1/2 công thực tế đã làm trong giờ hành chính.
+            regular_hours_raw = (raw_regular * Decimal("0.5")).quantize(Decimal("0.0001"))
+
+        record.regular_hours = (regular_hours_raw * multiplier).quantize(Decimal("0.01"))
 
         record.set_shift_status(Attendance.ShiftStatus.REGULAR_DONE)
         AttendanceService.finalize_attendance(record, finalize_status=False)
@@ -1386,7 +1407,10 @@ class AttendanceService:
         return {
             "type":                          "success",
             "action":                        AttendanceService.ACTION_CHECK_OUT,
-            "message":                       f"Check-out ca chính thành công. Công thường: {record.regular_hours}h{multiplier_label}",
+            "message":                       (
+                f"Check-out ca chính thành công. Công thường: {record.regular_hours}h{multiplier_label}" +
+                (" (áp dụng nửa ngày công do đi muộn quá 60 phút)" if record.is_half_day and not record.is_weekend and not record.is_holiday else "")
+            ),
             "attendance_state":              record.shift_status,
             "regular_hours":                 str(record.regular_hours),
             "overtime_hours":                str(record.overtime_hours or 0),

@@ -69,6 +69,7 @@
     <a id="detailLink" href="#" class="btn btn-primary btn-sm" style="display:none;">Xem chi tiết</a>
     <button class="btn btn-sm" onclick="downloadDetailPdf()">Lưu PDF</button>
     <button class="btn btn-danger btn-sm" id="btnResetOtRequest" style="display:none;" onclick="resetOtRequestFromNotification()">Xóa yêu cầu OT</button>
+    <button class="btn btn-danger btn-sm" onclick="deleteNotificationCascade()">🗑️ XÓA THÔNG BÁO</button>
     <button class="btn btn-warning btn-sm" onclick="toggleFeedbackForm()">📩 GỬI PHẢN HỒI / KHIẾU NẠI</button>
     <button class="btn btn-success btn-sm" id="btnCloseComplaint" style="display:none;" onclick="closeComplaint()">Đóng khiếu nại</button>
     <button class="btn btn-secondary btn-sm" onclick="closeNotificationDetail()">[ &lt;-- Quay lại ] Danh sách thông báo</button>
@@ -143,8 +144,8 @@ async function openNotificationDetail(el){
     detailLink.style.display = "inline-flex";
   } else {
     detailLink.style.display = "none";
+  }
 }
-
 function closeNotificationDetail(){
   document.getElementById("notification-detail").style.display = "none";
   document.getElementById("feedbackForm").style.display = "none";
@@ -190,6 +191,32 @@ async function closeComplaint(){
 
 function downloadDetailPdf(){
   window.print();
+}
+
+async function deleteNotificationCascade() {
+  if (!activeNotificationId) return;
+  const confirm = await Swal.fire({
+    title: "Xóa thông báo?",
+    text: "Thông báo sẽ bị xóa, và dữ liệu liên quan sẽ được cascade theo loại thông báo.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Xóa",
+    cancelButtonText: "Hủy"
+  });
+  if (!confirm.isConfirmed) return;
+
+  const res = await fetch(`/employee/notifications/${activeNotificationId}/delete`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    await Swal.fire({ icon: "error", title: data.error || "Không thể xóa thông báo" });
+    return;
+  }
+
+  const cascaded = Array.isArray(data.cascaded) && data.cascaded.length
+    ? `\n${data.cascaded.join("\n")}`
+    : "";
+  await Swal.fire({ icon: "success", title: "Đã xóa thông báo", text: `Đã xóa thành công.${cascaded}` });
+  window.location.reload();
 }
 
 async function resetOtRequestFromNotification() {

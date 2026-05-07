@@ -588,14 +588,14 @@ const scanner = HRMQRScanner.createQRScanner({
   modalId: 'qr-modal',
   readerId: 'reader',
   onDecoded: processAttendance,
-  onError: (error) => alert(error.message),
+  onError: async (error) => { await Swal.fire({ icon: "error", title: "Lỗi camera", text: error.message }); },
 });
 
 async function openQRModal() {
   try {
     await scanner.open();
   } catch (err) {
-    alert(err.message);
+    await Swal.fire({ icon: "error", title: "Lỗi camera", text: err.message });
   }
 }
 
@@ -605,11 +605,11 @@ async function closeQRModal() {
 async function processAttendance(code) {
     try {
         const now = getSimulatedDate();
-        const timeStr = toLocalISO(now);
+
         const payload = {
             qr_text: code,
-            qr_data: code, 
-            sim_time: timeStr,
+            qr_data: code,
+            sim_time: toLocalISO(now),
             simulated_now: toLocalISO(now),
             overtime_rejected: state.pendingCheckoutWithoutOT
         };
@@ -619,62 +619,36 @@ async function processAttendance(code) {
             body: JSON.stringify(payload)
         });
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.message || d.error || 'Không thể chấm công. Vui lòng thử lại.');
-        const needsOvertimeDecision = Boolean(d.requires_overtime_decision) || d.action === "offer_overtime" || d.action === "check_out";
+        if (!r.ok) throw new Error(d.message || d.error || 'Không thể chấm công.');
 
-        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
-            const decisionMessage = "Bạn đã check-out ca chính, vui lòng xác nhận lựa chọn OT.";
-            const confirmed = await askOvertimeDecisionModal(decisionMessage);
+        const needsOvertimeDecision = Boolean(d.requires_overtime_decision) || d.action === "offer_overtime";
+        if (needsOvertimeDecision) {
+            const confirm = await Swal.fire({
+                icon: 'question',
+                title: 'Đăng ký tăng ca?',
+                text: d.message || 'Bạn có muốn đăng ký tăng ca không?',
+                showCancelButton: true,
+                confirmButtonText: 'Có',
+                cancelButtonText: 'Không'
+            });
 
-        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
-            const decisionMessage = "Bạn đã check-out ca chính, vui lòng xác nhận lựa chọn OT.";
-            const confirmed = confirm(decisionMessage);
-
-        if (needsOvertimeDecision && !state.pendingCheckoutWithoutOT) {
-            const confirmed = confirm(d.message || "Bạn có muốn đăng ký tăng ca không?");
-            if (confirmed) {
-                const confirmRes = await fetch("{{ url_for('employee.check_in_out') }}", {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        ...payload,
-                        overtime_decision: "yes",
-                        overtime_start: toLocalISO(now)
-                    })
-                });
-                const confirmData = await confirmRes.json();
-                if (!confirmRes.ok) throw new Error(confirmData.message || "Xử lý tăng ca thất bại");
-                state.pendingCheckoutWithoutOT = false;
-                alert(`Xác nhận danh tính: {{ employee.full_name }} \n${confirmData.message}`);
-                persistSimTime();
-                window.location.reload();
-                return;
-            }
-
-            state.pendingCheckoutWithoutOT = true;
-            const rejectRes = await fetch("{{ url_for('employee.check_in_out') }}", {
+            const overtime_decision = confirm.isConfirmed ? 'yes' : 'no';
+            const decisionRes = await fetch("{{ url_for('employee.check_in_out') }}", {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    ...payload,
-                    overtime_decision: "no",
-                })
+                body: JSON.stringify({ ...payload, overtime_decision })
             });
-            const rejectData = await rejectRes.json().catch(() => ({}));
-            if (!rejectRes.ok) throw new Error(rejectData.message || "Không thể ghi nhận lựa chọn không tăng ca");
-            state.pendingCheckoutWithoutOT = false;
-            alert(`Xác nhận danh tính: {{ employee.full_name }} \n${rejectData.message || "Đã ghi nhận không tăng ca hôm nay."}`);
-            persistSimTime();
+            const decisionData = await decisionRes.json().catch(() => ({}));
+            if (!decisionRes.ok) throw new Error(decisionData.message || 'Không thể ghi nhận lựa chọn OT');
+            await Swal.fire({ icon: 'success', title: 'Đã ghi nhận', text: decisionData.message || 'Thành công' });
             window.location.reload();
             return;
         }
 
-        state.pendingCheckoutWithoutOT = false;        
-        persistSimTime();
-        alert(`Xác nhận danh tính: {{ employee.full_name }} \n${d.message}`);
+        await Swal.fire({ icon: 'success', title: 'Xác nhận danh tính: {{ employee.full_name }}', text: d.message || 'Thành công' });
         window.location.reload();
     } catch (e) {
-        alert(e.message);
+        await Swal.fire({ icon: 'error', title: 'Lỗi', text: e.message || 'Có lỗi xảy ra' });
     }
 }
 

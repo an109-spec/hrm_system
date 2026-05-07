@@ -926,7 +926,11 @@ def system_time_control():
     att_payload    = AttendanceService.build_attendance_payload(attendance) if attendance else {}
     regular_hours  = float(att_payload.get("regular_hours",  0) or 0) if att_payload else 0.0
     overtime_hours = float(att_payload.get("overtime_hours", 0) or 0) if att_payload else 0.0
- 
+    if attendance and attendance.check_in and not attendance.check_out:
+        regular_hours = float(AttendanceService.calculate_regular_hours_raw(attendance.check_in, now))
+
+    if attendance and attendance.overtime_check_in and not attendance.overtime_check_out:
+        overtime_hours = float(AttendanceService.calculate_overtime_hours_raw(attendance.overtime_check_in, now))
     return jsonify({
         "mode":             session.get("system_time_mode", "REAL"),
         "current_time":     now.isoformat(),
@@ -1374,6 +1378,25 @@ def notification_detail_api(noti_id: int):
         return jsonify(EmployeeESSService.notification_detail(user.id, noti_id))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
+
+@employee_bp.route("/notifications/<int:noti_id>/delete", methods=["DELETE"])
+def delete_notification_with_cascade(noti_id: int):
+    guard = _ensure_login()
+    if guard:
+        return guard
+
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        result = AttendanceService.delete_notification_cascade(noti_id, user.id)
+        return jsonify({"ok": True, **result})
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Không thể xóa thông báo: {exc}"}), 500
 @employee_bp.route("/notifications/<int:noti_id>/overtime-reset", methods=["POST"])
 def reset_overtime_from_notification(noti_id: int):
     guard = _ensure_login()

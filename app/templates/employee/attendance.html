@@ -612,7 +612,42 @@ function getServerNow() {
 
 let simDate = new Date(root?.dataset.serverNow || Date.now());
 let applyTimer = null;  // debounce
+let lastAutoSyncMinute = null;
 
+
+
+const NOTIFY_KEY_PREFIX = "attendance_demo_notify";
+
+function maybeShowDemoTimeNotification() {
+  if (!root) return;
+
+  const hh = simDate.getHours();
+  const mm = simDate.getMinutes();
+  const state = root.dataset.attendanceState || "";
+  const ymd = `${simDate.getFullYear()}-${String(simDate.getMonth()+1).padStart(2,"0")}-${String(simDate.getDate()).padStart(2,"0")}`;
+
+  const fireOnce = async (eventKey, title, text) => {
+    const key = `${NOTIFY_KEY_PREFIX}:${ymd}:${eventKey}`;
+    if (sessionStorage.getItem(key) === "1") return;
+    sessionStorage.setItem(key, "1");
+    await Swal.fire({ icon: "info", title, text, timer: 2600, showConfirmButton: false });
+  };
+
+  // 17:00 nhắc checkout ca chính
+  if (hh === 17 && mm === 0 && state === "working_regular") {
+    fireOnce("regular_checkout", "Đã đến giờ tan ca", "Vui lòng quét mã để check_out ca hành chính.");
+  }
+
+  // 19:00 nhắc checkin OT khi đã duyệt
+  if (hh === 19 && mm === 0 && state === "pre_ot_rest") {
+    fireOnce("ot_checkin", "Đến giờ tăng ca", "Vui lòng quét mã để check_in tăng ca.");
+  }
+
+  // 22:00 nhắc checkout OT
+  if (hh === 22 && mm === 0 && state === "working_overtime") {
+    fireOnce("ot_checkout", "Đã đến giờ kết thúc tăng ca", "Vui lòng quét mã để check_out tăng ca.");
+  }
+}
 function renderClock() {
   const pad = (n) => String(n).padStart(2, "0");
   const set = (id, val) => {
@@ -628,6 +663,7 @@ function renderClock() {
   // Cập nhật data-server-now ngay để handleQrScan dùng đúng giờ
   if (root) root.dataset.serverNow = toLocalISO(simDate);
   renderDateText();
+  maybeShowDemoTimeNotification();
 }
 
 const UNIT_MS = { h: 3600000, m: 60000, s: 1000, d: 86400000 };
@@ -668,84 +704,13 @@ async function applySimTime() {
   }
 }
 function updateUIRealtime(data) {
-  const root = document.getElementById("attendanceRoot");
-
-  // ===== Update dataset =====
-  root.dataset.attendanceState = data.attendance_state;
-  root.dataset.canCheckIn  = data.can_check_in ? "1" : "0";
-  root.dataset.canCheckOut = data.can_check_out ? "1" : "0";
-
-  // ===== Update badge =====
-  updateBadge(data.attendance_state);
-
-  // ===== Update button =====
-  updateButton(data.attendance_state);
-
-  // ===== Update công =====
-  const workText = document.getElementById("workHoursText");
-  if (workText) {
-    workText.textContent =
-      `Công hôm nay: ${data.regular_hours.toFixed(2)} giờ` +
-      (data.overtime_hours > 0
-        ? ` + OT ${data.overtime_hours.toFixed(2)} giờ`
-        : "");
-  }
+  Attendance.updateUIRealtime(data);
 }
 function updateButton(state) {
-  const btn = document.getElementById("attendanceBtn");
-  if (!btn) return;
-
-  btn.className = "btn"; // reset
-
-  switch (state) {
-    case "not_started":
-      btn.textContent = "🔳 XÁC THỰC CHẤM CÔNG";
-      btn.classList.add("btn-primary");
-      btn.disabled = false;
-      btn.onclick = openScannerModal;
-      break;
-
-    case "working_regular":
-      btn.textContent = "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH";
-      btn.classList.add("btn-primary");
-      break;
-
-    case "pre_ot_rest":
-      btn.textContent = "⏳ Chờ đến giờ OT";
-      btn.classList.add("btn-warning", "btn-disabled");
-      btn.disabled = true;
-      break;
-
-    case "working_overtime":
-      btn.textContent = "🔳 KẾT THÚC TĂNG CA";
-      btn.classList.add("btn-primary");
-      break;
-
-    case "completed":
-      btn.textContent = "✅ HOÀN THÀNH";
-      btn.classList.add("btn-success", "btn-disabled");
-      btn.disabled = true;
-      break;
-  }
+  Attendance.updateButtonUI(state);
 }
 function updateBadge(state) {
-  const badge = document.getElementById("attendanceStateBadge");
-  if (!badge) return;
-
-  badge.style.display = "inline-block";
-
-  const map = {
-    not_started: ["🟡 Chưa vào ca", "status-warning"],
-    working_regular: ["🟢 Đang làm", "status-success"],
-    pre_ot_rest: ["⏳ Chờ OT", "status-warning"],
-    working_overtime: ["🟣 Tăng ca", "status-warning"],
-    completed: ["🏁 Hoàn tất", "status-success"],
-  };
-
-  const [text, cls] = map[state] || ["Không xác định", "status-info"];
-
-  badge.textContent = text;
-  badge.className = `status ${cls}`;
+  Attendance.updateBadgeUI(state);
 }
 // Gắn sự kiện wheel + touch cho từng span
 document.querySelectorAll(".time-part[data-unit]").forEach((span) => {
@@ -776,6 +741,11 @@ renderClock();
 setInterval(() => {
   simDate = new Date(simDate.getTime() + 1000);
   renderClock();
+  const minuteKey = `${simDate.getFullYear()}-${simDate.getMonth()}-${simDate.getDate()}-${simDate.getHours()}-${simDate.getMinutes()}`;
+  if (minuteKey !== lastAutoSyncMinute) {
+    lastAutoSyncMinute = minuteKey;
+    applySimTime();
+  }
 }, 1000);
 // ════════════════════════════════════════════════════════════
 // QR SCANNER
@@ -903,7 +873,7 @@ window.applyHistoryFilter = () => {
     const month = document.getElementById("filterMonth").value;
     const year  = document.getElementById("filterYear").value;
     if (!month || !year) {
-        alert("Vui lòng chọn tháng và năm");
+        Swal.fire({ icon: "warning", title: "Thiếu bộ lọc", text: "Vui lòng chọn tháng và năm" });
         return;
     }
     const baseUrl = window.location.origin + window.location.pathname;

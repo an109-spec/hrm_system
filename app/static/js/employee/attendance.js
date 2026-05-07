@@ -54,11 +54,17 @@ const STATE_UI = {
     disabled: true,
     badge:    { cls: "status-warning", text: "⏳ Chờ duyệt tăng ca" },
   },
+  lunch_break: {
+    btnText:  "⏸️ ĐANG NGHỈ TRƯA",
+    btnClass: "btn-warning",
+    disabled: true,
+    badge:    { cls: "status-warning", text: "⏸️ Nghỉ trưa" },
+  },
   // pre_ot_rest có 2 sub-state — button_enabled từ server quyết định
   pre_ot_rest: {
     btnText:  "🔳 XÁC THỰC TĂNG CA",   // enabled khi approved, chưa check-in OT
     btnClass: "btn-primary",
-    disabled: false,                     // server sẽ override nếu cần disable
+    disabled: true,                     // server sẽ override nếu cần disable
     badge:    { cls: "status-warning", text: "🟡 Nghỉ trước tăng ca" },
   },
   working_overtime: {
@@ -136,8 +142,16 @@ export class Attendance {
   }
 
   // ── Xử lý toàn bộ luồng sau khi scan QR ──────────────────
+  static _lockScanButtonTemporarily() {
+    const btn = document.getElementById("attendanceBtn");
+    if (!btn) return;
+    btn.disabled = true;
+    btn.classList.add("btn-disabled");
+  }
+
   static async handleQrScan(qrText, serverNow) {
     const simulatedNow = serverNow || toLocalISO(new Date());
+    this._lockScanButtonTemporarily();
 
     let res;
     try {
@@ -423,6 +437,9 @@ export class Attendance {
 
     // Cập nhật message nếu có
     if (data.message) this._updateOtStatusBox(data.message, data.overtime_status?.toLowerCase());
+  }
+  static updateBadgeUI(state) {
+    this._updateBadge(state);
   }
 
   static _updateBadge(state) {
