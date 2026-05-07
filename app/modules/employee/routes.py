@@ -981,7 +981,47 @@ def attendance_state_api():
         },
         **state,
     })
+@employee_bp.route("/attendance/check", methods=["POST"])
+def employee_attendance_check_api():
+    guard = _ensure_login()
+    if guard:
+        return jsonify({"message": "Unauthorized"}), 401
 
+    employee = _current_employee()
+    if not employee:
+        return jsonify({"message": "Employee not found"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    simulated_now = payload.get("simulated_now") or session.get("simulated_now")
+    if simulated_now:
+        session["simulated_now"] = simulated_now
+
+    try:
+        result = AttendanceService.process_employee_action(employee.id, payload, simulated_now)
+        action = result.get("action")
+        response_type = result.get("type", "success")
+        return jsonify({
+            "status": "success",
+            "type": response_type,
+            "message": result.get("message"),
+            "action": action,
+            "data": result,
+        })
+    except ValidationError as e:
+        return jsonify({
+            "status": "error",
+            "type": "error",
+            "message": str(e),
+            "error_code": "ATTENDANCE_VALIDATION_FAILED",
+        }), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "type": "error",
+            "message": f"Lỗi hệ thống: {str(e)}",
+            "error_code": "ATTENDANCE_CHECK_FAILED",
+        }), 500
 @employee_bp.route("/attendance/delete", methods=["DELETE"])
 def delete_attendance_record():
     guard = _ensure_login()
