@@ -8,7 +8,7 @@
   --bg-card: #ffffff;
 
   --text-main: #0f172a;
-  --text-muted: #64748b;
+  --text-muted: #0f1010;
 
   --border: #e2e8f0;
 
@@ -373,103 +373,177 @@ p:contains("Công hôm nay") {
     {% endif %}
 
   </div>{# end demo-time-bar #}
+{# ========== PHẦN CẦN SỬA TRONG: attendance.html ========== #}
+{# Thay thế phần "Lịch sử chấm công" (từ thẻ <section>) bằng code dưới #}
 
+{# ── LỊCH SỬ CHẤM CÔNG ─────────────────────────────────── #}
+<section class="emp-card" style="margin-top:20px;">
+  <h3>📋 Lịch sử chấm công</h3>
 
-  {# ── LỊCH SỬ CHẤM CÔNG ─────────────────────────────────── #}
-  <section class="emp-card" style="margin-top:20px;">
-    <h3>Lịch sử chấm công</h3>
-<div class="history-filter" style="margin-bottom:16px; display:flex; gap:10px; align-items:center;">
-  
-  <select id="filterMonth" class="form-control" style="width:120px;">
-    {% for m in range(1, 13) %}
-      <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>
-        Tháng {{ "0%d"|format(m) if m < 10 else m }}
-      </option>
-    {% endfor %}
-  </select>
+  {# ── FILTER THÁNG/NĂM ─────────────────────────────────── #}
+  <div class="history-filter" style="margin-bottom:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    
+    <select id="filterMonth" class="form-control" style="width:120px;">
+      {% for m in range(1, 13) %}
+        <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>
+          Tháng {{ "0%d"|format(m) if m < 10 else m }}
+        </option>
+      {% endfor %}
+    </select>
 
-  <select id="filterYear" class="form-control" style="width:120px;">
-    {# Duyệt từ năm hiện tại lùi về 3 năm trước #}
-    {% set start_year = now.year %}
-    {% for y in range(start_year - 3, start_year + 1) %}
-      <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>
-        Năm {{ y }}
-      </option>
-    {% endfor %}
-  </select>
+    <select id="filterYear" class="form-control" style="width:120px;">
+      {# Duyệt từ năm hiện tại lùi về 3 năm trước #}
+      {% set start_year = now.year %}
+      {% for y in range(start_year - 3, start_year + 1) %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>
+          Năm {{ y }}
+        </option>
+      {% endfor %}
+    </select>
 
-  <button type="button" class="btn btn-primary" onclick="applyHistoryFilter()">
-    <i class="fas fa-filter"></i> Lọc dữ liệu
-  </button>
+    <button type="button" class="btn btn-primary" onclick="applyHistoryFilter()">
+      <i class="fas fa-filter"></i> Lọc dữ liệu
+    </button>
 
-  {# Hiển thị trạng thái lọc để người dùng biết họ đang xem gì #}
-  <span class="text-muted" style="font-size: 13px; margin-left: 10px;">
-    Đang xem: {{ selected_month }}/{{ selected_year }}
-  </span>
-</div>
-    <table class="emp-table">
-      <thead>
+    {# Hiển thị trạng thái lọc để người dùng biết họ đang xem gì #}
+    <span class="text-muted" style="font-size: 13px; margin-left: 10px;">
+      Đang xem: Tháng {{ selected_month }}/{{ selected_year }}
+    </span>
+  </div>
+
+  {# ── BẢNG LỊCH SỬ ─────────────────────────────────────── #}
+  <table class="emp-table">
+    <thead>
+      <tr>
+        <th>Ngày</th>
+        <th>Giờ vào</th>
+        <th>Giờ ra</th>
+        <th>Công chuẩn</th>
+        <th>Tăng ca</th>
+        <th>Trạng thái</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if history %}
+        {% for a in history %}
         <tr>
-          <th>Ngày</th>
-          <th>Giờ vào</th>
-          <th>Giờ ra</th>
-          <th>Công chuẩn</th>
-          <th>Tăng ca</th>
-          <th>Trạng thái</th>
-          <th>Hành động</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if history %}
-          {% for a in history %}
-          <tr>
-            <td>{{ a.date.strftime('%d/%m/%Y') }}</td>
-            <td>{{ a.check_in.strftime('%H:%M') if a.check_in else '--:--' }}</td>
-            <td>{{ a.check_out.strftime('%H:%M') if a.check_out else '--:--' }}</td>
-            <td>{{ '%.2f'|format((a.regular_hours or 0)|float) }}h</td>
-            <td>{{ '%.2f'|format((a.overtime_hours or 0)|float) }}h</td>
-            <td>
-              {%- set ss = a.normalized_shift_status if a.normalized_shift_status else a.shift_status -%}
-              {% if ss == 'completed' %}
-                <span class="status status-success">🏁 Hoàn tất</span>
-              {% elif ss == 'working_regular' %}
-                <span class="status status-warning">🟢 Đang làm ca chính</span>
-              {% elif ss == 'working_overtime' %}
-                <span class="status status-warning">🟣 Đang tăng ca</span>
-              {% elif ss == 'regular_done' %}
-                <span class="status status-success">✅ Ca chính xong</span>
-              {% elif ss == 'regular_done_pending_ot_decision' %}
-                <span class="status status-warning">⏳ Chờ duyệt OT</span>
-              {% elif ss == 'pre_ot_rest' %}
-                <span class="status status-warning">🟡 Nghỉ trước OT</span>
-              {% elif ss == 'absent' %}
-                <span class="status status-danger">❌ Vắng mặt</span>
-              {% elif ss == 'leave' %}
-                <span class="status status-info">📋 Nghỉ phép</span>
-              {% elif ss == 'holiday_off' %}
-                <span class="status status-info">🎉 Nghỉ lễ</span>
-              {% elif ss == 'weekend_off' %}
-                <span class="status status-info">🛌 Nghỉ cuối tuần</span>
-              {% elif a.check_in and not a.check_out %}
-                <span class="status status-warning">🟢 Đang làm</span>
-              {% else %}
-                <span class="status status-danger">❌ Chưa vào ca</span>
-              {% endif %}
-            </td>
-            <td>
+          <td>
+            {% if a.date %}
+              {% set weekdays = [
+                'Thứ hai',
+                'Thứ ba',
+                'Thứ tư',
+                'Thứ năm',
+                'Thứ sáu',
+                'Thứ bảy',
+                'Chủ nhật'
+              ] %}
+
+              <div style="display:flex; flex-direction:column; line-height:1.4;">
+                <strong>{{ a.date.strftime('%d/%m/%Y') }}</strong>
+
+                <span style="font-size:12px; color:#64748b;">
+                  {{ weekdays[a.date.weekday()] }}
+                </span>
+              </div>
+
+            {% else %}
+              <span class="text-muted">N/A</span>
+            {% endif %}
+          </td>
+          
+          {# Giờ vào #}
+          <td>
+            {% if a.check_in %}
+              {{ a.check_in.strftime('%H:%M') }}
+            {% else %}
+              <span class="text-muted">--:--</span>
+            {% endif %}
+          </td>
+          
+          {# Giờ ra #}
+          <td>
+            {% if a.check_out %}
+              {{ a.check_out.strftime('%H:%M') }}
+            {% else %}
+              <span class="text-muted">--:--</span>
+            {% endif %}
+          </td>
+          
+          {# Công chuẩn #}
+          <td>
+            {% if a.regular_hours and a.regular_hours > 0 %}
+              {{ '%.2f'|format((a.regular_hours or 0)|float) }}h
+            {% else %}
+              <span class="text-muted">0.00h</span>
+            {% endif %}
+          </td>
+          
+          {# Tăng ca #}
+          <td>
+            {% if a.overtime_hours and a.overtime_hours > 0 %}
+              {{ '%.2f'|format((a.overtime_hours or 0)|float) }}h
+            {% else %}
+              <span class="text-muted">0.00h</span>
+            {% endif %}
+          </td>
+          
+          {# Trạng thái #}
+          <td>
+            {%- set ss = a.normalized_shift_status if a.normalized_shift_status else a.shift_status -%}
+            {% if ss == 'completed' %}
+              <span class="status status-success">🏁 Hoàn tất</span>
+            {% elif ss == 'working_regular' %}
+              <span class="status status-warning">🟢 Đang làm ca chính</span>
+            {% elif ss == 'working_overtime' %}
+              <span class="status status-warning">🟣 Đang tăng ca</span>
+            {% elif ss == 'regular_done' %}
+              <span class="status status-success">✅ Ca chính xong</span>
+            {% elif ss == 'regular_done_pending_ot_decision' %}
+              <span class="status status-warning">⏳ Chờ duyệt OT</span>
+            {% elif ss == 'pre_ot_rest' %}
+              <span class="status status-warning">🟡 Nghỉ trước OT</span>
+            {% elif ss == 'absent' %}
+              <span class="status status-danger">❌ Vắng mặt</span>
+            {% elif ss == 'leave' %}
+              <span class="status status-info">📋 Nghỉ phép</span>
+            {% elif ss == 'holiday_off' %}
+              <span class="status status-info">🎉 Nghỉ lễ</span>
+            {% elif ss == 'weekend_off' %}
+              <span class="status status-info">🛌 Nghỉ cuối tuần</span>
+            {% elif ss == 'not_started' %}
+              <span class="status status-muted">🕐 Chưa bắt đầu</span>
+            {% elif a.check_in and not a.check_out %}
+              <span class="status status-warning">🟢 Đang làm</span>
+            {% else %}
+              <span class="status status-danger">❌ {{ ss or 'Chưa rõ' }}</span>
+            {% endif %}
+          </td>
+          
+          {# Hành động #}
+          <td>
+            {% if a.id %}
               <button type="button" class="btn btn-danger btn-sm"
                 onclick="deleteRecord('{{ a.date.isoformat() }}')">
-                Xóa
+                ❌ Xóa
               </button>
-            </td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr><td colspan="7">Chưa có dữ liệu chấm công.</td></tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </section>
+            {% else %}
+              <span class="text-muted">--</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center; color: #999;">
+            📭 Chưa có dữ liệu chấm công trong tháng này
+          </td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
 
 </div>
 
@@ -553,6 +627,7 @@ function renderClock() {
 
   // Cập nhật data-server-now ngay để handleQrScan dùng đúng giờ
   if (root) root.dataset.serverNow = toLocalISO(simDate);
+  renderDateText();
 }
 
 const UNIT_MS = { h: 3600000, m: 60000, s: 1000, d: 86400000 };
@@ -838,5 +913,27 @@ window.applyHistoryFilter = () => {
 
     window.location.href = `${baseUrl}?${params.toString()}`;
 };
+function renderDateText() {
+  const el = document.getElementById("dateText");
+  if (!el) return;
+
+  const weekdays = [
+    "Chủ nhật",
+    "Thứ hai",
+    "Thứ ba",
+    "Thứ tư",
+    "Thứ năm",
+    "Thứ sáu",
+    "Thứ bảy"
+  ];
+
+  const dayName = weekdays[simDate.getDay()];
+
+  const dd = String(simDate.getDate()).padStart(2, "0");
+  const mm = String(simDate.getMonth() + 1).padStart(2, "0");
+  const yyyy = simDate.getFullYear();
+
+  el.textContent = `${dayName}, ngày ${dd}/${mm}/${yyyy}`;
+}
 </script>
 {% endblock %}

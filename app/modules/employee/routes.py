@@ -820,13 +820,16 @@ def attendance():
     if selected_year and selected_year > 2000:
         filters.append(extract('year', Attendance.date) == selected_year)
 
-    history = (
-        Attendance.query.filter(*filters)
-        .order_by(Attendance.date.desc())
-        .all()
-        if employee and filters
-        else []
-    )
+    try:
+        history = AttendanceService.get_history(
+            employee.id,
+            session.get("simulated_now"),
+            month=selected_month,
+            year=selected_year,
+        ) if employee else []
+    except ValidationError as e:
+        flash(f"Lỗi lọc dữ liệu: {str(e)}", "warning")
+        history = []
 
     # ── 6. Xử lý OT request ──────────────────────
     today_ot_request = (

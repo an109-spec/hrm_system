@@ -289,8 +289,23 @@ class AttendanceService:
         month: int | None = None,
         year: int | None = None,
     ):
+        """
+        Truy vấn lịch sử chấm công theo tháng.
+        
+        - Nếu không có month/year: trả về `limit` bản ghi gần nhất
+        - Nếu có month/year: trả về ĐẦY ĐỦ tất cả ngày trong tháng với các trạng thái:
+        * Ngày có bản ghi chấm công → dùng bản ghi
+        * Ngày có đơn nghỉ phép đã duyệt → LEAVE
+        * Ngày là lễ → HOLIDAY_OFF (🎉)
+        * Ngày cuối tuần → WEEKEND_OFF (🛌)
+        * Ngày khác → ABSENT (vắng mặt ❌)
+        """
+        from calendar import monthrange
+        
         sim_time_str = sim_time_str or session.get("simulated_now")
         now_dt = AttendanceService.parse_time(sim_time_str)
+        
+        # ─────── TRƯỜNG HỢP 1: Không chỉ định tháng/năm ───────
         if not month or not year:
             return (
                 Attendance.query.filter(
@@ -302,11 +317,28 @@ class AttendanceService:
                 .all()
             )
 
+        # ─────── TRƯỜNG HỢP 2: Có chỉ định tháng/năm ───────
+        
+        # Validate tháng
+        if month < 1 or month > 12:
+            raise ValidationError("Tháng không hợp lệ")
+
+        # Xác định phạm vi ngày
         last_day = monthrange(year, month)[1]
         month_start = date(year, month, 1)
         month_end = date(year, month, last_day)
-        effective_end = min(month_end, now_dt.date())
+        
+        # Chỉ hiển thị đến hôm nay nếu tháng hiện tại
+        effective_end = (
+            month_end 
+            if (year, month) < (now_dt.year, now_dt.month) 
+            else min(month_end, now_dt.date())
+        )
 
+        if effective_end < month_start:
+            return []
+
+        # ─────── 1. Lấy bản ghi chấm công có sẵn ───────
         attendance_rows = (
             Attendance.query.filter(
                 Attendance.employee_id == employee_id,
@@ -317,10 +349,12 @@ class AttendanceService:
         )
         attendance_by_date = {row.date: row for row in attendance_rows}
 
+        # ─────── 2. Lấy danh sách ngày nghỉ phép đã duyệt ───────
         leave_rows = (
             LeaveRequest.query.filter(
                 LeaveRequest.employee_id == employee_id,
                 LeaveRequest.status == "approved",
+                LeaveRequest.is_deleted.is_(False),  # 🔥 QUAN TRỌNG: chỉ lấy đơn chưa xóa
                 LeaveRequest.from_date <= effective_end,
                 LeaveRequest.to_date >= month_start,
             )
@@ -335,33 +369,52 @@ class AttendanceService:
                 leave_dates.add(current)
                 current = current.fromordinal(current.toordinal() + 1)
 
-        holidays = Holiday.query.filter(
+        # ─────── 3. Lấy danh sách ngày lễ ───────
+        fixed_holidays = Holiday.query.filter(
+            Holiday.is_recurring.is_(False),
             Holiday.date >= month_start,
             Holiday.date <= effective_end,
         ).all()
-        holiday_dates = {h.date for h in holidays}
+        recurring_holidays = Holiday.query.filter_by(is_recurring=True).all()
+        holiday_dates = {h.date for h in fixed_holidays}
+        
+        for holiday in recurring_holidays:
+            try:
+                recurring_date = date(year, month, holiday.date.day)
+            except ValueError:
+                continue
+            if month_start <= recurring_date <= effective_end:
+                holiday_dates.add(recurring_date)
 
+        # ─────── 4. Xây dựng lịch sử đầy đủ từng ngày ───────
         history = []
         current = effective_end
+        
         while current >= month_start:
             if current in attendance_by_date:
+                # ✅ Có bản ghi chấm công → dùng bản ghi
                 history.append(attendance_by_date[current])
             else:
-                is_weekend = current.weekday() >= 5
+                # ❌ Không có bản ghi → xác định trạng thái mặc định
+                is_weekend = current.weekday() >= 5  # Thứ 6, 7
                 is_holiday = current in holiday_dates
                 is_leave = current in leave_dates
-                shift_status = (
-                    Attendance.ShiftStatus.HOLIDAY_OFF if is_holiday else
-                    Attendance.ShiftStatus.WEEKEND_OFF if is_weekend else
-                    Attendance.ShiftStatus.LEAVE if is_leave else
-                    Attendance.ShiftStatus.ABSENT
-                )
-                attendance_type = (
-                    Attendance.Type.HOLIDAY if is_holiday else
-                    Attendance.Type.WEEKEND if is_weekend else
-                    Attendance.Type.LEAVE if is_leave else
-                    Attendance.Type.ABSENT
-                )
+                
+                # ⚡ Ưu tiên: leave > holiday > weekend > absent
+                if is_leave:
+                    shift_status = Attendance.ShiftStatus.LEAVE
+                    attendance_type = Attendance.Type.LEAVE
+                elif is_holiday:
+                    shift_status = Attendance.ShiftStatus.HOLIDAY_OFF
+                    attendance_type = Attendance.Type.HOLIDAY
+                elif is_weekend:
+                    shift_status = Attendance.ShiftStatus.WEEKEND_OFF
+                    attendance_type = Attendance.Type.WEEKEND
+                else:
+                    shift_status = Attendance.ShiftStatus.ABSENT
+                    attendance_type = Attendance.Type.ABSENT
+                
+                # Tạo object giả lập (không lưu DB)
                 history.append(SimpleNamespace(
                     id=None,
                     date=current,
@@ -369,16 +422,18 @@ class AttendanceService:
                     check_out=None,
                     regular_hours=Decimal("0.00"),
                     overtime_hours=Decimal("0.00"),
+                    working_hours=Decimal("0.00"),  # 🔥 THÊM FIELD NÀY
                     shift_status=shift_status,
                     normalized_shift_status=shift_status,
                     attendance_type=attendance_type,
                     is_weekend=is_weekend,
                     is_holiday=is_holiday,
+                    late_minutes=0,
+                    is_half_day=False,
                 ))
             current = current.fromordinal(current.toordinal() - 1)
 
         return history
-
     @staticmethod
     def delete_attendance(employee_id: int, date_str: str) -> date | None:
         try:
