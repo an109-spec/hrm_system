@@ -827,20 +827,15 @@ window.resetOtRequest = async () => {
 window.applyHistoryFilter = () => {
     const month = document.getElementById("filterMonth").value;
     const year  = document.getElementById("filterYear").value;
-
-    // ✅ Validate input
     if (!month || !year) {
         alert("Vui lòng chọn tháng và năm");
         return;
     }
-
-    // ✅ Tạo URL sạch sẽ
     const baseUrl = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
     params.set("month", month);
     params.set("year", year);
 
-    // ✅ Navigate với query string đúng
     window.location.href = `${baseUrl}?${params.toString()}`;
 };
 </script>

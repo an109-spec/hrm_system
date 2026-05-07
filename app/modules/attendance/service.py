@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime, time, date
+from calendar import monthrange
+from types import SimpleNamespace
 from decimal import Decimal
 
 from flask import session
 
 from app.extensions import db
-from app.models import Attendance, AttendanceStatus, Employee, Holiday, OvertimeRequest
+from app.models import Attendance, AttendanceStatus, Employee, Holiday, OvertimeRequest, LeaveRequest
 from app.common.exceptions import ValidationError
 
 # Hệ số công ngày lễ / cuối tuần (theo spec: x3)
@@ -280,18 +282,102 @@ class AttendanceService:
         ).first()
 
     @staticmethod
-    def get_history(employee_id: int, sim_time_str: str | None = None, limit: int = 10):
+    def get_history(
+        employee_id: int,
+        sim_time_str: str | None = None,
+        limit: int = 10,
+        month: int | None = None,
+        year: int | None = None,
+    ):
         sim_time_str = sim_time_str or session.get("simulated_now")
         now_dt = AttendanceService.parse_time(sim_time_str)
-        return (
+        if not month or not year:
+            return (
+                Attendance.query.filter(
+                    Attendance.employee_id == employee_id,
+                    Attendance.date <= now_dt.date(),
+                )
+                .order_by(Attendance.date.desc())
+                .limit(limit)
+                .all()
+            )
+
+        last_day = monthrange(year, month)[1]
+        month_start = date(year, month, 1)
+        month_end = date(year, month, last_day)
+        effective_end = min(month_end, now_dt.date())
+
+        attendance_rows = (
             Attendance.query.filter(
                 Attendance.employee_id == employee_id,
-                Attendance.date <= now_dt.date(),
+                Attendance.date >= month_start,
+                Attendance.date <= effective_end,
             )
-            .order_by(Attendance.date.desc())
-            .limit(limit)
             .all()
         )
+        attendance_by_date = {row.date: row for row in attendance_rows}
+
+        leave_rows = (
+            LeaveRequest.query.filter(
+                LeaveRequest.employee_id == employee_id,
+                LeaveRequest.status == "approved",
+                LeaveRequest.from_date <= effective_end,
+                LeaveRequest.to_date >= month_start,
+            )
+            .all()
+        )
+        leave_dates = set()
+        for leave in leave_rows:
+            start = max(leave.from_date, month_start)
+            end = min(leave.to_date, effective_end)
+            current = start
+            while current <= end:
+                leave_dates.add(current)
+                current = current.fromordinal(current.toordinal() + 1)
+
+        holidays = Holiday.query.filter(
+            Holiday.date >= month_start,
+            Holiday.date <= effective_end,
+        ).all()
+        holiday_dates = {h.date for h in holidays}
+
+        history = []
+        current = effective_end
+        while current >= month_start:
+            if current in attendance_by_date:
+                history.append(attendance_by_date[current])
+            else:
+                is_weekend = current.weekday() >= 5
+                is_holiday = current in holiday_dates
+                is_leave = current in leave_dates
+                shift_status = (
+                    Attendance.ShiftStatus.HOLIDAY_OFF if is_holiday else
+                    Attendance.ShiftStatus.WEEKEND_OFF if is_weekend else
+                    Attendance.ShiftStatus.LEAVE if is_leave else
+                    Attendance.ShiftStatus.ABSENT
+                )
+                attendance_type = (
+                    Attendance.Type.HOLIDAY if is_holiday else
+                    Attendance.Type.WEEKEND if is_weekend else
+                    Attendance.Type.LEAVE if is_leave else
+                    Attendance.Type.ABSENT
+                )
+                history.append(SimpleNamespace(
+                    id=None,
+                    date=current,
+                    check_in=None,
+                    check_out=None,
+                    regular_hours=Decimal("0.00"),
+                    overtime_hours=Decimal("0.00"),
+                    shift_status=shift_status,
+                    normalized_shift_status=shift_status,
+                    attendance_type=attendance_type,
+                    is_weekend=is_weekend,
+                    is_holiday=is_holiday,
+                ))
+            current = current.fromordinal(current.toordinal() - 1)
+
+        return history
 
     @staticmethod
     def delete_attendance(employee_id: int, date_str: str) -> date | None:

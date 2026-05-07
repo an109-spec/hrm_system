@@ -63,8 +63,15 @@ def attendance_page():
         session["simulated_now"] = simulated_now
     else:
         now = datetime.now()
+    selected_month = request.args.get("month", type=int) or now.month
+    selected_year = request.args.get("year", type=int) or now.year
     today = AttendanceService.get_today(employee.id, simulated_now)
-    history = AttendanceService.get_history(employee.id, simulated_now)
+    history = AttendanceService.get_history(
+        employee.id,
+        simulated_now,
+        month=selected_month,
+        year=selected_year,
+    )
 
     for a in history:
         if a.check_in and a.check_out:
@@ -75,7 +82,9 @@ def attendance_page():
         employee=employee,
         today=today,
         history=history,
-        now=now
+        now=now,
+        selected_month=selected_month,
+        selected_year=selected_year,
     )
 
 

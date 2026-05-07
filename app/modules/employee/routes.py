@@ -873,8 +873,8 @@ def attendance():
         today=today,
         history=history,
         now=now,
-        selected_month=selected_month,    # ✅ QUAN TRỌNG
-        selected_year=selected_year,      # ✅ QUAN TRỌNG
+        selected_month=selected_month,  
+        selected_year=selected_year,   
         current_year=now.year,
         today_holiday=today_holiday,
         holiday_lookup=holiday_lookup,
