@@ -892,7 +892,10 @@ def system_time_control():
     guard = _ensure_login()
     if guard:
         return jsonify({"message": "Unauthorized"}), 401
-
+ 
+    from app.utils.time import get_current_time
+    from app.models import OvertimeRequest
+ 
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         now = get_current_time(payload)
@@ -901,49 +904,44 @@ def system_time_control():
     else:
         now = get_current_time({})
         session["system_time_mode"] = "SIMULATED" if session.get("simulated_now") else "REAL"
-
-    # ===== RULE CA LÀM =====
-    shift_start = time(8, 0)
-    shift_end   = time(17, 0)
-    ot_start    = time(19, 0)
-
-    current_time = now.time()
-
-    # ===== GIẢ LẬP STATE MACHINE =====
-    if current_time < shift_start:
-        attendance_state = "not_started"
-        can_check_in  = True
-        can_check_out = False
-
-    elif shift_start <= current_time < shift_end:
-        attendance_state = "working_regular"
-        can_check_in  = False
-        can_check_out = True
-
-    elif shift_end <= current_time < ot_start:
-        attendance_state = "pre_ot_rest"
-        can_check_in  = False
-        can_check_out = False
-
-    else:
-        attendance_state = "working_overtime"
-        can_check_in  = False
-        can_check_out = True
-
-    # ===== TÍNH GIỜ CÔNG DEMO =====
-    worked_hours = max(0, (now.hour + now.minute/60) - 8)
-    overtime_hours = max(0, (now.hour + now.minute/60) - 19)
-
+ 
+    employee = _current_employee()
+    attendance = None
+    ot_request = None
+    if employee:
+        attendance = AttendanceService.get_today(employee.id, now.isoformat())
+        ot_request = (
+            OvertimeRequest.query.filter_by(
+                employee_id=employee.id,
+                overtime_date=now.date(),
+                is_deleted=False,
+            )
+            .order_by(OvertimeRequest.id.desc())
+            .first()
+        )
+ 
+    # ── SINGLE SOURCE OF TRUTH — không tính state riêng nữa ─────────────
+    state_result = AttendanceService.compute_attendance_state(now, attendance, ot_request)
+ 
+    att_payload    = AttendanceService.build_attendance_payload(attendance) if attendance else {}
+    regular_hours  = float(att_payload.get("regular_hours",  0) or 0) if att_payload else 0.0
+    overtime_hours = float(att_payload.get("overtime_hours", 0) or 0) if att_payload else 0.0
+ 
     return jsonify({
-        "mode": session.get("system_time_mode", "REAL"),
-        "current_time": now.isoformat(),
-        "attendance_state": attendance_state,
-        "can_check_in": can_check_in,
-        "can_check_out": can_check_out,
-        "regular_hours": round(min(worked_hours, 9), 2),
-        "overtime_hours": round(overtime_hours, 2)
+        "mode":             session.get("system_time_mode", "REAL"),
+        "current_time":     now.isoformat(),
+        "attendance_state": state_result.state,
+        "button_enabled":   state_result.button_enabled,
+        "button_text":      state_result.button_text,
+        "can_scan":         state_result.can_scan,
+        "message":          state_result.message,
+        "overtime_status":  state_result.overtime_status,
+        "regular_hours":    regular_hours,
+        "overtime_hours":   overtime_hours,
+        # backward compat với FE cũ
+        "can_check_in":     state_result.state == "not_started",
+        "can_check_out":    state_result.state == "working_regular" and state_result.button_enabled,
     })
-
 
 @employee_bp.route("/attendance/state", methods=["GET"])
 def attendance_state_api():

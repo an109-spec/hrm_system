@@ -1,39 +1,99 @@
-# app/modules/attendance/service.py
 from __future__ import annotations
 
 from datetime import datetime, time, date
-from calendar import monthrange
-from types import SimpleNamespace
 from decimal import Decimal
+from types import SimpleNamespace
 
 from flask import session
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.models import Attendance, AttendanceStatus, Employee, Holiday, OvertimeRequest, LeaveRequest
+from app.models import (
+    Attendance,
+    AttendanceStatus,
+    Employee,
+    Holiday,
+    Notification,
+    OvertimeRequest,
+    LeaveRequest,
+)
 from app.common.exceptions import ValidationError
 
-# Hệ số công ngày lễ / cuối tuần (theo spec: x3)
-HOLIDAY_MULTIPLIER = Decimal("3.00")
-WEEKEND_MULTIPLIER = Decimal("3.00")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TIME CONSTANTS  ← single source of truth, không được define lại ở routes
+# ══════════════════════════════════════════════════════════════════════════════
+
+REGULAR_START    = time(8,  0, 0)
+REGULAR_END      = time(17, 0, 0)
+LUNCH_START      = time(12, 0, 0)
+LUNCH_END        = time(13, 0, 0)
+LATE_THRESHOLD   = time(9,  0, 0)   # check-in sau giờ này → is_half_day
+OT_CHECKIN_OPEN  = time(19, 0, 0)   # giờ hiệu lực OT (clamp khi tính công)
+OT_END           = time(22, 0, 0)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MULTIPLIERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+HOLIDAY_MULTIPLIER = Decimal("3.00")
+WEEKEND_MULTIPLIER = Decimal("1.00")   # ← cuối tuần KHÔNG nhân hệ số
+NORMAL_MULTIPLIER  = Decimal("1.00")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RESULT TYPE cho compute_attendance_state
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AttendanceStateResult:
+    """Kết quả duy nhất từ compute_attendance_state() — mọi nơi đều dùng cái này."""
+
+    def __init__(
+        self,
+        state: str,
+        button_enabled: bool,
+        button_text: str,
+        can_scan: bool,
+        message: str | None = None,
+        overtime_status: str | None = None,
+    ):
+        self.state          = state
+        self.button_enabled = button_enabled
+        self.button_text    = button_text
+        self.can_scan       = can_scan
+        self.message        = message
+        self.overtime_status = overtime_status
+
+    def to_dict(self) -> dict:
+        return {
+            "attendance_state": self.state,
+            "button_enabled":   self.button_enabled,
+            "button_text":      self.button_text,
+            "can_scan":         self.can_scan,
+            "message":          self.message,
+            "overtime_status":  self.overtime_status,
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AttendanceService
+# ══════════════════════════════════════════════════════════════════════════════
 
 class AttendanceService:
-    # =========================================================
-    # CONFIG
-    # =========================================================
-    MIN_OT_REST_MINUTES = 30
-    REGULAR_START    = time(8,  0, 0)
-    REGULAR_END      = time(17, 0, 0)
-    LUNCH_START      = time(12, 0, 0)
-    LUNCH_END        = time(13, 0, 0)
-    HALF_DAY_THRESHOLD = time(9, 0, 0)
-    OT_START         = time(19, 0, 0)
-    OT_END           = time(22, 0, 0)
-    OT_EARLY_CHECKIN = time(18, 30, 0)
 
-    # =========================================================
-    # ACTION CONSTANTS
-    # =========================================================
+    # ── config (re-export để backward compat) ─────────────────────────────
+    REGULAR_START     = REGULAR_START
+    REGULAR_END       = REGULAR_END
+    LUNCH_START       = LUNCH_START
+    LUNCH_END         = LUNCH_END
+    LATE_THRESHOLD    = LATE_THRESHOLD
+    OT_START          = OT_CHECKIN_OPEN   # alias
+    OT_CHECKIN_OPEN   = OT_CHECKIN_OPEN
+    OT_END            = OT_END
+    OT_EARLY_CHECKIN  = OT_CHECKIN_OPEN   # alias — xóa magic 18:30 cũ
+    MIN_OT_REST_MINUTES = 0               # không còn bắt buộc đợi 30p
+
+    # ── action constants ───────────────────────────────────────────────────
     ACTION_CHECK_IN                   = "check_in"
     ACTION_CHECK_OUT                  = "check_out"
     ACTION_CHECK_IN_OT                = "check_in_overtime"
@@ -42,16 +102,169 @@ class AttendanceService:
     ACTION_WEEKEND_WORK_PROMPT        = "weekend_work_prompt"
     ACTION_EARLY_CHECKOUT_PROMPT      = "early_checkout_prompt"
     ACTION_OFFER_OVERTIME             = "offer_overtime"
-    ACTION_ALREADY_RECORDED           = "already_recorded"
+    ACTION_ALREADY_RECORDED          = "already_recorded"
     ACTION_OVERTIME_REQUEST_CREATED   = "overtime_request_created"
     ACTION_COMPLETE_WITHOUT_OT        = "complete_without_overtime"
     ACTION_HOLIDAY_OFF                = "holiday_off"
     ACTION_WEEKEND_OFF                = "weekend_off"
     ACTION_OVERTIME_DECISION_RECORDED = "overtime_decision_recorded"
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
+    # COMPUTE_ATTENDANCE_STATE  ← single source of truth
+    # ══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def compute_attendance_state(
+        now: datetime,
+        attendance: Attendance | None,
+        ot_request: OvertimeRequest | None = None,
+    ) -> AttendanceStateResult:
+        """
+        Tính trạng thái chấm công tại thời điểm `now`.
+        Đây là HÀM DUY NHẤT được phép quyết định state — không tính lại ở routes.
+        """
+        current_time = now.time()
+
+        # ── Nếu chưa có bản ghi ──────────────────────────────────────────
+        if not attendance or not attendance.check_in:
+            return AttendanceStateResult(
+                state="not_started",
+                button_enabled=True,
+                button_text="🔳 XÁC THỰC CHẤM CÔNG",
+                can_scan=True,
+            )
+
+        raw_state = Attendance.ShiftStatus.normalize(attendance.shift_status)
+
+        # ── Terminal states ───────────────────────────────────────────────
+        if raw_state == Attendance.ShiftStatus.COMPLETED:
+            return AttendanceStateResult(
+                state="completed",
+                button_enabled=False,
+                button_text="✅ ĐÃ HOÀN THÀNH CÔNG VIỆC",
+                can_scan=False,
+            )
+        if raw_state == Attendance.ShiftStatus.HOLIDAY_OFF:
+            return AttendanceStateResult(
+                state="holiday_off",
+                button_enabled=False,
+                button_text="🎉 Đã ghi nhận nghỉ lễ",
+                can_scan=False,
+            )
+        if raw_state == Attendance.ShiftStatus.WEEKEND_OFF:
+            return AttendanceStateResult(
+                state="weekend_off",
+                button_enabled=False,
+                button_text="🛌 Đã ghi nhận nghỉ cuối tuần",
+                can_scan=False,
+            )
+        if raw_state == Attendance.ShiftStatus.LEAVE:
+            return AttendanceStateResult(
+                state="leave",
+                button_enabled=False,
+                button_text="📋 Đang nghỉ phép",
+                can_scan=False,
+            )
+        if raw_state == Attendance.ShiftStatus.ABSENT:
+            return AttendanceStateResult(
+                state="absent",
+                button_enabled=False,
+                button_text="❌ Vắng mặt",
+                can_scan=False,
+            )
+
+        # ── Đang làm ca chính ─────────────────────────────────────────────
+        if raw_state == Attendance.ShiftStatus.WORKING_REGULAR:
+            # Giờ nghỉ trưa → disable
+            if LUNCH_START <= current_time < LUNCH_END:
+                return AttendanceStateResult(
+                    state="working_regular",
+                    button_enabled=False,
+                    button_text="🍽️ ĐANG NGHỈ TRƯA",
+                    can_scan=False,
+                    message="Đang trong giờ nghỉ trưa (12:00–13:00)",
+                )
+            return AttendanceStateResult(
+                state="working_regular",
+                button_enabled=True,
+                button_text="🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
+                can_scan=True,
+            )
+
+        # ── Đã check-out ca chính ─────────────────────────────────────────
+        if raw_state == Attendance.ShiftStatus.REGULAR_DONE:
+            return AttendanceStateResult(
+                state="regular_done",
+                button_enabled=False,
+                button_text="✅ Đã hoàn thành ca chính",
+                can_scan=False,
+                message="Vui lòng xác nhận có muốn tăng ca không",
+            )
+
+        # ── Chờ duyệt OT ─────────────────────────────────────────────────
+        if raw_state == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
+            ot_status = ot_request.status.upper() if ot_request else "PENDING"
+            return AttendanceStateResult(
+                state="regular_done_pending_ot_decision",
+                button_enabled=False,
+                button_text="⏳ ĐANG CHỜ DUYỆT OT",
+                can_scan=False,
+                overtime_status=ot_status,
+                message="Đang chờ HR/Admin phê duyệt tăng ca",
+            )
+
+        # ── OT đã duyệt, nghỉ ngơi trước tăng ca ────────────────────────
+        if raw_state == Attendance.ShiftStatus.PRE_OT_REST:
+            # Sau khi approved: có thể check-in OT ngay (giờ hiệu lực vẫn 19:00)
+            if not attendance.overtime_check_in:
+                return AttendanceStateResult(
+                    state="pre_ot_rest",
+                    button_enabled=True,
+                    button_text="🔳 XÁC THỰC TĂNG CA",
+                    can_scan=True,
+                    message="OT đã được duyệt. Xác thực để bắt đầu tăng ca (công tính từ 19:00)",
+                    overtime_status="APPROVED",
+                )
+            # Đã check-in OT nhưng chưa đến 19:00 → waiting
+            if current_time < OT_CHECKIN_OPEN:
+                return AttendanceStateResult(
+                    state="pre_ot_rest",
+                    button_enabled=False,
+                    button_text=f"⏳ Đã xác thực — chờ đến 19:00",
+                    can_scan=False,
+                    message="Đã xác thực tăng ca. Công OT bắt đầu tính từ 19:00.",
+                    overtime_status="APPROVED",
+                )
+            # Đã qua 19:00 → chuyển sang working_overtime
+            return AttendanceStateResult(
+                state="working_overtime",
+                button_enabled=True,
+                button_text="🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
+                can_scan=True,
+                overtime_status="APPROVED",
+            )
+
+        # ── Đang tăng ca ─────────────────────────────────────────────────
+        if raw_state == Attendance.ShiftStatus.WORKING_OVERTIME:
+            return AttendanceStateResult(
+                state="working_overtime",
+                button_enabled=True,
+                button_text="🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
+                can_scan=True,
+                overtime_status="APPROVED",
+            )
+
+        # ── Fallback ──────────────────────────────────────────────────────
+        return AttendanceStateResult(
+            state=raw_state or "not_started",
+            button_enabled=False,
+            button_text="—",
+            can_scan=False,
+        )
+
+    # ══════════════════════════════════════════════════════════════════════
     # HELPERS
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def parse_time(sim_time_str: str | None = None) -> datetime:
@@ -83,7 +296,13 @@ class AttendanceService:
             is_holiday=False,
         )
         db.session.add(record)
-        db.session.flush()
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            record = Attendance.query.filter_by(
+                employee_id=employee_id, date=now_dt.date()
+            ).first()
         return record
 
     @staticmethod
@@ -104,12 +323,11 @@ class AttendanceService:
 
     @staticmethod
     def _day_multiplier(is_holiday: bool, is_weekend: bool) -> Decimal:
-        """Trả về hệ số nhân công theo loại ngày."""
         if is_holiday:
             return HOLIDAY_MULTIPLIER
         if is_weekend:
             return WEEKEND_MULTIPLIER
-        return Decimal("1.00")
+        return NORMAL_MULTIPLIER
 
     @staticmethod
     def _resolve_attendance_type(
@@ -123,38 +341,39 @@ class AttendanceService:
             return Attendance.Type.WEEKEND
         return Attendance.Type.NORMAL
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # HOUR CALCULATIONS
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def calculate_regular_hours_raw(check_in: datetime, check_out: datetime) -> Decimal:
         """
-        Tính công ca chính CHƯA nhân hệ số.
-        - Bắt đầu: max(check_in, 08:00)  → check-in sớm vẫn tính từ 8h
-        - Kết thúc: min(check_out, 17:00) → check-out muộn vẫn chỉ tính đến 17h
-        - Trừ nghỉ trưa 12:00–13:00 nếu overlap
+        Tính giờ công ca chính CHƯA nhân hệ số.
+        - effective_start = max(check_in, 08:00)
+        - effective_end   = min(check_out, 17:00)
+        - Trừ overlap với 12:00–13:00
+        Ví dụ: check_in=8:47 → effective_start=8:47; check_out=17:00
+               raw = (17:00 - 8:47) - 1h trưa = 7h13m = 7.2167h
         """
         if not check_in or not check_out:
             return Decimal("0.00")
 
-        day        = check_in.date()
-        shift_start = datetime.combine(day, AttendanceService.REGULAR_START)
-        shift_end   = datetime.combine(day, AttendanceService.REGULAR_END)
-        lunch_start = datetime.combine(day, AttendanceService.LUNCH_START)
-        lunch_end   = datetime.combine(day, AttendanceService.LUNCH_END)
+        day         = check_in.date()
+        shift_start = datetime.combine(day, REGULAR_START)
+        shift_end   = datetime.combine(day, REGULAR_END)
+        lunch_start = datetime.combine(day, LUNCH_START)
+        lunch_end   = datetime.combine(day, LUNCH_END)
 
-        actual_start = max(check_in, shift_start)   # check-in sớm → tính từ 8h
-        actual_end   = min(check_out, shift_end)     # check-out muộn → chỉ đến 17h
+        actual_start = max(check_in, shift_start)
+        actual_end   = min(check_out, shift_end)
 
         if actual_end <= actual_start:
             return Decimal("0.00")
 
         total_seconds = (actual_end - actual_start).total_seconds()
 
-        # Trừ nghỉ trưa
         overlap_start = max(actual_start, lunch_start)
-        overlap_end   = min(actual_end,   lunch_end)
+        overlap_end   = min(actual_end, lunch_end)
         lunch_seconds = (
             (overlap_end - overlap_start).total_seconds()
             if overlap_end > overlap_start
@@ -162,11 +381,10 @@ class AttendanceService:
         )
 
         hours = (total_seconds - lunch_seconds) / 3600
-        return Decimal(str(round(max(0, hours), 3)))
+        return Decimal(str(round(max(0.0, hours), 4)))
 
     @staticmethod
     def calculate_regular_hours(check_in: datetime, check_out: datetime) -> Decimal:
-        """Alias để tương thích — trả về công RAW (chưa nhân hệ số)."""
         return AttendanceService.calculate_regular_hours_raw(check_in, check_out)
 
     @staticmethod
@@ -178,21 +396,21 @@ class AttendanceService:
         overtime_check_in: datetime, overtime_check_out: datetime
     ) -> Decimal:
         """
-        Tính công OT CHƯA nhân hệ số.
-        - Chỉ tính trong khung 19:00–22:00
-        - check-in trước 19h → tính từ 19h
-        - check-out sau 22h → chỉ tính đến 22h
+        Tính giờ OT CHƯA nhân hệ số.
+        - effective_start = max(ot_check_in, 19:00)   ← luôn clamp về 19:00
+        - effective_end   = min(ot_check_out, 22:00)
+        Không trừ khoảng nghỉ (17:00–19:00 không tính — nhưng đã bị clamp bởi effective_start).
         """
         if not overtime_check_in or not overtime_check_out:
             return Decimal("0.00")
         if overtime_check_in.tzinfo is not None:
-            overtime_check_in  = overtime_check_in.replace(tzinfo=None)
+            overtime_check_in = overtime_check_in.replace(tzinfo=None)
         if overtime_check_out.tzinfo is not None:
             overtime_check_out = overtime_check_out.replace(tzinfo=None)
 
         day      = overtime_check_in.date()
-        ot_start = datetime.combine(day, AttendanceService.OT_START)
-        ot_end   = datetime.combine(day, AttendanceService.OT_END)
+        ot_start = datetime.combine(day, OT_CHECKIN_OPEN)   # 19:00
+        ot_end   = datetime.combine(day, OT_END)            # 22:00
 
         actual_start = max(ot_start, overtime_check_in)
         actual_end   = min(ot_end,   overtime_check_out)
@@ -201,24 +419,23 @@ class AttendanceService:
             return Decimal("0.00")
 
         hours = (actual_end - actual_start).total_seconds() / 3600
-        return Decimal(str(round(hours, 2)))
+        return Decimal(str(round(hours, 4)))
 
     @staticmethod
     def calculate_overtime_hours(
         overtime_check_in: datetime, overtime_check_out: datetime
     ) -> Decimal:
-        """Alias để tương thích."""
         return AttendanceService.calculate_overtime_hours_raw(overtime_check_in, overtime_check_out)
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # FINALIZE
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def finalize_attendance(record: Attendance, finalize_status: bool = True) -> None:
         """
         Tính lại working_hours = regular_hours + overtime_hours.
-        regular_hours và overtime_hours đã bao gồm hệ số nhân (được set khi checkout).
+        Cả hai trường này ĐÃ bao gồm hệ số nhân (set tại thời điểm checkout).
         """
         regular_hours  = Decimal(str(record.regular_hours  or 0))
         overtime_hours = Decimal(str(record.overtime_hours or 0))
@@ -238,9 +455,73 @@ class AttendanceService:
         if finalize_status:
             record.set_shift_status(Attendance.ShiftStatus.COMPLETED)
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
+    # AUTO-COMPLETE (gọi từ job scheduler hoặc khi load trang mới ngày)
+    # ══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def auto_complete_stale_records(reference_date: date | None = None) -> int:
+        """
+        Tự động hoàn tất các bản ghi của ngày hôm qua trở về trước
+        mà vẫn còn trạng thái chưa kết thúc.
+        Trả về số bản ghi đã được xử lý.
+        """
+        from datetime import date as date_cls
+        today = reference_date or date_cls.today()
+
+        stale_statuses = [
+            Attendance.ShiftStatus.WORKING_REGULAR,
+            Attendance.ShiftStatus.REGULAR_DONE,
+            Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+            Attendance.ShiftStatus.PRE_OT_REST,
+            Attendance.ShiftStatus.WORKING_OVERTIME,
+        ]
+
+        stale_records = Attendance.query.filter(
+            Attendance.date < today,
+            Attendance.shift_status.in_(stale_statuses),
+        ).all()
+
+        count = 0
+        for record in stale_records:
+            # Nếu chưa checkout ca chính, dùng 17:00 của ngày đó
+            if not record.check_out and record.check_in:
+                record.check_out = datetime.combine(record.date, REGULAR_END)
+                raw_regular = AttendanceService.calculate_regular_hours_raw(
+                    record.check_in, record.check_out
+                )
+                multiplier = AttendanceService._day_multiplier(
+                    bool(record.is_holiday), bool(record.is_weekend)
+                )
+                record.regular_hours = (raw_regular * multiplier).quantize(Decimal("0.01"))
+
+            # Nếu đang OT nhưng chưa checkout OT, dùng 22:00
+            if record.overtime_check_in and not record.overtime_check_out:
+                record.overtime_check_out = datetime.combine(record.date, OT_END)
+                approved_ot = AttendanceService._get_approved_ot(record.employee_id, record.date)
+                raw_ot = AttendanceService.calculate_overtime_hours_raw(
+                    record.overtime_check_in, record.overtime_check_out
+                )
+                multiplier = (
+                    Decimal(str(approved_ot.holiday_multiplier or 1))
+                    if approved_ot
+                    else AttendanceService._day_multiplier(
+                        bool(record.is_holiday), bool(record.is_weekend)
+                    )
+                )
+                record.overtime_hours = (raw_ot * multiplier).quantize(Decimal("0.01"))
+
+            AttendanceService.finalize_attendance(record, finalize_status=True)
+            count += 1
+
+        if count > 0:
+            db.session.commit()
+
+        return count
+
+    # ══════════════════════════════════════════════════════════════════════
     # BUILD PAYLOAD
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def build_attendance_payload(record: Attendance) -> dict | None:
@@ -251,27 +532,44 @@ class AttendanceService:
                 bool(record.is_holiday), bool(record.is_weekend)
             )
         )
+        # Tính raw (chia ngược) để FE hiển thị đúng nếu cần
+        multiplier_d = Decimal(str(multiplier))
+        raw_regular  = (
+            (Decimal(str(record.regular_hours)) / multiplier_d).quantize(Decimal("0.01"))
+            if multiplier_d > 1 and record.regular_hours
+            else Decimal(str(record.regular_hours or 0))
+        )
+        raw_overtime = (
+            (Decimal(str(record.overtime_hours)) / multiplier_d).quantize(Decimal("0.01"))
+            if multiplier_d > 1 and record.overtime_hours
+            else Decimal(str(record.overtime_hours or 0))
+        )
+
         return {
             "date":               record.date.isoformat() if record.date else None,
             "check_in":           record.check_in.isoformat()           if record.check_in           else None,
             "check_out":          record.check_out.isoformat()          if record.check_out          else None,
             "overtime_check_in":  record.overtime_check_in.isoformat()  if record.overtime_check_in  else None,
             "overtime_check_out": record.overtime_check_out.isoformat() if record.overtime_check_out else None,
+            # Đã nhân hệ số (dùng để tính lương)
             "regular_hours":      str(record.regular_hours  or 0),
             "overtime_hours":     str(record.overtime_hours or 0),
             "working_hours":      str(record.working_hours  or 0),
+            # Raw — dùng để hiển thị "X giờ Y phút" cho nhân viên
+            "regular_hours_raw":  str(raw_regular),
+            "overtime_hours_raw": str(raw_overtime),
             "shift_status":       record.shift_status,
             "attendance_type":    record.attendance_type,
             "late_minutes":       record.late_minutes,
             "is_half_day":        record.is_half_day,
             "is_weekend":         record.is_weekend,
             "is_holiday":         record.is_holiday,
-            "day_multiplier":     multiplier,   # ← frontend dùng để hiển thị "x3"
+            "day_multiplier":     multiplier,
         }
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # QUERY HELPERS
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def get_today(employee_id: int, sim_time_str: str | None = None) -> Attendance | None:
@@ -289,23 +587,11 @@ class AttendanceService:
         month: int | None = None,
         year: int | None = None,
     ):
-        """
-        Truy vấn lịch sử chấm công theo tháng.
-        
-        - Nếu không có month/year: trả về `limit` bản ghi gần nhất
-        - Nếu có month/year: trả về ĐẦY ĐỦ tất cả ngày trong tháng với các trạng thái:
-        * Ngày có bản ghi chấm công → dùng bản ghi
-        * Ngày có đơn nghỉ phép đã duyệt → LEAVE
-        * Ngày là lễ → HOLIDAY_OFF (🎉)
-        * Ngày cuối tuần → WEEKEND_OFF (🛌)
-        * Ngày khác → ABSENT (vắng mặt ❌)
-        """
         from calendar import monthrange
-        
+
         sim_time_str = sim_time_str or session.get("simulated_now")
         now_dt = AttendanceService.parse_time(sim_time_str)
-        
-        # ─────── TRƯỜNG HỢP 1: Không chỉ định tháng/năm ───────
+
         if not month or not year:
             return (
                 Attendance.query.filter(
@@ -317,59 +603,44 @@ class AttendanceService:
                 .all()
             )
 
-        # ─────── TRƯỜNG HỢP 2: Có chỉ định tháng/năm ───────
-        
-        # Validate tháng
         if month < 1 or month > 12:
             raise ValidationError("Tháng không hợp lệ")
 
-        # Xác định phạm vi ngày
-        last_day = monthrange(year, month)[1]
+        last_day    = monthrange(year, month)[1]
         month_start = date(year, month, 1)
-        month_end = date(year, month, last_day)
-        
-        # Chỉ hiển thị đến hôm nay nếu tháng hiện tại
+        month_end   = date(year, month, last_day)
         effective_end = (
-            month_end 
-            if (year, month) < (now_dt.year, now_dt.month) 
+            month_end
+            if (year, month) < (now_dt.year, now_dt.month)
             else min(month_end, now_dt.date())
         )
 
         if effective_end < month_start:
             return []
 
-        # ─────── 1. Lấy bản ghi chấm công có sẵn ───────
-        attendance_rows = (
-            Attendance.query.filter(
-                Attendance.employee_id == employee_id,
-                Attendance.date >= month_start,
-                Attendance.date <= effective_end,
-            )
-            .all()
-        )
+        attendance_rows = Attendance.query.filter(
+            Attendance.employee_id == employee_id,
+            Attendance.date >= month_start,
+            Attendance.date <= effective_end,
+        ).all()
         attendance_by_date = {row.date: row for row in attendance_rows}
 
-        # ─────── 2. Lấy danh sách ngày nghỉ phép đã duyệt ───────
-        leave_rows = (
-            LeaveRequest.query.filter(
-                LeaveRequest.employee_id == employee_id,
-                LeaveRequest.status == "approved",
-                LeaveRequest.is_deleted.is_(False),  # 🔥 QUAN TRỌNG: chỉ lấy đơn chưa xóa
-                LeaveRequest.from_date <= effective_end,
-                LeaveRequest.to_date >= month_start,
-            )
-            .all()
-        )
+        leave_rows = LeaveRequest.query.filter(
+            LeaveRequest.employee_id == employee_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.is_deleted.is_(False),
+            LeaveRequest.from_date <= effective_end,
+            LeaveRequest.to_date >= month_start,
+        ).all()
         leave_dates = set()
         for leave in leave_rows:
             start = max(leave.from_date, month_start)
-            end = min(leave.to_date, effective_end)
-            current = start
-            while current <= end:
-                leave_dates.add(current)
-                current = current.fromordinal(current.toordinal() + 1)
+            end   = min(leave.to_date, effective_end)
+            cur   = start
+            while cur <= end:
+                leave_dates.add(cur)
+                cur = cur.fromordinal(cur.toordinal() + 1)
 
-        # ─────── 3. Lấy danh sách ngày lễ ───────
         fixed_holidays = Holiday.query.filter(
             Holiday.is_recurring.is_(False),
             Holiday.date >= month_start,
@@ -377,44 +648,37 @@ class AttendanceService:
         ).all()
         recurring_holidays = Holiday.query.filter_by(is_recurring=True).all()
         holiday_dates = {h.date for h in fixed_holidays}
-        
-        for holiday in recurring_holidays:
+        for h in recurring_holidays:
             try:
-                recurring_date = date(year, month, holiday.date.day)
+                hd = date(year, month, h.date.day)
             except ValueError:
                 continue
-            if month_start <= recurring_date <= effective_end:
-                holiday_dates.add(recurring_date)
+            if month_start <= hd <= effective_end:
+                holiday_dates.add(hd)
 
-        # ─────── 4. Xây dựng lịch sử đầy đủ từng ngày ───────
         history = []
         current = effective_end
-        
         while current >= month_start:
             if current in attendance_by_date:
-                # ✅ Có bản ghi chấm công → dùng bản ghi
                 history.append(attendance_by_date[current])
             else:
-                # ❌ Không có bản ghi → xác định trạng thái mặc định
-                is_weekend = current.weekday() >= 5  # Thứ 6, 7
+                is_weekend = current.weekday() >= 5
                 is_holiday = current in holiday_dates
-                is_leave = current in leave_dates
-                
-                # ⚡ Ưu tiên: leave > holiday > weekend > absent
+                is_leave   = current in leave_dates
+
                 if is_leave:
-                    shift_status = Attendance.ShiftStatus.LEAVE
+                    shift_status   = Attendance.ShiftStatus.LEAVE
                     attendance_type = Attendance.Type.LEAVE
                 elif is_holiday:
-                    shift_status = Attendance.ShiftStatus.HOLIDAY_OFF
+                    shift_status   = Attendance.ShiftStatus.HOLIDAY_OFF
                     attendance_type = Attendance.Type.HOLIDAY
                 elif is_weekend:
-                    shift_status = Attendance.ShiftStatus.WEEKEND_OFF
+                    shift_status   = Attendance.ShiftStatus.WEEKEND_OFF
                     attendance_type = Attendance.Type.WEEKEND
                 else:
-                    shift_status = Attendance.ShiftStatus.ABSENT
+                    shift_status   = Attendance.ShiftStatus.ABSENT
                     attendance_type = Attendance.Type.ABSENT
-                
-                # Tạo object giả lập (không lưu DB)
+
                 history.append(SimpleNamespace(
                     id=None,
                     date=current,
@@ -422,7 +686,7 @@ class AttendanceService:
                     check_out=None,
                     regular_hours=Decimal("0.00"),
                     overtime_hours=Decimal("0.00"),
-                    working_hours=Decimal("0.00"),  # 🔥 THÊM FIELD NÀY
+                    working_hours=Decimal("0.00"),
                     shift_status=shift_status,
                     normalized_shift_status=shift_status,
                     attendance_type=attendance_type,
@@ -434,6 +698,7 @@ class AttendanceService:
             current = current.fromordinal(current.toordinal() - 1)
 
         return history
+
     @staticmethod
     def delete_attendance(employee_id: int, date_str: str) -> date | None:
         try:
@@ -447,18 +712,14 @@ class AttendanceService:
         if not record:
             raise ValidationError("Không tìm thấy dữ liệu chấm công trong ngày đã chọn")
 
-        from app.models import Employee, Notification
-
         employee = Employee.query.get(employee_id)
         if employee and employee.user_id:
-            notilist = (
-                Notification.query.filter(
-                    Notification.user_id == employee.user_id,
-                    Notification.is_deleted.is_(False),
-                    Notification.type.in_(["attendance", "overtime"]),
-                    db.func.date(Notification.created_at) == target_date,
-                ).all()
-            )
+            notilist = Notification.query.filter(
+                Notification.user_id == employee.user_id,
+                Notification.is_deleted.is_(False),
+                Notification.type.in_(["attendance", "overtime"]),
+                db.func.date(Notification.created_at) == target_date,
+            ).all()
             for n in notilist:
                 n.is_deleted = True
 
@@ -472,9 +733,63 @@ class AttendanceService:
         )
         return last.date if last else None
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
+    # NOTIFICATION CASCADE DELETE
+    # ══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def delete_notification_cascade(notification_id: int, user_id: int) -> dict:
+        """
+        Xóa notification và cascade theo type:
+        - type=overtime  → xóa linked OT request, reset overtime trên attendance
+        - type=attendance → chỉ xóa notification
+        """
+        noti = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+        if not noti:
+            raise ValidationError("Không tìm thấy thông báo")
+
+        noti.is_deleted = True
+        cascaded = []
+
+        if noti.type == "overtime":
+            # Tìm OT request liên quan theo ngày tạo thông báo
+            target_date = noti.created_at.date() if noti.created_at else None
+            if target_date:
+                employee = Employee.query.filter_by(user_id=user_id).first()
+                if employee:
+                    ot_req = OvertimeRequest.query.filter(
+                        OvertimeRequest.employee_id == employee.id,
+                        OvertimeRequest.overtime_date == target_date,
+                        OvertimeRequest.is_deleted.is_(False),
+                    ).first()
+                    if ot_req:
+                        ot_req.is_deleted = True
+                        cascaded.append(f"OT request #{ot_req.id}")
+
+                        # Reset overtime fields trên attendance
+                        att = Attendance.query.filter_by(
+                            employee_id=employee.id, date=target_date
+                        ).first()
+                        if att:
+                            att.overtime_hours     = Decimal("0.00")
+                            att.overtime_check_in  = None
+                            att.overtime_check_out = None
+                            att.overtime_request_id = None
+                            if att.shift_status in (
+                                Attendance.ShiftStatus.WORKING_OVERTIME,
+                                Attendance.ShiftStatus.PRE_OT_REST,
+                                Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+                            ):
+                                att.set_shift_status(Attendance.ShiftStatus.COMPLETED)
+                                AttendanceService.finalize_attendance(att, finalize_status=True)
+                            cascaded.append(f"Attendance overtime reset ({target_date})")
+
+        db.session.commit()
+        return {"deleted": True, "cascaded": cascaded}
+
+    # ══════════════════════════════════════════════════════════════════════
     # MAIN ENTRY POINT
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def process_employee_action(
@@ -488,11 +803,11 @@ class AttendanceService:
 
         if attendance and attendance.shift_status == Attendance.ShiftStatus.COMPLETED:
             return {
-                "type": "success",
-                "action": AttendanceService.ACTION_ALREADY_RECORDED,
+                "type":             "success",
+                "action":           AttendanceService.ACTION_ALREADY_RECORDED,
                 "attendance_state": attendance.shift_status,
-                "message": "Ngày công đã hoàn tất",
-                "attendance": AttendanceService.build_attendance_payload(attendance),
+                "message":          "Ngày công đã hoàn tất",
+                "attendance":       AttendanceService.build_attendance_payload(attendance),
             }
 
         if not attendance or not attendance.check_in:
@@ -509,9 +824,9 @@ class AttendanceService:
             attendance, employee_id, payload, current_time
         )
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # PHASE 1 — CHƯA CHECK-IN
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _handle_not_started(
@@ -544,9 +859,9 @@ class AttendanceService:
         )
         return {"type": response_type, "status_code": 200, **result}
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # PHASE 2 — ĐANG LÀM CA CHÍNH
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _handle_working(
@@ -556,46 +871,48 @@ class AttendanceService:
         current_time: datetime,
     ) -> dict:
         today       = current_time.date()
-        end_of_day  = datetime.combine(today, AttendanceService.REGULAR_END)
-        lunch_start = datetime.combine(today, AttendanceService.LUNCH_START)
-        lunch_end   = datetime.combine(today, AttendanceService.LUNCH_END)
-        grace_end   = datetime.combine(today, time(17, 5, 0))
+        end_of_day  = datetime.combine(today, REGULAR_END)
+        lunch_start = datetime.combine(today, LUNCH_START)
+        lunch_end   = datetime.combine(today, LUNCH_END)
 
         early_checkout_confirmed = bool(payload.get("early_checkout_confirmed"))
 
+        # Giờ nghỉ trưa → block
         if lunch_start <= current_time <= lunch_end:
             return {
-                "type": "info",
-                "action": "lunch_break",
+                "type":             "info",
+                "action":           "lunch_break",
                 "attendance_state": attendance.shift_status,
-                "message": "Đang trong giờ nghỉ trưa (12:00–13:00)",
+                "message":          "Đang trong giờ nghỉ trưa (12:00–13:00)",
             }
 
-        if end_of_day <= current_time <= grace_end:
+        # Đúng giờ tan ca hoặc muộn hơn → checkout bình thường
+        if current_time >= end_of_day:
             return AttendanceService.check_out_regular(
                 employee_id, current_time.isoformat(),
                 early_checkout=False, current_time=current_time,
             )
 
-        if current_time < end_of_day and not early_checkout_confirmed:
+        # Còn trước 17:00 → hỏi về sớm
+        if not early_checkout_confirmed:
             early_minutes = int((end_of_day - current_time).total_seconds() // 60)
             return {
-                "type": "warning",
-                "action": AttendanceService.ACTION_EARLY_CHECKOUT_PROMPT,
-                "attendance_state": attendance.shift_status,
-                "message": f"Bạn có muốn tan ca sớm không? (sớm {early_minutes} phút)",
+                "type":                 "warning",
+                "action":               AttendanceService.ACTION_EARLY_CHECKOUT_PROMPT,
+                "attendance_state":     attendance.shift_status,
+                "message":              f"Bạn có muốn tan ca sớm không? (sớm {early_minutes} phút)",
                 "requires_confirmation": True,
-                "flags": {"early_minutes": early_minutes},
+                "flags":                {"early_minutes": early_minutes},
             }
 
         return AttendanceService.check_out_regular(
             employee_id, current_time.isoformat(),
-            early_checkout=early_checkout_confirmed, current_time=current_time,
+            early_checkout=True, current_time=current_time,
         )
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # PHASE 3 — SAU CHECK-OUT CA CHÍNH
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _handle_after_checkout(
@@ -604,31 +921,32 @@ class AttendanceService:
         payload: dict,
         current_time: datetime,
     ) -> dict:
-        sim_time = current_time.isoformat()
+        sim_time        = current_time.isoformat()
         overtime_decision = str(payload.get("overtime_decision") or "").lower()
 
-        # REGULAR_DONE
+        # ── REGULAR_DONE ──────────────────────────────────────────────────
         if attendance.shift_status == Attendance.ShiftStatus.REGULAR_DONE:
-            if attendance.check_out and attendance.check_out.time() < AttendanceService.REGULAR_END:
+            # Về sớm → auto complete, không hỏi OT
+            if attendance.check_out and attendance.check_out.time() < REGULAR_END:
                 attendance.set_shift_status(Attendance.ShiftStatus.COMPLETED)
                 AttendanceService.finalize_attendance(attendance, finalize_status=True)
                 db.session.commit()
                 return {
-                    "type": "success",
-                    "action": AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
+                    "type":             "success",
+                    "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                     "attendance_state": attendance.shift_status,
-                    "message": "Đã hoàn tất ngày công (về sớm).",
-                    "attendance": AttendanceService.build_attendance_payload(attendance),
+                    "message":          "Đã hoàn tất ngày công (về sớm).",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
             if overtime_decision not in {"yes", "no"}:
                 return {
-                    "type": "warning",
-                    "action": AttendanceService.ACTION_OFFER_OVERTIME,
-                    "message": "Bạn có muốn đăng ký tăng ca không?",
-                    "attendance_state": attendance.shift_status,
-                    "next_event": "offer_overtime",
-                    "requires_overtime_decision": True,
+                    "type":                          "warning",
+                    "action":                        AttendanceService.ACTION_OFFER_OVERTIME,
+                    "message":                       "Bạn có muốn đăng ký tăng ca không?",
+                    "attendance_state":              attendance.shift_status,
+                    "next_event":                    "offer_overtime",
+                    "requires_overtime_decision":    True,
                 }
 
             if overtime_decision == "no":
@@ -636,30 +954,23 @@ class AttendanceService:
                 AttendanceService.finalize_attendance(attendance, finalize_status=True)
                 db.session.commit()
                 return {
-                    "type": "success",
-                    "action": AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
+                    "type":             "success",
+                    "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                     "attendance_state": attendance.shift_status,
-                    "message": "Đã hoàn tất ngày công, không đăng ký tăng ca.",
-                    "attendance": AttendanceService.build_attendance_payload(attendance),
+                    "message":          "Đã hoàn tất ngày công, không đăng ký tăng ca.",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
             return AttendanceService._create_ot_request_pending(
                 attendance, employee_id, current_time
             )
 
-        # REGULAR_DONE_PENDING_OT_DECISION
+        # ── REGULAR_DONE_PENDING_OT_DECISION ──────────────────────────────
         if attendance.shift_status == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
             approved_ot = AttendanceService._get_approved_ot(employee_id, current_time.date())
             if approved_ot:
-                if current_time.time() >= AttendanceService.OT_EARLY_CHECKIN:
-                    return AttendanceService.check_in_overtime(employee_id, sim_time)
-                return {
-                    "type": "info",
-                    "action": "ot_approved_wait",
-                    "attendance_state": attendance.shift_status,
-                    "overtime_status": "APPROVED",
-                    "message": "OT đã được duyệt. Vui lòng check-in OT từ 18:30.",
-                }
+                # OT approved → có thể check-in OT ngay (không cần đợi 19:00)
+                return AttendanceService.check_in_overtime(employee_id, sim_time)
 
             pending_ot = OvertimeRequest.query.filter(
                 OvertimeRequest.employee_id == employee_id,
@@ -669,73 +980,89 @@ class AttendanceService:
             ).first()
             if pending_ot:
                 return {
-                    "type": "info",
-                    "action": "ot_pending_approval",
+                    "type":             "info",
+                    "action":           "ot_pending_approval",
                     "attendance_state": attendance.shift_status,
-                    "overtime_status": "PENDING",
-                    "message": "Đang chờ duyệt tăng ca.",
+                    "overtime_status":  "PENDING",
+                    "message":          "Đang chờ duyệt tăng ca.",
                 }
 
+            # OT bị reject → complete
             attendance.set_shift_status(Attendance.ShiftStatus.COMPLETED)
             AttendanceService.finalize_attendance(attendance, finalize_status=True)
             db.session.commit()
             return {
-                "type": "warning",
-                "action": AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
+                "type":             "warning",
+                "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                 "attendance_state": attendance.shift_status,
-                "message": "Đơn tăng ca bị từ chối. Đã hoàn tất ngày công.",
-                "attendance": AttendanceService.build_attendance_payload(attendance),
+                "message":          "Đơn tăng ca bị từ chối. Đã hoàn tất ngày công.",
+                "attendance":       AttendanceService.build_attendance_payload(attendance),
             }
 
-        # PRE_OT_REST
+        # ── PRE_OT_REST ────────────────────────────────────────────────────
         if attendance.shift_status == Attendance.ShiftStatus.PRE_OT_REST:
             approved_ot = AttendanceService._get_approved_ot(employee_id, current_time.date())
             if not approved_ot:
-                return {
-                    "type": "warning",
-                    "action": "overtime_not_approved",
-                    "attendance_state": attendance.shift_status,
-                    "message": "Đơn tăng ca không còn hợp lệ hoặc chưa được duyệt.",
-                }
-            if not attendance.overtime_check_in:
-                return AttendanceService.check_in_overtime(employee_id, sim_time)
-            if current_time.time() >= AttendanceService.OT_START:
-                attendance.set_shift_status(Attendance.ShiftStatus.WORKING_OVERTIME)
+                attendance.set_shift_status(Attendance.ShiftStatus.COMPLETED)
+                AttendanceService.finalize_attendance(attendance, finalize_status=True)
                 db.session.commit()
-            return {
-                "type": "info",
-                "action": "pre_ot_rest",
-                "attendance_state": attendance.shift_status,
-                "message": "Đã xác thực chấm công tăng ca. Đang nghỉ ngơi trước tăng ca.",
-                "attendance": AttendanceService.build_attendance_payload(attendance),
-            }
+                return {
+                    "type":             "warning",
+                    "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
+                    "attendance_state": attendance.shift_status,
+                    "message":          "Đơn tăng ca không còn hiệu lực. Đã hoàn tất ngày công.",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
+                }
 
-        # WORKING_OVERTIME
+            # Đã check-in OT rồi nhưng state vẫn pre_ot_rest → cập nhật state
+            if attendance.overtime_check_in:
+                if current_time.time() >= OT_CHECKIN_OPEN:
+                    attendance.set_shift_status(Attendance.ShiftStatus.WORKING_OVERTIME)
+                    db.session.commit()
+                    return {
+                        "type":             "info",
+                        "action":           "pre_ot_rest",
+                        "attendance_state": Attendance.ShiftStatus.WORKING_OVERTIME,
+                        "message":          "Đang tăng ca.",
+                        "attendance":       AttendanceService.build_attendance_payload(attendance),
+                    }
+                return {
+                    "type":             "info",
+                    "action":           "pre_ot_rest",
+                    "attendance_state": attendance.shift_status,
+                    "message":          "Đã xác thực tăng ca. Công OT bắt đầu tính từ 19:00.",
+                    "attendance":       AttendanceService.build_attendance_payload(attendance),
+                }
+
+            # Chưa check-in OT → cho phép scan
+            return AttendanceService.check_in_overtime(employee_id, sim_time)
+
+        # ── WORKING_OVERTIME ──────────────────────────────────────────────
         if attendance.shift_status == Attendance.ShiftStatus.WORKING_OVERTIME:
             if not attendance.overtime_check_out:
                 return AttendanceService.check_out_overtime(employee_id, sim_time)
 
-        # COMPLETED
+        # ── COMPLETED ─────────────────────────────────────────────────────
         if attendance.shift_status == Attendance.ShiftStatus.COMPLETED:
             return {
-                "type": "success",
-                "action": AttendanceService.ACTION_ALREADY_RECORDED,
+                "type":             "success",
+                "action":           AttendanceService.ACTION_ALREADY_RECORDED,
                 "attendance_state": attendance.shift_status,
-                "message": "Ngày công đã hoàn tất.",
-                "attendance": AttendanceService.build_attendance_payload(attendance),
+                "message":          "Ngày công đã hoàn tất.",
+                "attendance":       AttendanceService.build_attendance_payload(attendance),
             }
 
         return {
-            "type": "info",
-            "action": AttendanceService.ACTION_ALREADY_RECORDED,
+            "type":             "info",
+            "action":           AttendanceService.ACTION_ALREADY_RECORDED,
             "attendance_state": attendance.shift_status,
-            "message": "Trạng thái: " + Attendance.ShiftStatus.label(attendance.shift_status),
-            "attendance": AttendanceService.build_attendance_payload(attendance),
+            "message":          "Trạng thái: " + str(attendance.shift_status),
+            "attendance":       AttendanceService.build_attendance_payload(attendance),
         }
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # OT REQUEST CREATION
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _create_ot_request_pending(
@@ -769,12 +1096,12 @@ class AttendanceService:
         db.session.commit()
 
         return {
-            "type": "success",
-            "action": AttendanceService.ACTION_OVERTIME_REQUEST_CREATED,
+            "type":             "success",
+            "action":           AttendanceService.ACTION_OVERTIME_REQUEST_CREATED,
             "attendance_state": attendance.shift_status,
-            "overtime_status": "PENDING",
-            "message": "Đã gửi yêu cầu tăng ca. Vui lòng chờ phê duyệt.",
-            "attendance": AttendanceService.build_attendance_payload(attendance),
+            "overtime_status":  "PENDING",
+            "message":          "Đã gửi yêu cầu tăng ca. Vui lòng chờ phê duyệt.",
+            "attendance":       AttendanceService.build_attendance_payload(attendance),
         }
 
     @staticmethod
@@ -786,9 +1113,81 @@ class AttendanceService:
             OvertimeRequest.status == "approved",
         ).first()
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
+    # OT APPROVAL / REJECTION (gọi từ HR/Admin routes)
+    # ══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def handle_ot_approved(ot_request: OvertimeRequest) -> None:
+        """
+        Gọi sau khi HR/Admin approve OT request.
+        - Chuyển attendance → PRE_OT_REST
+        - Tạo notification cho employee
+        """
+        attendance = Attendance.query.filter_by(
+            employee_id=ot_request.employee_id,
+            date=ot_request.overtime_date,
+        ).first()
+        if attendance and attendance.shift_status in (
+            Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+            Attendance.ShiftStatus.REGULAR_DONE,
+        ):
+            attendance.set_shift_status(Attendance.ShiftStatus.PRE_OT_REST)
+            db.session.flush()
+
+        # Tạo notification cho employee
+        employee = Employee.query.get(ot_request.employee_id)
+        if employee and employee.user_id:
+            db.session.add(Notification(
+                user_id=employee.user_id,
+                title="Yêu cầu tăng ca đã được duyệt",
+                content=(
+                    f"Yêu cầu tăng ca ngày "
+                    f"{ot_request.overtime_date.strftime('%d/%m/%Y')} "
+                    f"đã được phê duyệt. Bạn có thể xác thực để bắt đầu tăng ca."
+                ),
+                type="overtime",
+                link="/employee/attendance",
+            ))
+
+    @staticmethod
+    def handle_ot_rejected(ot_request: OvertimeRequest, reason: str = "") -> None:
+        """
+        Gọi sau khi HR/Admin reject OT request.
+        - Chuyển attendance → COMPLETED
+        - Tạo notification cho employee
+        """
+        attendance = Attendance.query.filter_by(
+            employee_id=ot_request.employee_id,
+            date=ot_request.overtime_date,
+        ).first()
+        if attendance and attendance.shift_status in (
+            Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+            Attendance.ShiftStatus.REGULAR_DONE,
+            Attendance.ShiftStatus.PRE_OT_REST,
+        ):
+            AttendanceService.finalize_attendance(attendance, finalize_status=True)
+            db.session.flush()
+
+        # Tạo notification cho employee
+        employee = Employee.query.get(ot_request.employee_id)
+        if employee and employee.user_id:
+            reason_str = f" Lý do: {reason}" if reason else ""
+            db.session.add(Notification(
+                user_id=employee.user_id,
+                title="Yêu cầu tăng ca bị từ chối",
+                content=(
+                    f"Yêu cầu tăng ca ngày "
+                    f"{ot_request.overtime_date.strftime('%d/%m/%Y')} "
+                    f"đã bị từ chối.{reason_str}"
+                ),
+                type="overtime",
+                link="/employee/attendance",
+            ))
+
+    # ══════════════════════════════════════════════════════════════════════
     # OFFDAY LOGIC
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _handle_offday_logic(employee_id: int, payload: dict, today: date) -> dict:
@@ -812,25 +1211,25 @@ class AttendanceService:
                 )
                 db.session.commit()
                 return {
-                    "type": "info",
-                    "status_code": 200,
-                    "action": (
+                    "type":             "info",
+                    "status_code":      200,
+                    "action":           (
                         AttendanceService.ACTION_HOLIDAY_OFF if is_holiday
                         else AttendanceService.ACTION_WEEKEND_OFF
                     ),
                     "attendance_state": record.shift_status,
-                    "message": (
+                    "message":          (
                         "Đã ghi nhận nghỉ lễ hôm nay." if is_holiday
                         else "Đã ghi nhận nghỉ cuối tuần hôm nay."
                     ),
-                    "attendance": AttendanceService.build_attendance_payload(record),
+                    "attendance":       AttendanceService.build_attendance_payload(record),
                 }
 
-        return {"pass_through": True, "debug": {"is_weekend": is_weekend, "is_holiday": is_holiday}}
+        return {"pass_through": True}
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # CHECK-IN CA CHÍNH
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def check_in(
@@ -853,14 +1252,14 @@ class AttendanceService:
 
         if (is_weekend or is_holiday) and not confirm_work_on_offday:
             return {
-                "action": (
+                "action":               (
                     AttendanceService.ACTION_HOLIDAY_WORK_PROMPT if is_holiday
                     else AttendanceService.ACTION_WEEKEND_WORK_PROMPT
                 ),
                 "requires_confirmation": True,
-                "is_weekend": is_weekend,
-                "is_holiday": is_holiday,
-                "message": (
+                "is_weekend":            is_weekend,
+                "is_holiday":            is_holiday,
+                "message":               (
                     "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm ngày lễ không?"
                     if is_holiday
                     else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
@@ -875,18 +1274,16 @@ class AttendanceService:
         record.check_in = now_dt
         record.set_shift_status(Attendance.ShiftStatus.WORKING_REGULAR)
 
-        # Tính đi muộn: so với 8:00
+        # ── Tính đi muộn ──────────────────────────────────────────────────
+        # late_minutes = phút sau 8:00 (nếu đến trước 8:00 thì = 0)
+        shift_start_dt = datetime.combine(now_dt.date(), REGULAR_START)
         late_minutes = max(
             0,
-            int(
-                (now_dt - datetime.combine(now_dt.date(), AttendanceService.REGULAR_START))
-                .total_seconds() / 60
-            ),
+            int((now_dt - shift_start_dt).total_seconds() / 60),
         )
         record.late_minutes = late_minutes
-        record.is_half_day  = late_minutes >= 60   # đi muộn ≥ 60 phút → nửa ngày
+        record.is_half_day  = late_minutes >= 60  # is_half_day là flag hiển thị
 
-        # Gán DB status
         if record.is_half_day:
             status_name = "HALF_DAY"
         elif late_minutes > 0:
@@ -897,23 +1294,23 @@ class AttendanceService:
         if db_status:
             record.status_id = db_status.id
 
-        # Ngày thường + đi muộn nhiều → ABNORMAL
         if not record.is_weekend and not record.is_holiday and record.is_half_day:
             record.set_attendance_type(Attendance.Type.ABNORMAL)
 
         db.session.commit()
 
-        msg = f"Check-in thành công lúc {now_dt.strftime('%H:%M:%S')}"
-        resp_type = "success"
+        msg        = f"Check-in thành công lúc {now_dt.strftime('%H:%M:%S')}"
+        resp_type  = "success"
+        multiplier = AttendanceService._day_multiplier(is_holiday, is_weekend)
         if is_holiday:
-            msg += " (Ngày lễ — công sẽ nhân x3)"
-        elif is_weekend:
-            msg += " (Cuối tuần — công sẽ nhân x3)"
+            msg += f" (Ngày lễ — công sẽ nhân x{int(multiplier)})"
+        elif is_weekend and multiplier > 1:
+            msg += f" (Cuối tuần — công sẽ nhân x{int(multiplier)})"
         if record.is_half_day:
-            msg += f". Đi muộn {late_minutes} phút, tính nửa ngày công."
+            msg      += f". Đi muộn {late_minutes} phút — tính nửa ngày công."
             resp_type = "warning"
         elif late_minutes > 0:
-            msg += f". Đi muộn {late_minutes} phút."
+            msg      += f". Đi muộn {late_minutes} phút."
             resp_type = "warning"
 
         return {
@@ -924,9 +1321,9 @@ class AttendanceService:
             "attendance":       AttendanceService.build_attendance_payload(record),
         }
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # CHECK-OUT CA CHÍNH
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def check_out_regular(
@@ -947,13 +1344,13 @@ class AttendanceService:
 
         record.check_out = now_dt
 
-        # Tính công RAW (chưa nhân hệ số)
+        # Tính công raw (chưa nhân hệ số) — dùng effective clamp
         raw_regular = AttendanceService.calculate_regular_hours_raw(
             record.check_in, record.check_out
         )
 
-        # Áp hệ số ngày lễ / cuối tuần
-        multiplier = AttendanceService._day_multiplier(
+        # Nhân hệ số và lưu
+        multiplier          = AttendanceService._day_multiplier(
             bool(record.is_holiday), bool(record.is_weekend)
         )
         record.regular_hours = (raw_regular * multiplier).quantize(Decimal("0.01"))
@@ -962,47 +1359,46 @@ class AttendanceService:
         AttendanceService.finalize_attendance(record, finalize_status=False)
         db.session.commit()
 
-        early_minutes = 0
-        if early_checkout and current_time:
-            end_of_day    = datetime.combine(current_time.date(), AttendanceService.REGULAR_END)
-            early_minutes = max(0, int((end_of_day - current_time).total_seconds() // 60))
-
-        # Thông điệp hiển thị công
         multiplier_label = f" (x{int(multiplier)})" if multiplier > 1 else ""
+
         if early_checkout:
+            early_minutes = 0
+            if current_time:
+                end_of_day    = datetime.combine(current_time.date(), REGULAR_END)
+                early_minutes = max(0, int((end_of_day - current_time).total_seconds() // 60))
             record.set_shift_status(Attendance.ShiftStatus.COMPLETED)
             AttendanceService.finalize_attendance(record, finalize_status=True)
             db.session.commit()
             return {
-                "type":             "warning",
-                "action":           AttendanceService.ACTION_CHECK_OUT,
-                "message":          f"Check-out lúc {(current_time or now_dt).strftime('%H:%M:%S')}. Về sớm {early_minutes} phút.",
-                "attendance_state": record.shift_status,
-                "status_key":       "early_leave",
-                "regular_hours":    str(record.regular_hours),
-                "overtime_hours":   str(record.overtime_hours or 0),
-                "working_hours":    str(record.working_hours),
-                "attendance":       AttendanceService.build_attendance_payload(record),
-                "next_event":       None,
-                "requires_overtime_decision": False,
+                "type":                          "warning",
+                "action":                        AttendanceService.ACTION_CHECK_OUT,
+                "message":                       f"Check-out lúc {(current_time or now_dt).strftime('%H:%M:%S')}. Về sớm {early_minutes} phút.",
+                "attendance_state":              record.shift_status,
+                "status_key":                    "early_leave",
+                "regular_hours":                 str(record.regular_hours),
+                "overtime_hours":                str(record.overtime_hours or 0),
+                "working_hours":                 str(record.working_hours),
+                "attendance":                    AttendanceService.build_attendance_payload(record),
+                "next_event":                    None,
+                "requires_overtime_decision":    False,
             }
 
         return {
-            "type":             "success",
-            "action":           AttendanceService.ACTION_CHECK_OUT,
-            "message":          f"Check-out ca chính thành công. Công thường: {record.regular_hours}h{multiplier_label}",
-            "attendance_state": record.shift_status,
-            "regular_hours":    str(record.regular_hours),
-            "overtime_hours":   str(record.overtime_hours or 0),
-            "working_hours":    str(record.working_hours),
-            "attendance":       AttendanceService.build_attendance_payload(record),
-            "next_event":       "offer_overtime",
-            "requires_overtime_decision": True,
+            "type":                          "success",
+            "action":                        AttendanceService.ACTION_CHECK_OUT,
+            "message":                       f"Check-out ca chính thành công. Công thường: {record.regular_hours}h{multiplier_label}",
+            "attendance_state":              record.shift_status,
+            "regular_hours":                 str(record.regular_hours),
+            "overtime_hours":                str(record.overtime_hours or 0),
+            "working_hours":                 str(record.working_hours),
+            "attendance":                    AttendanceService.build_attendance_payload(record),
+            "next_event":                    "offer_overtime",
+            "requires_overtime_decision":    True,
         }
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # CHECK-IN OT
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def check_in_overtime(employee_id: int, sim_time_str: str | None) -> dict:
@@ -1014,26 +1410,24 @@ class AttendanceService:
         if not record or not record.check_out:
             raise ValidationError("Bạn phải hoàn tất ca chính trước khi OT.")
 
-        if now_dt.time() < AttendanceService.OT_EARLY_CHECKIN:
-            raise ValidationError(
-                f"Chưa đến giờ xác thực OT. Vui lòng quay lại từ "
-                f"{AttendanceService.OT_EARLY_CHECKIN.strftime('%H:%M')}."
-            )
-
         approved_ot = AttendanceService._get_approved_ot(employee_id, now_dt.date())
         if not approved_ot:
             raise ValidationError("Bạn chưa có đơn OT đã được HR/Admin duyệt cho hôm nay.")
 
         if record.overtime_check_in:
-            raise ValidationError("Bạn đã check-in OT.")
+            raise ValidationError("Bạn đã check-in OT rồi.")
 
-        record.overtime_check_in   = now_dt
-        record.overtime_status     = "APPROVED"
-        record.overtime_request_id = approved_ot.id
+        record.overtime_check_in    = now_dt
+        record.overtime_status      = "APPROVED"
+        record.overtime_request_id  = approved_ot.id
 
-        if now_dt.time() < AttendanceService.OT_START:
+        # Nếu check-in trước 19:00 → PRE_OT_REST (chờ đến 19:00, công clamp từ 19:00)
+        if now_dt.time() < OT_CHECKIN_OPEN:
             record.set_shift_status(Attendance.ShiftStatus.PRE_OT_REST)
-            msg = "Đã xác thực chấm công tăng ca. Trạng thái: Nghỉ ngơi trước tăng ca."
+            msg = (
+                f"Đã xác thực tăng ca lúc {now_dt.strftime('%H:%M:%S')}. "
+                f"Trạng thái: Nghỉ ngơi trước tăng ca — công OT bắt đầu tính từ 19:00."
+            )
         else:
             record.set_shift_status(Attendance.ShiftStatus.WORKING_OVERTIME)
             msg = f"Check-in OT lúc {now_dt.strftime('%H:%M:%S')}. Bắt đầu tăng ca."
@@ -1049,9 +1443,9 @@ class AttendanceService:
             "attendance":       AttendanceService.build_attendance_payload(record),
         }
 
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
     # CHECK-OUT OT
-    # =========================================================
+    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def check_out_overtime(employee_id: int, sim_time_str: str | None) -> dict:
@@ -1063,12 +1457,11 @@ class AttendanceService:
         if not record or not record.overtime_check_in:
             raise ValidationError("Bạn chưa check-in OT.")
         if record.overtime_check_out:
-            raise ValidationError("Bạn đã check-out OT.")
+            raise ValidationError("Bạn đã check-out OT rồi.")
 
-        ot_end_dt             = datetime.combine(now_dt.date(), AttendanceService.OT_END)
+        ot_end_dt             = datetime.combine(now_dt.date(), OT_END)
         record.overtime_check_out = min(now_dt, ot_end_dt)
 
-        # Tính OT raw, sau đó nhân multiplier từ approved OT request
         approved_ot = AttendanceService._get_approved_ot(employee_id, now_dt.date())
         raw_ot      = AttendanceService.calculate_overtime_hours_raw(
             record.overtime_check_in, record.overtime_check_out
@@ -1087,14 +1480,14 @@ class AttendanceService:
 
         multiplier_label = f" (x{int(multiplier)})" if multiplier > 1 else ""
         return {
-            "type":              "success",
-            "action":            AttendanceService.ACTION_CHECK_OUT_OT,
-            "message":           f"Check-out OT thành công. Tăng ca: {record.overtime_hours}h{multiplier_label}",
-            "attendance_state":  record.shift_status,
-            "regular_hours":     str(record.regular_hours),
-            "overtime_hours":    str(record.overtime_hours),
-            "working_hours":     str(record.working_hours),
+            "type":               "success",
+            "action":             AttendanceService.ACTION_CHECK_OUT_OT,
+            "message":            f"Check-out OT thành công. Tăng ca: {record.overtime_hours}h{multiplier_label}",
+            "attendance_state":   record.shift_status,
+            "regular_hours":      str(record.regular_hours),
+            "overtime_hours":     str(record.overtime_hours),
+            "working_hours":      str(record.working_hours),
             "overtime_check_in":  record.overtime_check_in.isoformat()  if record.overtime_check_in  else None,
             "overtime_check_out": record.overtime_check_out.isoformat() if record.overtime_check_out else None,
-            "attendance":        AttendanceService.build_attendance_payload(record),
+            "attendance":         AttendanceService.build_attendance_payload(record),
         }

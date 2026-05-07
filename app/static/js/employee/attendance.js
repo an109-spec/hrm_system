@@ -1,4 +1,3 @@
-// app/static/js/employee/attendance.js
 import { Toast } from "../components/toast.js";
 import { AttendanceAPI } from "../api/attendance.api.js";
 import { attendanceStore } from "../store/attendance.store.js";
@@ -18,7 +17,7 @@ function toLocalISO(dateObj = new Date()) {
 
 function normalizeResponse(res = {}) {
   return {
-    type: res.type || "success",
+    type:   res.type   || "success",
     action: res.action || null,
     message: res.message || null,
     ...res,
@@ -27,74 +26,76 @@ function normalizeResponse(res = {}) {
 
 // ─────────────────────────────────────────────────────────────
 // UI MAPPING  (attendance_state → nút + badge)
+// Đồng bộ với compute_attendance_state() trong service.py
 // ─────────────────────────────────────────────────────────────
 
 const STATE_UI = {
   not_started: {
-    btnText: "🔳 XÁC THỰC CHẤM CÔNG",
+    btnText:  "🔳 XÁC THỰC CHẤM CÔNG",
     btnClass: "btn-primary",
     disabled: false,
-    badge: null,
+    badge:    null,
   },
   working_regular: {
-    btnText: "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
+    btnText:  "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH",
     btnClass: "btn-primary",
     disabled: false,
-    badge: { cls: "status-warning", text: "🟢 Đang làm ca chính" },
+    badge:    { cls: "status-warning", text: "🟢 Đang làm ca chính" },
   },
   regular_done: {
-    btnText: "✅ Đã hoàn thành ca chính",
+    btnText:  "✅ Đã hoàn thành ca chính",
     btnClass: "btn-success",
     disabled: true,
-    badge: { cls: "status-success", text: "✅ Hoàn thành ca chính" },
+    badge:    { cls: "status-success", text: "✅ Hoàn thành ca chính" },
   },
   regular_done_pending_ot_decision: {
-    btnText: "⏳ ĐANG CHỜ DUYỆT OT",
+    btnText:  "⏳ ĐANG CHỜ DUYỆT OT",
     btnClass: "btn-warning",
     disabled: true,
-    badge: { cls: "status-warning", text: "⏳ Chờ duyệt tăng ca" },
+    badge:    { cls: "status-warning", text: "⏳ Chờ duyệt tăng ca" },
   },
+  // pre_ot_rest có 2 sub-state — button_enabled từ server quyết định
   pre_ot_rest: {
-    btnText: "⏳ Đã xác thực, chờ đến 19:00",
-    btnClass: "btn-warning",
-    disabled: true,
-    badge: { cls: "status-warning", text: "🟡 Nghỉ trước tăng ca" },
+    btnText:  "🔳 XÁC THỰC TĂNG CA",   // enabled khi approved, chưa check-in OT
+    btnClass: "btn-primary",
+    disabled: false,                     // server sẽ override nếu cần disable
+    badge:    { cls: "status-warning", text: "🟡 Nghỉ trước tăng ca" },
   },
   working_overtime: {
-    btnText: "🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
+    btnText:  "🔳 XÁC NHẬN KẾT THÚC TĂNG CA",
     btnClass: "btn-primary",
     disabled: false,
-    badge: { cls: "status-warning", text: "🟣 Đang tăng ca" },
+    badge:    { cls: "status-warning", text: "🟣 Đang tăng ca" },
   },
   completed: {
-    btnText: "✅ ĐÃ HOÀN THÀNH CÔNG VIỆC",
+    btnText:  "✅ ĐÃ HOÀN THÀNH CÔNG VIỆC",
     btnClass: "btn-success",
     disabled: true,
-    badge: { cls: "status-success", text: "🏁 Hoàn tất ngày công" },
+    badge:    { cls: "status-success", text: "🏁 Hoàn tất ngày công" },
   },
   holiday_off: {
-    btnText: "🛌 Đã ghi nhận nghỉ lễ",
+    btnText:  "🛌 Đã ghi nhận nghỉ lễ",
     btnClass: "btn-success",
     disabled: true,
-    badge: { cls: "status-success", text: "🎉 Nghỉ lễ" },
+    badge:    { cls: "status-success", text: "🎉 Nghỉ lễ" },
   },
   weekend_off: {
-    btnText: "🛌 Đã ghi nhận nghỉ cuối tuần",
+    btnText:  "🛌 Đã ghi nhận nghỉ cuối tuần",
     btnClass: "btn-success",
     disabled: true,
-    badge: { cls: "status-success", text: "🛌 Nghỉ cuối tuần" },
+    badge:    { cls: "status-success", text: "🛌 Nghỉ cuối tuần" },
   },
   absent: {
-    btnText: "❌ Vắng mặt",
+    btnText:  "❌ Vắng mặt",
     btnClass: "btn-danger",
     disabled: true,
-    badge: { cls: "status-danger", text: "❌ Vắng mặt" },
+    badge:    { cls: "status-danger", text: "❌ Vắng mặt" },
   },
   leave: {
-    btnText: "📋 Đang nghỉ phép",
+    btnText:  "📋 Đang nghỉ phép",
     btnClass: "btn-warning",
     disabled: true,
-    badge: { cls: "status-warning", text: "📋 Nghỉ phép" },
+    badge:    { cls: "status-warning", text: "📋 Nghỉ phép" },
   },
 };
 
@@ -107,7 +108,7 @@ export class Attendance {
   // ── Lấy state hiện tại từ API ─────────────────────────────
   static async fetchCurrentState() {
     try {
-      const remote = await AttendanceAPI.getEmployeeAttendanceState();
+      const remote  = await AttendanceAPI.getEmployeeAttendanceState();
       const payload = remote?.data || remote || {};
       attendanceStore.setToday(payload.today || payload);
       return payload;
@@ -138,7 +139,6 @@ export class Attendance {
   static async handleQrScan(qrText, serverNow) {
     const simulatedNow = serverNow || toLocalISO(new Date());
 
-    // Bước 1: gọi API với QR text
     let res;
     try {
       res = await this.submit({ qr_text: qrText, simulated_now: simulatedNow });
@@ -147,7 +147,6 @@ export class Attendance {
       return;
     }
 
-    // Bước 2: xử lý theo action trả về
     await this._handleResponse(res, qrText, simulatedNow);
   }
 
@@ -157,7 +156,6 @@ export class Attendance {
 
     switch (action) {
 
-      // ── Check-in thành công ───────────────────────────────
       case "check_in": {
         const toastFn = res.type === "warning" ? Toast.warning : Toast.success;
         (toastFn || Toast.success)(res.message || "Check-in thành công");
@@ -165,10 +163,8 @@ export class Attendance {
         break;
       }
 
-      // ── Check-out ca chính thành công → hỏi OT ───────────
       case "check_out": {
         Toast.success(res.message || "Check-out thành công");
-
         if (res.requires_overtime_decision) {
           await this._askOvertimeDecision(qrText, simulatedNow);
         } else {
@@ -177,36 +173,35 @@ export class Attendance {
         break;
       }
 
-      // ── Check-in OT thành công ────────────────────────────
       case "check_in_overtime": {
         Toast.success(res.message || "Check-in OT thành công");
         await this._reloadUI();
         break;
       }
 
-      // ── Check-out OT thành công ───────────────────────────
       case "check_out_overtime": {
-        Toast.success(res.message || `Check-out OT thành công. Tăng ca: ${res.overtime_hours}h`);
+        Toast.success(
+          res.message || `Check-out OT thành công. Tăng ca: ${res.overtime_hours}h`
+        );
         await this._reloadUI();
         break;
       }
 
-      // ── Về sớm → hỏi xác nhận ────────────────────────────
       case "early_checkout_prompt": {
         const earlyMins = res.flags?.early_minutes || res.early_minutes || 0;
-        const confirm = await Swal.fire({
-          icon: "question",
-          title: "Tan ca nghỉ sớm?",
-          text: res.message || `Bạn sẽ về sớm ${earlyMins} phút.`,
-          showCancelButton: true,
+        const confirm   = await Swal.fire({
+          icon:              "question",
+          title:             "Tan ca nghỉ sớm?",
+          text:              res.message || `Bạn sẽ về sớm ${earlyMins} phút.`,
+          showCancelButton:  true,
           confirmButtonText: "Có, về sớm",
-          cancelButtonText: "Không, tiếp tục làm",
+          cancelButtonText:  "Không, tiếp tục làm",
         });
 
         if (confirm.isConfirmed) {
           const earlyRes = await this.submit({
-            qr_text: qrText,
-            simulated_now: simulatedNow,
+            qr_text:                  qrText,
+            simulated_now:            simulatedNow,
             early_checkout_confirmed: true,
           });
           Toast.warning(earlyRes.message || "Check-out sớm thành công");
@@ -215,39 +210,38 @@ export class Attendance {
         break;
       }
 
-      // ── Ngày nghỉ lễ / cuối tuần → hỏi có đi làm không ──
       case "holiday_work_prompt":
       case "weekend_work_prompt": {
         const isHoliday = action === "holiday_work_prompt";
-        const confirm = await Swal.fire({
-          icon: "question",
-          title: isHoliday ? "Ngày nghỉ lễ" : "Ngày nghỉ cuối tuần",
-          text: res.message || "Bạn có muốn đi làm hôm nay không?",
-          showCancelButton: true,
+        const confirm   = await Swal.fire({
+          icon:              "question",
+          title:             isHoliday ? "Ngày nghỉ lễ" : "Ngày nghỉ cuối tuần",
+          text:              res.message || "Bạn có muốn đi làm hôm nay không?",
+          showCancelButton:  true,
           confirmButtonText: "Có, đi làm",
-          cancelButtonText: "Không, nghỉ",
+          cancelButtonText:  "Không, nghỉ",
         });
 
         if (confirm.isConfirmed) {
           const workRes = await this.submit({
-            qr_text: qrText,
-            simulated_now: simulatedNow,
+            qr_text:               qrText,
+            simulated_now:         simulatedNow,
             confirm_work_on_offday: true,
           });
           Toast.success(workRes.message || "Check-in thành công");
         } else {
           const offRes = await this.submit({
-            qr_text: qrText,
-            simulated_now: simulatedNow,
+            qr_text:           qrText,
+            simulated_now:     simulatedNow,
             decline_offday_work: true,
           });
-          Toast.info?.(offRes.message || "Đã ghi nhận nghỉ") || Toast.success(offRes.message || "Đã ghi nhận nghỉ");
+          const infoFn = Toast.info || Toast.success;
+          infoFn(offRes.message || "Đã ghi nhận nghỉ");
         }
         await this._reloadUI();
         break;
       }
 
-      // ── Ghi nhận nghỉ lễ / cuối tuần ─────────────────────
       case "holiday_off":
       case "weekend_off": {
         Toast.success(res.message || "Đã ghi nhận nghỉ");
@@ -255,66 +249,63 @@ export class Attendance {
         break;
       }
 
-      // ── Backend hỏi OT (REGULAR_DONE state) ──────────────
       case "offer_overtime": {
         await this._askOvertimeDecision(qrText, simulatedNow);
         break;
       }
 
-      // ── Đã gửi OT request, chờ duyệt ─────────────────────
       case "overtime_request_created": {
         Toast.success(res.message || "Đã gửi yêu cầu tăng ca. Chờ phê duyệt.");
         await this._reloadUI();
         break;
       }
 
-      // ── Hoàn tất không OT ────────────────────────────────
       case "complete_without_overtime": {
         Toast.success(res.message || "Đã hoàn tất ngày công.");
         await this._reloadUI();
         break;
       }
 
-      // ── Đang chờ duyệt OT (polling state) ────────────────
       case "ot_pending_approval": {
-        Toast.info?.(res.message || "Đang chờ duyệt tăng ca") || Toast.success(res.message || "Đang chờ duyệt tăng ca");
+        const infoFn = Toast.info || Toast.success;
+        infoFn(res.message || "Đang chờ duyệt tăng ca");
         this._updateOtStatusBox(res.message, "pending");
         break;
       }
 
-      // ── OT đã duyệt nhưng chưa đến giờ ───────────────────
       case "ot_approved_wait": {
-        Toast.success(res.message || "OT đã được duyệt. Vui lòng check-in OT từ 18:30.");
+        Toast.success(res.message || "OT đã được duyệt. Có thể xác thực tăng ca.");
         this._updateOtStatusBox(res.message, "approved");
-        break;
-      }
-
-      // ── Đang nghỉ trước tăng ca ───────────────────────────
-      case "pre_ot_rest": {
-        Toast.success(res.message || "Đang nghỉ ngơi trước tăng ca.");
+        // Reload để button chuyển sang enabled
         await this._reloadUI();
         break;
       }
 
-      // ── Đã hoàn tất rồi ───────────────────────────────────
+      case "pre_ot_rest": {
+        Toast.success(res.message || "Đã xác thực tăng ca. Chờ đến 19:00 bắt đầu tính công.");
+        await this._reloadUI();
+        break;
+      }
+
       case "already_completed":
       case "already_recorded": {
-        Toast.info?.(res.message || "Ngày công đã hoàn tất") || Toast.success(res.message || "Ngày công đã hoàn tất");
+        const infoFn = Toast.info || Toast.success;
+        infoFn(res.message || "Ngày công đã hoàn tất");
         break;
       }
 
-      // ── Giờ nghỉ trưa ─────────────────────────────────────
       case "lunch_break": {
-        Toast.warning?.(res.message || "Đang trong giờ nghỉ trưa") || Toast.error(res.message || "Đang trong giờ nghỉ trưa");
+        const warnFn = Toast.warning || Toast.error;
+        warnFn(res.message || "Đang trong giờ nghỉ trưa");
         break;
       }
 
-      // ── Fallback ──────────────────────────────────────────
       default: {
         if (res.type === "error") {
           Toast.error(res.message || "Có lỗi xảy ra");
         } else if (res.type === "warning") {
-          Toast.warning?.(res.message) || Toast.error(res.message || "Yêu cầu xác nhận");
+          const warnFn = Toast.warning || Toast.error;
+          warnFn(res.message || "Yêu cầu xác nhận");
         } else if (res.message) {
           Toast.success(res.message);
           await this._reloadUI();
@@ -324,21 +315,21 @@ export class Attendance {
     }
   }
 
-  // ── Hỏi người dùng muốn đăng ký OT không ────────────────
+  // ── Hỏi OT decision ──────────────────────────────────────
   static async _askOvertimeDecision(qrText, simulatedNow) {
     const decision = await Swal.fire({
-      icon: "question",
-      title: "Đăng ký tăng ca?",
-      text: "Bạn có muốn đăng ký tăng ca hôm nay không?",
-      showCancelButton: true,
+      icon:              "question",
+      title:             "Đăng ký tăng ca?",
+      text:              "Bạn có muốn đăng ký tăng ca hôm nay không?",
+      showCancelButton:  true,
       confirmButtonText: "Có, đăng ký OT",
-      cancelButtonText: "Không, về thôi",
+      cancelButtonText:  "Không, về thôi",
     });
 
     const otDecision = decision.isConfirmed ? "yes" : "no";
-    const otRes = await this.submit({
-      qr_text: qrText,
-      simulated_now: simulatedNow,
+    const otRes      = await this.submit({
+      qr_text:          qrText,
+      simulated_now:    simulatedNow,
       overtime_decision: otDecision,
     });
 
@@ -358,29 +349,47 @@ export class Attendance {
     const box = document.getElementById("otRequestStatusBox");
     if (!box) return;
     box.style.display = "block";
-    const icon = status === "approved" ? "✅" : "⏳";
-    box.innerHTML = `<strong>${icon} ${message || ""}</strong>`;
+    const icon        = status === "approved" ? "✅" : "⏳";
+    box.innerHTML     = `<strong>${icon} ${message || ""}</strong>`;
   }
 
   // ── Cập nhật UI nút theo state ────────────────────────────
-  static updateButtonUI(attendanceState) {
+  // serverData: object từ /system/time (có button_text, button_enabled)
+  static updateButtonUI(attendanceState, serverData = null) {
     const btn = document.getElementById("attendanceBtn");
     if (!btn) return;
 
-    const ui = STATE_UI[attendanceState] || STATE_UI["not_started"];
+    // Ưu tiên dữ liệu từ server (compute_attendance_state đã tính đúng)
+    if (serverData && serverData.button_text) {
+      btn.textContent = serverData.button_text;
+      btn.disabled    = !serverData.button_enabled;
+      btn.className   = "btn " + (
+        serverData.button_enabled ? "btn-primary" : "btn-success"
+      );
+      if (!serverData.button_enabled) btn.classList.add("btn-disabled");
 
-    btn.textContent = ui.btnText;
-    btn.disabled = ui.disabled;
-
-    // Reset class
-    btn.className = "btn " + (ui.btnClass || "btn-primary");
-    if (ui.disabled) btn.classList.add("btn-disabled");
+      // Gắn onclick nếu có thể scan
+      if (serverData.can_scan && serverData.button_enabled) {
+        btn.onclick = () => window.openScannerModal?.();
+      } else {
+        btn.onclick = null;
+      }
+    } else {
+      // Fallback sang STATE_UI local
+      const ui = STATE_UI[attendanceState] || STATE_UI["not_started"];
+      btn.textContent = ui.btnText;
+      btn.disabled    = ui.disabled;
+      btn.className   = "btn " + (ui.btnClass || "btn-primary");
+      if (ui.disabled) btn.classList.add("btn-disabled");
+      if (!ui.disabled) btn.onclick = () => window.openScannerModal?.();
+    }
 
     // Badge trạng thái
     const badgeEl = document.getElementById("attendanceStateBadge");
     if (badgeEl) {
+      const ui = STATE_UI[attendanceState] || {};
       if (ui.badge) {
-        badgeEl.className = `status ${ui.badge.cls}`;
+        badgeEl.className   = `status ${ui.badge.cls}`;
         badgeEl.textContent = ui.badge.text;
         badgeEl.style.display = "inline-block";
       } else {
@@ -389,26 +398,66 @@ export class Attendance {
     }
   }
 
+  // ── updateUIRealtime — gọi sau khi /system/time trả về ───
+  // FIXED: dùng server button_text thay vì switch cứng
+  static updateUIRealtime(data) {
+    const root = document.getElementById("attendanceRoot");
+    if (root) {
+      root.dataset.attendanceState = data.attendance_state;
+      root.dataset.canCheckIn      = data.can_check_in  ? "1" : "0";
+      root.dataset.canCheckOut     = data.can_check_out ? "1" : "0";
+    }
+
+    this.updateButtonUI(data.attendance_state, data);
+    this._updateBadge(data.attendance_state);
+
+    // Cập nhật giờ công
+    const workText = document.getElementById("workHoursText");
+    if (workText) {
+      const reg = parseFloat(data.regular_hours  || 0);
+      const ot  = parseFloat(data.overtime_hours || 0);
+      let   text = `Công hôm nay: ${this._fmtH(reg)}`;
+      if (ot > 0) text += ` + OT ${this._fmtH(ot)}`;
+      workText.textContent = text;
+    }
+
+    // Cập nhật message nếu có
+    if (data.message) this._updateOtStatusBox(data.message, data.overtime_status?.toLowerCase());
+  }
+
+  static _updateBadge(state) {
+    const badge = document.getElementById("attendanceStateBadge");
+    if (!badge) return;
+    const ui = STATE_UI[state];
+    if (ui?.badge) {
+      badge.textContent     = ui.badge.text;
+      badge.className       = `status ${ui.badge.cls}`;
+      badge.style.display   = "inline-block";
+    } else {
+      badge.style.display   = "none";
+    }
+  }
+
+  static _fmtH(h) {
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    if (hh > 0 && mm > 0) return `${hh} giờ ${mm} phút`;
+    if (hh > 0) return `${hh} giờ`;
+    return `${mm} phút`;
+  }
+
   // ── Cập nhật dòng giờ công ────────────────────────────────
   static updateWorkHours(regularHours = 0, overtimeHours = 0, otPreview = 0) {
     const el = document.getElementById("workHoursText");
     if (!el) return;
 
-    const reg = parseFloat(regularHours) || 0;
-    const ot  = parseFloat(overtimeHours) || parseFloat(otPreview) || 0;
+    const reg   = parseFloat(regularHours)  || 0;
+    const ot    = parseFloat(overtimeHours) || parseFloat(otPreview) || 0;
     const total = reg + ot;
 
-    const fmtH = (h) => {
-      const hh = Math.floor(h);
-      const mm = Math.round((h - hh) * 60);
-      if (hh > 0 && mm > 0) return `${hh} giờ ${mm} phút`;
-      if (hh > 0) return `${hh} giờ`;
-      return `${mm} phút`;
-    };
-
-    let text = `Công hôm nay: ${fmtH(reg)}`;
-    if (ot > 0) text += ` + OT ${fmtH(ot)}`;
-    if (reg > 0 || ot > 0) text += ` = ${fmtH(total)}`;
+    let text = `Công hôm nay: ${this._fmtH(reg)}`;
+    if (ot > 0) text += ` + OT ${this._fmtH(ot)}`;
+    if (reg > 0 || ot > 0) text += ` = ${this._fmtH(total)}`;
 
     el.textContent = text;
   }
@@ -425,10 +474,8 @@ export class Attendance {
     }
   }
 
-  // ── Reload UI (fetch state mới rồi update nút) ────────────
+  // ── Reload UI ─────────────────────────────────────────────
   static async _reloadUI() {
-    // Reload trang đơn giản và đáng tin cậy nhất
-    // (state đã được lưu DB, reload sẽ render đúng từ server)
     window.location.reload();
   }
 }
