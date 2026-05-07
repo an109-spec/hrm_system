@@ -4,170 +4,202 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/employee/employee.css') }}">
 <style>
 :root {
-  --primary: #1e3a8a;
-  --primary-soft: #c7d2fe;
-  --success: #14532d;
-  --warning: #92400e;
-  --danger: #7f1d1d;
   --bg-main: #f1f5f9;
   --bg-card: #ffffff;
-  --border: #cbd5e1;
-  --text-main: #0b1220;
-  --text-muted: #334155;
+
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+
+  --border: #e2e8f0;
+
+  --primary: #4f46e5;
+  --primary-soft: rgba(79, 70, 229, 0.08);
 }
 
-/* ===== CARD ===== */
+/* =========================
+   BODY & CARD 
+========================= */
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
+  padding: 40px;
+}
+
 .emp-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 1px 2px rgba(16,24,40,.06);
-  margin-bottom: 20px;
-  color: var(--text-main);
+  border-radius: 12px;
+  padding: 30px;
+  max-width: 100%;
+  margin: 0;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  
+  /* Ép layout cũ vào hàng lối bằng Flex */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* ===== DEMO TIME ===== */
+/* Tiêu đề Chấm công */
+.emp-card h3 {
+  font-size: 18px;
+  color: var(--text-main);
+  margin: 0 0 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 15px;
+}
+
+/* =========================
+   ĐỒNG HỒ & LỜI CHÀO (Phần giữa)
+========================= */
+
+/* Container bọc đồng hồ và lời chào */
 .demo-time-display {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--primary);
-  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 5px;
 }
+
 .time-part {
-  cursor: ns-resize;
-  padding: 2px 4px;
-  font-weight: 600;
-  font-size: 1.05rem;
-  color: var(--primary);
-}
-.unit-label {
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  letter-spacing: .5px;
-}
-
-/* ===== NOTE BOXES ===== */
-.attendance-note {
-  background: #f9fafb;
-  border: 1px solid var(--border);
-  padding: 10px 14px;
-  border-radius: 8px;
-  color: var(--text-main);
-  margin-top: 8px;
-}
-.attendance-warning {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: var(--danger);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-  margin-top: 8px;
-}
-.attendance-info {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-top: 8px;
-}
-
-/* ===== BUTTON ===== */
-.btn {
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all .15s ease;
-  font-size: 15px;
-}
-.btn-primary  { background: var(--primary); color: #fff; }
-.btn-success  { background: #16a34a; color: #fff; }
-.btn-warning  { background: #f59e0b; color: #fff; }
-.btn-danger   { background: #dc2626; color: #fff; }
-.btn-disabled { opacity: .55; cursor: not-allowed; pointer-events: none; }
-.btn:not(.btn-disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.1);
-}
-
-/* ===== STATUS BADGE ===== */
-.status {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-block;
-  margin-top: 6px;
-}
-.status-success { background: #dcfce7; color: #166534; }
-.status-warning { background: #fef3c7; color: #92400e; }
-.status-danger  { background: #fee2e2; color: #991b1b; }
-.status-info    { background: #e0e7ff; color: #1e40af; }
-
-/* ===== TABLE ===== */
-.emp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-.emp-table th {
-  text-align: left;
-  padding: 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-  background: #f9fafb;
-}
-.emp-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-main);
-}
-.emp-table tr:hover td { background: #f9fafb; }
-
-/* ===== SCANNER MODAL ===== */
-.scanner-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.6);
-  display: none;
+  background: #f8fafc !important;
+  border: 1px solid #dbe2ea !important;
+  color: #3730a3 !important;
+  font-size: 26px !important;
+  font-weight: 700;
+  width: 55px;
+  height: 55px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999999;
+  border-radius: 8px;
 }
-.scanner-modal.open { display: flex; }
+
+/* Lời chào & Tên (Nguyễn Duy An) */
+.demo-time-bar strong, 
+.emp-card strong {
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* =========================
+   TRẠNG THÁI & NÚT BẤM
+========================= */
+
+/* Box "Chưa vào ca" - Sửa từ dải dài thành tag gọn */
+.attendance-warning, 
+.attendance-info, 
+.attendance-note {
+  background: var(--primary-soft) !important;
+  border: 1px solid var(--primary) !important;
+  color: var(--text-main) !important;
+  padding: 8px 16px !important;
+  border-radius: 6px !important;
+  display: inline-block; /* Không cho dài hết cỡ */
+  width: fit-content;
+  font-size: 13px;
+  margin: 10px 0;
+}
+
+/* Nút bấm xác thực */
+.btn-primary {
+  background: var(--primary) !important;
+  border: none !important;
+  padding: 14px 30px !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: 0.3s;
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+  margin-top: 15px;
+  width: fit-content;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.2);
+  transform: translateY(-2px);
+}
+
+/* Dòng cuối cùng (Đơn tăng ca) */
+.emp-card span[style*="color: green"], 
+.status-success {
+  color: var(--success) !important;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+p:contains("Công hôm nay") {
+  color: var(--text-muted);
+  font-size: 14px;}
+.scanner-modal {
+    position: fixed;
+    inset: 0;
+
+    width: 100vw;
+    height: 100vh;
+
+    background: rgba(15, 23, 42, 0.65);
+
+    display: none;
+
+    align-items: center;
+    justify-content: center;
+
+    z-index: 999999;
+}
+
+.scanner-modal.open {
+    display: flex;
+}
+
 .scanner-panel {
-  background: #fff;
-  width: 420px;
-  max-width: 92vw;
-  border-radius: 12px;
-  padding: 16px;
-  z-index: 1000000;
-  position: relative;
+    width: 420px;
+    max-width: 92vw;
+
+    background: #ffffff;
+
+    border-radius: 18px;
+
+    padding: 20px;
+
+    box-shadow: 0 25px 60px rgba(0,0,0,.25);
+
+    position: relative;
 }
-#qr-reader {
-  width: 100% !important;
-  min-height: 280px !important;
-  border-radius: 10px;
+.history-filter {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
 }
-.btn-sm { padding: 6px 12px; font-size: 13px; }
+
+.history-filter select {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text-main);
+    outline: none;
+    cursor: pointer;
+}
+
+.history-filter select:focus {
+    border-color: var(--primary);
+}
 </style>
 {% endblock %}
-
 {% block content %}
-
-{#
-  ── DATA BOOTSTRAP ──────────────────────────────────────────
-  Toàn bộ state từ server được truyền qua data-* attributes.
-  JS đọc một lần khi load, không tự tính lại.
-#}
 <div
-  id="attendanceRoot"
+  id="attendanceRoot" 
   class="emp-card"
 
   data-attendance-state="{{ shift_info.attendance_state if shift_info else (today.shift_status if today else 'not_started') }}"
@@ -243,7 +275,6 @@
         </button>
 
       {%- elif s == 'regular_done' -%}
-        {# REGULAR_DONE: trạng thái tạm, JS sẽ hỏi OT ngay #}
         <button type="button" id="attendanceBtn" class="btn btn-success btn-disabled" disabled>
           ✅ Đã hoàn thành ca chính
         </button>
@@ -346,7 +377,36 @@
 
   {# ── LỊCH SỬ CHẤM CÔNG ─────────────────────────────────── #}
   <section class="emp-card" style="margin-top:20px;">
-    <h3>Lịch sử gần đây</h3>
+    <h3>Lịch sử chấm công</h3>
+<div class="history-filter" style="margin-bottom:16px; display:flex; gap:10px; align-items:center;">
+  
+  <select id="filterMonth" class="form-control" style="width:120px;">
+    {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>
+        Tháng {{ "0%d"|format(m) if m < 10 else m }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <select id="filterYear" class="form-control" style="width:120px;">
+    {# Duyệt từ năm hiện tại lùi về 3 năm trước #}
+    {% set start_year = now.year %}
+    {% for y in range(start_year - 3, start_year + 1) %}
+      <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>
+        Năm {{ y }}
+      </option>
+    {% endfor %}
+  </select>
+
+  <button type="button" class="btn btn-primary" onclick="applyHistoryFilter()">
+    <i class="fas fa-filter"></i> Lọc dữ liệu
+  </button>
+
+  {# Hiển thị trạng thái lọc để người dùng biết họ đang xem gì #}
+  <span class="text-muted" style="font-size: 13px; margin-left: 10px;">
+    Đang xem: {{ selected_month }}/{{ selected_year }}
+  </span>
+</div>
     <table class="emp-table">
       <thead>
         <tr>
@@ -411,7 +471,7 @@
     </table>
   </section>
 
-</div>{# end attendanceRoot #}
+</div>
 
 
 {# ── QR SCANNER MODAL ──────────────────────────────────────── #}
@@ -439,20 +499,17 @@ import { attendanceStore } from "{{ url_for('static', filename='js/store/attenda
 // ── Bootstrap state từ data-attributes ───────────────────────
 const root = document.getElementById("attendanceRoot");
 
-const serverNow = root?.dataset.serverNow || null;
-
-// Nạp state vào store để Attendance class dùng
 attendanceStore.setToday({
   shift_status:        root?.dataset.attendanceState || "not_started",
-  check_in:            root?.dataset.checkin || null,
-  check_out:           root?.dataset.checkout || null,
+  check_in:            root?.dataset.checkin         || null,
+  check_out:           root?.dataset.checkout        || null,
   overtime_check_in:   root?.dataset.overtimeCheckin || null,
-  overtime_check_out:  root?.dataset.overtimeCheckout || null,
-  regular_hours:       Number(root?.dataset.regularHours || 0),
+  overtime_check_out:  root?.dataset.overtimeCheckout|| null,
+  regular_hours:       Number(root?.dataset.regularHours  || 0),
   overtime_hours:      Number(root?.dataset.overtimeHours || 0),
-  late_minutes:        Number(root?.dataset.lateMinutes || 0),
-  is_half_day:         root?.dataset.isHalfDay === "1",
-  is_weekend:          root?.dataset.isWeekend === "1",
+  late_minutes:        Number(root?.dataset.lateMinutes   || 0),
+  is_half_day:         root?.dataset.isHalfDay  === "1",
+  is_weekend:          root?.dataset.isWeekend  === "1",
   action_flags: {
     can_check_in:  root?.dataset.canCheckIn  === "1",
     can_check_out: root?.dataset.canCheckOut === "1",
@@ -461,68 +518,330 @@ attendanceStore.setToday({
   },
 });
 
-// ── QR Scanner setup ─────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
+function toLocalISO(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000`
+  );
+}
+
+function getServerNow() {
+  // Luôn đọc lại từ data-attribute (time picker cập nhật liên tục)
+  return root?.dataset.serverNow || toLocalISO(new Date());
+}
+
+// ════════════════════════════════════════════════════════════
+// TIME PICKER — cuộn tự áp dụng ngay (không cần nút)
+// ════════════════════════════════════════════════════════════
+
+let simDate = new Date(root?.dataset.serverNow || Date.now());
+let applyTimer = null;  // debounce
+
+function renderClock() {
+  const pad = (n) => String(n).padStart(2, "0");
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  set("demoTimeHH", pad(simDate.getHours()));
+  set("demoTimeMM", pad(simDate.getMinutes()));
+  set("demoTimeSS", pad(simDate.getSeconds()));
+  set("demoDateDD", pad(simDate.getDate()));
+  set("demoDateMM", pad(simDate.getMonth() + 1));
+
+  // Cập nhật data-server-now ngay để handleQrScan dùng đúng giờ
+  if (root) root.dataset.serverNow = toLocalISO(simDate);
+}
+
+const UNIT_MS = { h: 3600000, m: 60000, s: 1000, d: 86400000 };
+
+function adjustDate(unit, delta) {
+  if (unit === "mo") {
+    simDate.setMonth(simDate.getMonth() + delta);
+  } else {
+    simDate = new Date(simDate.getTime() + delta * UNIT_MS[unit]);
+  }
+  renderClock();
+  scheduleApply();
+}
+
+// Debounce: chờ 600ms sau lần cuộn cuối rồi mới POST
+function scheduleApply() {
+  clearTimeout(applyTimer);
+  applyTimer = setTimeout(applySimTime, 600);
+}
+
+async function applySimTime() {
+  const iso = toLocalISO(simDate);
+
+  try {
+    const res = await fetch("/employee/system/time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ simulated_now: iso }),
+    });
+
+    const data = await res.json();
+
+    updateUIRealtime(data); // vẫn giữ realtime
+
+  } catch (err) {
+    console.error("Time apply error:", err);
+  }
+}
+function updateUIRealtime(data) {
+  const root = document.getElementById("attendanceRoot");
+
+  // ===== Update dataset =====
+  root.dataset.attendanceState = data.attendance_state;
+  root.dataset.canCheckIn  = data.can_check_in ? "1" : "0";
+  root.dataset.canCheckOut = data.can_check_out ? "1" : "0";
+
+  // ===== Update badge =====
+  updateBadge(data.attendance_state);
+
+  // ===== Update button =====
+  updateButton(data.attendance_state);
+
+  // ===== Update công =====
+  const workText = document.getElementById("workHoursText");
+  if (workText) {
+    workText.textContent =
+      `Công hôm nay: ${data.regular_hours.toFixed(2)} giờ` +
+      (data.overtime_hours > 0
+        ? ` + OT ${data.overtime_hours.toFixed(2)} giờ`
+        : "");
+  }
+}
+function updateButton(state) {
+  const btn = document.getElementById("attendanceBtn");
+  if (!btn) return;
+
+  btn.className = "btn"; // reset
+
+  switch (state) {
+    case "not_started":
+      btn.textContent = "🔳 XÁC THỰC CHẤM CÔNG";
+      btn.classList.add("btn-primary");
+      btn.disabled = false;
+      btn.onclick = openScannerModal;
+      break;
+
+    case "working_regular":
+      btn.textContent = "🔳 XÁC NHẬN HẾT CA HÀNH CHÍNH";
+      btn.classList.add("btn-primary");
+      break;
+
+    case "pre_ot_rest":
+      btn.textContent = "⏳ Chờ đến giờ OT";
+      btn.classList.add("btn-warning", "btn-disabled");
+      btn.disabled = true;
+      break;
+
+    case "working_overtime":
+      btn.textContent = "🔳 KẾT THÚC TĂNG CA";
+      btn.classList.add("btn-primary");
+      break;
+
+    case "completed":
+      btn.textContent = "✅ HOÀN THÀNH";
+      btn.classList.add("btn-success", "btn-disabled");
+      btn.disabled = true;
+      break;
+  }
+}
+function updateBadge(state) {
+  const badge = document.getElementById("attendanceStateBadge");
+  if (!badge) return;
+
+  badge.style.display = "inline-block";
+
+  const map = {
+    not_started: ["🟡 Chưa vào ca", "status-warning"],
+    working_regular: ["🟢 Đang làm", "status-success"],
+    pre_ot_rest: ["⏳ Chờ OT", "status-warning"],
+    working_overtime: ["🟣 Tăng ca", "status-warning"],
+    completed: ["🏁 Hoàn tất", "status-success"],
+  };
+
+  const [text, cls] = map[state] || ["Không xác định", "status-info"];
+
+  badge.textContent = text;
+  badge.className = `status ${cls}`;
+}
+// Gắn sự kiện wheel + touch cho từng span
+document.querySelectorAll(".time-part[data-unit]").forEach((span) => {
+  span.title = "Cuộn lên/xuống để thay đổi";
+  span.style.cursor = "ns-resize";
+
+  span.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    adjustDate(span.dataset.unit, e.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
+
+  let touchStartY = null;
+  span.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  span.addEventListener("touchmove", (e) => {
+    if (touchStartY === null) return;
+    const dy = touchStartY - e.touches[0].clientY;
+    if (Math.abs(dy) > 10) {
+      adjustDate(span.dataset.unit, dy > 0 ? 1 : -1);
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+  span.addEventListener("touchend", () => { touchStartY = null; });
+});
+
+renderClock();
+setInterval(() => {
+  simDate = new Date(simDate.getTime() + 1000);
+  renderClock();
+}, 1000);
+// ════════════════════════════════════════════════════════════
+// QR SCANNER
+// ════════════════════════════════════════════════════════════
+
 const scanner = HRMQRScanner.createQRScanner({
   modalId:  "scannerModal",
   readerId: "qr-reader",
   panelId:  "scannerPanel",
 
   onDecoded: async (decodedText) => {
-    // Dùng serverNow để simulated_now khớp với giờ server
-    await Attendance.handleQrScan(decodedText, serverNow);
+    // Dùng giờ giả lập hiện tại (đã được cập nhật liên tục bởi time picker)
+    await Attendance.handleQrScan(decodedText, getServerNow());
   },
 
   onError: async (err) => {
     await Swal.fire({
-      icon: "error",
+      icon:  "error",
       title: "Lỗi camera",
-      text: err?.message || "Không thể truy cập camera",
+      text:  err?.message || "Không thể truy cập camera",
     });
   },
 });
 
-window.openScannerModal  = async () => await scanner.open();
+window.openScannerModal  = async () => {
+  try {
+    await scanner.open();
+  } catch (err) {
+    await Swal.fire({ icon: "error", title: "Lỗi camera", text: err?.message });
+  }
+};
 window.closeScannerModal = async () => await scanner.close();
 
-// ── Xóa bản ghi ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// XÓA BẢN GHI
+// ════════════════════════════════════════════════════════════
+
 window.deleteRecord = async (dateIso) => {
-  const confirm = await Swal.fire({
-    icon: "warning",
-    title: "Xóa bản ghi chấm công?",
-    text: `Ngày: ${dateIso}`,
-    showCancelButton: true,
+  const confirmResult = await Swal.fire({
+    icon:              "warning",
+    title:             "Xóa bản ghi chấm công?",
+    text:              `Ngày: ${dateIso}`,
+    showCancelButton:  true,
     confirmButtonText: "Xóa",
-    cancelButtonText: "Hủy",
-    confirmButtonColor: "#d33",
+    cancelButtonText:  "Hủy",
+    confirmButtonColor:"#d33",
   });
-  if (!confirm.isConfirmed) return;
-  await Attendance.deleteRecord(dateIso);
-  window.location.reload();
+
+  if (!confirmResult.isConfirmed) return;
+
+  try {
+    // Gọi trực tiếp fetch (không qua http.client) để tránh nhầm base URL
+    const res = await fetch("/employee/attendance/delete", {
+      method:      "DELETE",
+      headers:     { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify({ date: dateIso }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      await Swal.fire({
+        icon:  "error",
+        title: "Xóa thất bại",
+        text:  data?.message || `Lỗi ${res.status}`,
+      });
+      return;
+    }
+
+    await Swal.fire({
+      icon:             "success",
+      title:            "Đã xóa",
+      text:             data?.message || `Đã xóa bản ghi ngày ${dateIso}`,
+      timer:            1500,
+      showConfirmButton: false,
+    });
+    window.location.reload();
+
+  } catch (err) {
+    await Swal.fire({
+      icon:  "error",
+      title: "Lỗi",
+      text:  err?.message || "Không thể kết nối server",
+    });
+  }
 };
 
-// ── Reset OT Request (DEV/ADMIN) ──────────────────────────────
+// ════════════════════════════════════════════════════════════
+// RESET OT REQUEST (DEV/ADMIN)
+// ════════════════════════════════════════════════════════════
+
 window.resetOtRequest = async () => {
-  const confirm = await Swal.fire({
-    icon: "warning",
-    title: "[DEV] Reset OT Request?",
-    text: "Sẽ xóa OT request hôm nay để test lại luồng.",
-    showCancelButton: true,
+  const confirmResult = await Swal.fire({
+    icon:              "warning",
+    title:             "[DEV] Reset OT Request?",
+    text:              "Sẽ xóa OT request hôm nay để test lại luồng.",
+    showCancelButton:  true,
     confirmButtonText: "Reset",
-    cancelButtonText: "Hủy",
-    confirmButtonColor: "#d33",
+    cancelButtonText:  "Hủy",
+    confirmButtonColor:"#d33",
   });
-  if (!confirm.isConfirmed) return;
+
+  if (!confirmResult.isConfirmed) return;
+
   try {
     const res = await fetch("/employee/attendance/overtime-request/reset", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method:      "DELETE",
+      headers:     { "Content-Type": "application/json" },
+      credentials: "include",
     });
-    const data = await res.json();
-    await Swal.fire({ icon: "success", title: data.message || "Đã reset" });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      await Swal.fire({ icon: "error", title: "Lỗi", text: data?.message || `Lỗi ${res.status}` });
+      return;
+    }
+    await Swal.fire({ icon: "success", title: data.message || "Đã reset", timer: 1500, showConfirmButton: false });
     window.location.reload();
   } catch (err) {
-    await Swal.fire({ icon: "error", title: "Lỗi", text: err.message });
+    await Swal.fire({ icon: "error", title: "Lỗi", text: err?.message });
   }
+};
+window.applyHistoryFilter = () => {
+    const month = document.getElementById("filterMonth").value;
+    const year  = document.getElementById("filterYear").value;
+
+    // ✅ Validate input
+    if (!month || !year) {
+        alert("Vui lòng chọn tháng và năm");
+        return;
+    }
+
+    // ✅ Tạo URL sạch sẽ
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set("month", month);
+    params.set("year", year);
+
+    // ✅ Navigate với query string đúng
+    window.location.href = `${baseUrl}?${params.toString()}`;
 };
 </script>
 {% endblock %}

@@ -1,46 +1,52 @@
-const API_BASE = "/api";
+// app/static/js/api/http.client.js
 
-/**
- * Lấy token từ Cookie hoặc LocalStorage
- */
+// Flask blueprint không dùng prefix /api — gọi thẳng path
+const API_BASE = "";
+
 function getToken() {
-  // Ưu tiên 1: Nếu bạn lưu ở localStorage (dành cho các logic JS thuần)
-  const token = localStorage.getItem("access_token");
-  if (token) return token;
-
-  // Ưu tiên 2: Nếu không có trong localStorage, trình duyệt sẽ tự gửi Cookie
-  // (Bạn không cần code thêm gì vì fetch() sẽ tự đính kèm cookie nếu cùng domain)
-  return null;
+  return localStorage.getItem("access_token") || null;
 }
 
 async function request(endpoint, options = {}) {
   const token = getToken();
 
-  // Cấu hình mặc định cho fetch
   const defaultOptions = {
     headers: {
       "Content-Type": "application/json",
-      // Nếu có token trong localStorage thì đính kèm vào Header
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
+      ...options.headers,
     },
-    // Quan trọng: credentials: 'include' giúp fetch gửi kèm Cookie (access_token_cookie)
-    credentials: 'include', 
-    ...options
+    credentials: "include",
+    ...options,
   };
 
-  const res = await fetch(API_BASE + endpoint, defaultOptions);
-
-  if (!res.ok) {
-    // Nếu bị 401 (Unauthorized), có thể Token hết hạn -> đẩy về login
-    if (res.status === 401) {
-      window.location.href = "/auth/login";
-    }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "API Error");
+  let res;
+  try {
+    res = await fetch(API_BASE + endpoint, defaultOptions);
+  } catch (networkErr) {
+    throw new Error("Không thể kết nối server. Kiểm tra mạng và thử lại.");
   }
 
-  return res.json();
+  if (res.status === 401) {
+    window.location.href = "/auth/login";
+    throw new Error("Phiên đăng nhập hết hạn");
+  }
+
+  // Đọc body một lần
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    throw new Error(`Lỗi server (${res.status})`);
+  }
+
+  if (!res.ok) {
+    // Ưu tiên message từ server, rồi mới dùng status text
+    const msg = data?.message || data?.error || `Lỗi ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
 }
 
 export default request;

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from sqlalchemy import extract
 
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
@@ -676,7 +677,6 @@ def staff_profile():
                 "source": f"{log.entity_type or 'HistoryLog'}",
             }
         )
-    from datetime import timezone
 
     def _event_sort_key(item):
         event_time = item.get("time")
@@ -749,18 +749,20 @@ def update_profile_ajax():
     
 @employee_bp.route("/attendance")
 def attendance():
+    # ── 1. Kiểm tra đăng nhập ─────────────────────
     guard = _ensure_login()
     if guard:
         return guard
- 
+
     employee = _current_employee()
     if not employee:
         flash("Không tìm thấy hồ sơ nhân viên.", "danger")
         return _redirect_when_missing_employee()
- 
+
+    # ── 2. Xử lý thời gian hệ thống ───────────────
     now = parse_simulated_time({})
- 
-    # Nếu simulated_now vượt ngày thực tế → điều chỉnh về ngày cuối cùng có data
+
+    # Nếu simulated_now vượt ngày thực tế → điều chỉnh
     latest_attendance = (
         Attendance.query.filter_by(employee_id=employee.id)
         .order_by(Attendance.date.desc())
@@ -768,6 +770,7 @@ def attendance():
         if employee
         else None
     )
+    
     if latest_attendance and latest_attendance.date > now.date():
         fallback_time = (
             latest_attendance.check_out.time()
@@ -780,23 +783,52 @@ def attendance():
         )
         now = datetime.combine(latest_attendance.date, fallback_time)
         session["simulated_now"] = now.isoformat()
- 
-    # ── Lấy data hôm nay và lịch sử ──────────────────────────
+
+    # ── 3. Lấy tham số lọc tháng/năm từ URL ──────
+    try:
+        month_param = request.args.get("month")
+        year_param = request.args.get("year")
+        
+        # Ưu tiên lấy từ URL
+        selected_month = int(month_param) if month_param else now.month
+        selected_year = int(year_param) if year_param else now.year
+        
+        # ✅ Validate dữ liệu
+        if selected_month < 1 or selected_month > 12:
+            selected_month = now.month
+        if selected_year < 2020 or selected_year > now.year + 1:
+            selected_year = now.year
+            
+    except (ValueError, TypeError):
+        selected_month = now.month
+        selected_year = now.year
+
+    # ── 4. Truy vấn hôm nay ──────────────────────
     today = (
         EmployeeDashboardService.get_today_attendance(employee.id, now.date())
         if employee
         else None
     )
+
+    # ── 5. Truy vấn lịch sử (FIX) ────────────────
+    # ✅ Xây dựng filter động để tránh lỗi
+    filters = [Attendance.employee_id == employee.id]
+    
+    if selected_month and 1 <= selected_month <= 12:
+        filters.append(extract('month', Attendance.date) == selected_month)
+    
+    if selected_year and selected_year > 2000:
+        filters.append(extract('year', Attendance.date) == selected_year)
+
     history = (
-        Attendance.query.filter_by(employee_id=employee.id)
+        Attendance.query.filter(*filters)
         .order_by(Attendance.date.desc())
-        .limit(10)
         .all()
-        if employee
+        if employee and filters
         else []
     )
- 
-    # ── Lấy OT request hôm nay ───────────────────────────────
+
+    # ── 6. Xử lý OT request ──────────────────────
     today_ot_request = (
         OvertimeRequest.query.filter_by(
             employee_id=employee.id,
@@ -808,9 +840,7 @@ def attendance():
         if employee
         else None
     )
- 
-    # ── Preview giờ OT từ đơn đã duyệt (nếu chưa chốt thật) ─
-    # Chỉ dùng để hiển thị UI, KHÔNG ghi vào DB
+
     ot_preview_hours = Decimal("0.00")
     if (
         today
@@ -826,28 +856,31 @@ def attendance():
                 or 0
             )
         ).quantize(Decimal("0.01"))
- 
-    # ── Build shift & action state để pass xuống template ─────
+
+    # ── 7. Thông tin khác ────────────────────────
     shift_info = _build_shift_and_actions(now, today)
- 
-    today_holiday  = _get_holiday_for_date(now.date())
+    today_holiday = _get_holiday_for_date(now.date())
     holiday_lookup = _get_holiday_lookup()
- 
-    user       = _current_user()
-    role_name  = (user.role.name.lower() if user and user.role else "")
+
+    user = _current_user()
+    role_name = (user.role.name.lower() if user and user.role else "")
     can_reset_ot_request = role_name == "admin" or _is_dev_or_test_env()
- 
+
+    # ✅ RENDER - pass đúng selected_month & selected_year
     return render_template(
         "employee/attendance.html",
         employee=employee,
         today=today,
         history=history,
         now=now,
+        selected_month=selected_month,    # ✅ QUAN TRỌNG
+        selected_year=selected_year,      # ✅ QUAN TRỌNG
+        current_year=now.year,
         today_holiday=today_holiday,
         holiday_lookup=holiday_lookup,
         today_ot_request=today_ot_request,
-        ot_preview_hours=ot_preview_hours,       # ← mới, thay cho override trực tiếp
-        shift_info=shift_info,                    # ← mới, pass nguyên block xuống template
+        ot_preview_hours=ot_preview_hours,       
+        shift_info=shift_info,                    
         can_reset_ot_request=can_reset_ot_request,
     )
 
@@ -866,10 +899,46 @@ def system_time_control():
         now = get_current_time({})
         session["system_time_mode"] = "SIMULATED" if session.get("simulated_now") else "REAL"
 
+    # ===== RULE CA LÀM =====
+    shift_start = time(8, 0)
+    shift_end   = time(17, 0)
+    ot_start    = time(19, 0)
+
+    current_time = now.time()
+
+    # ===== GIẢ LẬP STATE MACHINE =====
+    if current_time < shift_start:
+        attendance_state = "not_started"
+        can_check_in  = True
+        can_check_out = False
+
+    elif shift_start <= current_time < shift_end:
+        attendance_state = "working_regular"
+        can_check_in  = False
+        can_check_out = True
+
+    elif shift_end <= current_time < ot_start:
+        attendance_state = "pre_ot_rest"
+        can_check_in  = False
+        can_check_out = False
+
+    else:
+        attendance_state = "working_overtime"
+        can_check_in  = False
+        can_check_out = True
+
+    # ===== TÍNH GIỜ CÔNG DEMO =====
+    worked_hours = max(0, (now.hour + now.minute/60) - 8)
+    overtime_hours = max(0, (now.hour + now.minute/60) - 19)
+
     return jsonify({
         "mode": session.get("system_time_mode", "REAL"),
         "current_time": now.isoformat(),
-        "day_of_week": now.strftime("%A"),
+        "attendance_state": attendance_state,
+        "can_check_in": can_check_in,
+        "can_check_out": can_check_out,
+        "regular_hours": round(min(worked_hours, 9), 2),
+        "overtime_hours": round(overtime_hours, 2)
     })
 
 
