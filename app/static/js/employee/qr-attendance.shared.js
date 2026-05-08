@@ -87,19 +87,22 @@
             const panel = document.getElementById(panelId);
             if (panel) panel.classList.add('success-flash');
           }
-            try {
-              await onDecoded(decodedText);
-              await close();
-            } catch (err) {
+          try {
+            const decodeResult = await onDecoded(decodedText);
+            if (decodeResult === false) {
               isProcessingDecode = false;
 
-              console.error("QR PROCESS ERROR:", err);
-
-              if (onError) {
-                await onError(err);
-              }
+              return;
+            }
+            await close();
+          } catch (err) {
+            isProcessingDecode = false;
+            console.error("QR PROCESS ERROR:", err);
+            if (onError) {
+              await onError(err);
             }
           }
+        }
       );
     }
 
@@ -112,7 +115,10 @@
       const isLocalDev =
         host === "localhost" ||
         host === "127.0.0.1" ||
-        host.startsWith("192.168.");
+        host.startsWith("192.168.") ||
+        host.startsWith("10.") ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+        host.endsWith(".local");
 
       if (!global.isSecureContext && !isLocalDev) {
         throw new Error(
