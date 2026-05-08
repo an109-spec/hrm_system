@@ -194,9 +194,9 @@ class AttendanceService:
         # ── Đã check-out ca chính ─────────────────────────────────────────
         if raw_state == Attendance.ShiftStatus.REGULAR_DONE:
             return AttendanceStateResult(
-                state="regular_done",
+                state="regular_done_pending_ot_decision",
                 button_enabled=False,
-                button_text="✅ Đã hoàn thành ca chính",
+                button_text="⏳ ĐANG CHỜ DUYỆT TĂNG CA",
                 can_scan=False,
                 message="Vui lòng xác nhận có muốn tăng ca không",
             )
@@ -932,7 +932,7 @@ class AttendanceService:
                     "type":             "success",
                     "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                     "attendance_state": attendance.shift_status,
-                    "message":          "Đã hoàn tất ngày công (về sớm).",
+                    "message":          "✅ Đã hoàn thành ngày làm việc.",
                     "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
@@ -954,7 +954,7 @@ class AttendanceService:
                     "type":             "success",
                     "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                     "attendance_state": attendance.shift_status,
-                    "message":          "Đã hoàn tất ngày công, không đăng ký tăng ca.",
+                    "message":          "✅ Đã hoàn thành ngày làm việc.",
                     "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
@@ -974,7 +974,7 @@ class AttendanceService:
                     "action":           "ot_approved_wait",
                     "attendance_state": attendance.shift_status,
                     "overtime_status":  "APPROVED",
-                    "message":          "Yêu cầu tăng ca đã được duyệt. Vui lòng chờ đến 19:00 để xác thực vào ca OT.",
+                    "message":          "✅ Yêu cầu tăng ca đã được phê duyệt.",
                     "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
@@ -990,7 +990,7 @@ class AttendanceService:
                     "action":           "ot_pending_approval",
                     "attendance_state": attendance.shift_status,
                     "overtime_status":  "PENDING",
-                    "message":          "Đang chờ duyệt tăng ca.",
+                    "message":          "⏳ ĐANG CHỜ DUYỆT TĂNG CA",
                 }
 
             # OT bị reject → complete
@@ -1001,7 +1001,7 @@ class AttendanceService:
                 "type":             "warning",
                 "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                 "attendance_state": attendance.shift_status,
-                "message":          "Đơn tăng ca bị từ chối. Đã hoàn tất ngày công.",
+                "message":          "✅ Đã hoàn thành ngày làm việc.",
                 "attendance":       AttendanceService.build_attendance_payload(attendance),
             }
 
@@ -1016,7 +1016,7 @@ class AttendanceService:
                     "type":             "warning",
                     "action":           AttendanceService.ACTION_COMPLETE_WITHOUT_OT,
                     "attendance_state": attendance.shift_status,
-                    "message":          "Đơn tăng ca không còn hiệu lực. Đã hoàn tất ngày công.",
+                    "message":          "✅ Đã hoàn thành ngày làm việc.",
                     "attendance":       AttendanceService.build_attendance_payload(attendance),
                 }
 
@@ -1436,7 +1436,7 @@ class AttendanceService:
 
         approved_ot = AttendanceService._get_approved_ot(employee_id, now_dt.date())
         if not approved_ot:
-            raise ValidationError("Bạn chưa có đơn OT đã được HR/Admin duyệt cho hôm nay.")
+            raise ValidationError("❌ Yêu cầu tăng ca chưa được phê duyệt.")
 
         if record.overtime_check_in:
             raise ValidationError("Bạn đã check-in OT rồi.")
@@ -1454,7 +1454,7 @@ class AttendanceService:
             )
         else:
             record.set_shift_status(Attendance.ShiftStatus.WORKING_OVERTIME)
-            msg = f"Check-in OT lúc {now_dt.strftime('%H:%M:%S')}. Bắt đầu tăng ca."
+            msg = "✅ Check-in tăng ca thành công."
 
         db.session.commit()
 
@@ -1479,7 +1479,7 @@ class AttendanceService:
         ).first()
 
         if not record or not record.overtime_check_in:
-            raise ValidationError("Bạn chưa check-in OT.")
+            raise ValidationError("❌ Yêu cầu tăng ca chưa được phê duyệt.")
         if record.overtime_check_out:
             raise ValidationError("Bạn đã check-out OT rồi.")
 
@@ -1506,7 +1506,7 @@ class AttendanceService:
         return {
             "type":               "success",
             "action":             AttendanceService.ACTION_CHECK_OUT_OT,
-            "message":            f"Check-out OT thành công. Tăng ca: {record.overtime_hours}h{multiplier_label}",
+            "message":            "✅ Đã hoàn thành tăng ca.",
             "attendance_state":   record.shift_status,
             "regular_hours":      str(record.regular_hours),
             "overtime_hours":     str(record.overtime_hours),

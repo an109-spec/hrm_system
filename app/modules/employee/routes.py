@@ -1000,13 +1000,12 @@ def employee_attendance_check_api():
         result = AttendanceService.process_employee_action(employee.id, payload, simulated_now)
         action = result.get("action")
         response_type = result.get("type", "success")
-        return jsonify({
+        response_payload = {
             "status": "success",
-            "type": response_type,
-            "message": result.get("message"),
-            "action": action,
-            "data": result,
-        })
+            **result
+        }
+
+        return jsonify(response_payload)
     except ValidationError as e:
         return jsonify({
             "status": "error",

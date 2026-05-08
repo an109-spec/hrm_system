@@ -154,7 +154,7 @@ export class Attendance {
     this._lockScanButtonTemporarily();
 
     let res;
-    try {
+    try { 
       res = await this.submit({ qr_text: qrText, simulated_now: simulatedNow });
     } catch (err) {
       Toast.error(err.message || "Lỗi hệ thống");

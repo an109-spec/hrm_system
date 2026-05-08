@@ -249,7 +249,9 @@ p:contains("Công hôm nay") {
     {% endif %}
 
     <p id="dateText"></p>
-
+<div id="employeeStatusBar" class="attendance-info" style="margin-top:10px;">
+  🟢 Trạng thái hiện tại: Chưa vào ca
+</div>
     {# ── NGÀY LỄ / CUỐI TUẦN ─────────────────────────────── #}
     {% if today_holiday %}
       <p class="attendance-info">🎉 Hôm nay là ngày nghỉ lễ: <strong>{{ today_holiday.name }}</strong></p>
