@@ -1,4 +1,4 @@
-import qrcode
+import qrcode # pyright: ignore[reportMissingModuleSource]
 from io import BytesIO
 import base64
 

@@ -1,44 +1,30 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, timezone, date
 from decimal import Decimal
 
 from app.extensions.db import db
 from app.models import (
     Attendance,
-    Employee,
     OvertimeRequest,
 )
+from app.models.attendance import AttendanceShiftStatus
 from app.common.exceptions import ValidationError
 from app.modules.attendance.service import AttendanceService
 
-
 class OvertimeService:
-    """
-    Service xử lý nghiệp vụ tăng ca (OT).
-    Bao gồm: tạo đơn, duyệt, từ chối, kiểm tra điều kiện, tính giờ.
-    """
-
-    OT_START = AttendanceService.OT_CHECKIN_OPEN   # 19:00 — single source of truth
-    OT_END   = AttendanceService.OT_END            # 22:00
-
-    # ══════════════════════════════════════════════════════════════════════
-    # CREATE OT REQUEST
-    # ══════════════════════════════════════════════════════════════════════
+    OT_START = AttendanceService.OT_CHECKIN_OPEN   
+    OT_END   = AttendanceService.OT_END            
 
     @staticmethod
     def create_overtime_request(
         employee_id: int,
         target_date: date,
         reason: str,
+        requested_hours: float = 0.0  # Thêm tham số này để nhận giờ từ FE
     ) -> dict:
-        """
-        Tạo đơn xin tăng ca.
-        Điều kiện: chưa có đơn OT cùng ngày, lý do không rỗng.
-        """
         if not reason or not reason.strip():
             raise ValidationError("Vui lòng nhập lý do tăng ca")
-
         existed = OvertimeRequest.query.filter(
             OvertimeRequest.employee_id == employee_id,
             OvertimeRequest.overtime_date == target_date,
@@ -52,55 +38,56 @@ class OvertimeService:
             employee_id=employee_id,
             overtime_date=target_date,
             reason=reason.strip(),
-            status="pending",
+            requested_hours=requested_hours,
+            overtime_hours=0.0,  # Bắt buộc phải có vì nullable=False
+            status="pending"     # Khớp với default trong Model
         )
 
         db.session.add(ot_req)
         db.session.commit()
 
         return {
-            "message":    "Tạo đơn tăng ca thành công",
+            "message": "Tạo đơn tăng ca thành công",
             "request_id": ot_req.id,
         }
-
-    # ══════════════════════════════════════════════════════════════════════
-    # APPROVE OT
-    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def approve_overtime(
         request_id: int,
-        approver_id: int | None = None,
+        approver_id: int,
+        approved_hours: float | None = None
     ) -> dict:
-        """
-        HR / Manager duyệt đơn tăng ca.
-        Sau khi approve:
-        - OT request.status = approved
-        - Attendance chuyển sang PRE_OT_REST
-        - Employee nhận notification
-        """
         ot_req = OvertimeRequest.query.get(request_id)
 
         if not ot_req:
             raise ValidationError("Không tìm thấy đơn tăng ca")
 
-        if ot_req.status not in ("pending", "pending_hr", "pending_admin"):
-            raise ValidationError("Đơn này đã được xử lý trước đó")
+        # Khớp với logic status rút gọn (chỉ còn pending)
+        if ot_req.status != "pending":
+            raise ValidationError(f"Đơn này không ở trạng thái chờ duyệt (Hiện tại: {ot_req.status})")
 
-        ot_req.status      = "approved"
+        # Cập nhật thông tin phê duyệt
+        ot_req.status = "approved"
         ot_req.approved_by = approver_id
-        ot_req.approved_at = datetime.utcnow()
+        ot_req.approved_at = datetime.now(timezone.utc)
+        
+        # Cập nhật thông tin HR duyệt (vì bạn giữ lại cột hr_decision trong model)
+        ot_req.hr_decision_by = approver_id
+        ot_req.hr_decision_at =datetime.now(timezone.utc)
 
-        # Hook → cập nhật attendance + tạo notification
+        # Logic chốt số giờ được hưởng
+        if approved_hours is not None:
+            ot_req.approved_hours = approved_hours
+        else:
+            # Nếu Admin không nhập giờ cụ thể, lấy bằng giờ đăng ký
+            ot_req.approved_hours = ot_req.requested_hours
+
+        # Hook → cập nhật attendance
         AttendanceService.handle_ot_approved(ot_req)
 
         db.session.commit()
 
         return {"message": "Đã duyệt đơn tăng ca"}
-
-    # ══════════════════════════════════════════════════════════════════════
-    # REJECT OT
-    # ══════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def reject_overtime(
@@ -108,27 +95,24 @@ class OvertimeService:
         reject_reason: str = "",
         approver_id: int | None = None,
     ) -> dict:
-        """
-        HR / Manager từ chối đơn tăng ca.
-        Sau khi reject:
-        - OT request.status = rejected
-        - Attendance chuyển sang COMPLETED
-        - Employee nhận notification
-        """
         ot_req = OvertimeRequest.query.get(request_id)
 
         if not ot_req:
             raise ValidationError("Không tìm thấy đơn tăng ca")
-
         if ot_req.status not in ("pending", "pending_hr", "pending_admin"):
-            raise ValidationError("Đơn này đã được xử lý trước đó")
-
-        ot_req.status        = "rejected"
-        ot_req.reject_reason = reject_reason
-        ot_req.approved_by   = approver_id
-        ot_req.approved_at   = datetime.utcnow()
+            raise ValidationError("Đơn này đã được xử lý hoặc không ở trạng thái chờ duyệt")
+        ot_req.status = "rejected"
+        ot_req.rejection_reason = reject_reason 
+        ot_req.approved_by = approver_id
+        ot_req.approved_at = datetime.now(timezone.utc)
+        
+        # Cập nhật thêm vào cột HR (vì model có sẵn, tội gì không dùng để sau này truy vết)
+        ot_req.hr_decision_by = approver_id
+        ot_req.hr_decision_at = datetime.now(timezone.utc)
+        ot_req.hr_note = f"Từ chối với lý do: {reject_reason}"
 
         # Hook → finalize attendance + tạo notification
+        # Đảm bảo AttendanceService nhận đúng tham số
         AttendanceService.handle_ot_rejected(ot_req, reason=reject_reason)
 
         db.session.commit()
@@ -141,43 +125,40 @@ class OvertimeService:
 
     @staticmethod
     def can_start_ot(employee_id: int, target_date: date) -> bool:
-        """
-        Kiểm tra nhân viên có được bắt đầu (xác thực) OT hay không.
-
-        Điều kiện:
-        - Đã có attendance hôm đó
-        - Đã checkout ca chính
-        - Có đơn OT đã approved
-        - Chưa OT check-in
-
-        Lưu ý: KHÔNG chặn theo giờ — employee xác thực được ngay sau khi approved.
-        Công OT vẫn clamp về 19:00 khi tính thực tế.
-        """
         attendance = Attendance.query.filter_by(
             employee_id=employee_id,
             date=target_date
         ).first()
 
         if not attendance:
-            raise ValidationError("Chưa có dữ liệu chấm công hôm nay")
+            raise ValidationError("Chưa có dữ liệu chấm công ngày hôm nay")
+        valid_statuses = (
+            AttendanceShiftStatus.REGULAR_DONE,
+            AttendanceShiftStatus.OT_CHECKIN_REQUIRED,
+            AttendanceShiftStatus.REGULAR_DONE_PENDING_OT_DECISION
+        )
+        
+        if attendance.shift_status not in valid_statuses:
+            if not attendance.check_out:
+                raise ValidationError("Bạn chưa checkout ca hành chính. Vui lòng hoàn thành ca chính trước.")
+            raise ValidationError(f"Trạng thái hiện tại ({attendance.shift_status_label}) không cho phép bắt đầu OT.")
 
-        if not attendance.check_out:
-            raise ValidationError("Bạn chưa checkout ca chính")
-
+        # Kiểm tra nếu đã check-in OT rồi
         if attendance.overtime_check_in:
-            raise ValidationError("Bạn đã bắt đầu OT rồi")
+            raise ValidationError("Bạn đã thực hiện check-in tăng ca trước đó rồi.")
 
+        # Kiểm tra đơn OT được duyệt
         ot_req = OvertimeRequest.query.filter_by(
             employee_id=employee_id,
             overtime_date=target_date,
             status="approved",
-        ).filter(OvertimeRequest.is_deleted.is_(False)).first()
+            is_deleted=False # BaseModel của bạn có is_deleted mặc định là False
+        ).first()
 
         if not ot_req:
-            raise ValidationError("Bạn chưa có đơn tăng ca được duyệt")
+            raise ValidationError("Bạn không có đơn đăng ký tăng ca nào được phê duyệt cho ngày hôm nay.")
 
         return True
-
     # ══════════════════════════════════════════════════════════════════════
     # CALCULATE OVERTIME
     # ══════════════════════════════════════════════════════════════════════

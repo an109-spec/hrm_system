@@ -2,7 +2,7 @@ from app.models.base import BaseModel, db
 from sqlalchemy.orm import relationship
 
 
-class ResignationRequest(BaseModel):
+class ResignationRequest(BaseModel):#(Đơn xin thôi việc
     __tablename__ = "resignation_requests"
 
     employee_id = db.Column(db.Integer, db.ForeignKey("employees.id"), nullable=False, index=True)

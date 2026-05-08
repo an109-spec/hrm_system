@@ -1,33 +1,22 @@
-# app/models/attendance.py
-
 from app.models.base import BaseModel, db
 
 class AttendanceShiftStatus:
-    """
-    Danh sách trạng thái luồng chấm công chuẩn.
-
-    Đây là nguồn sự thật cho `Attendance.shift_status`. Các service/routes/jobs/UI
-    nên dùng các constant này thay vì hard-code string rải rác.
-    """
-
-    NOT_STARTED = "not_started"
-    WORKING_REGULAR = "working_regular"
-    REGULAR_DONE = "regular_done"
-    REGULAR_DONE_PENDING_OT_DECISION = "regular_done_pending_ot_decision"
-    PRE_OT_REST = "pre_ot_rest"
-    WORKING_OVERTIME = "working_overtime"
-    COMPLETED = "completed"
-    HOLIDAY_OFF = "holiday_off"
-    WEEKEND_OFF = "weekend_off"
-    ABSENT = "absent"
+    NOT_STARTED = "not_started" #Chưa vào ca
+    WORKING_REGULAR = "working_regular" #Đang làm việc chính thức
+    REGULAR_DONE = "regular_done"#Đã hoàn thành giờ hành chính
+    REGULAR_DONE_PENDING_OT_DECISION = "regular_done_pending_ot_decision"#Xong giờ hành chính - Đang chờ quyết định tăng ca
+    PRE_OT_REST = "pre_ot_rest"#Nghỉ giải lao trước khi tăng ca
+    WORKING_OVERTIME = "working_overtime"#Đang làm tăng ca
+    COMPLETED = "completed"#Hoàn thành ngày công
+    HOLIDAY_OFF = "holiday_off"#Nghỉ lễ
+    WEEKEND_OFF = "weekend_off"#Nghỉ cuối tuần
+    ABSENT = "absent"#Vắng mặt
     LEAVE = "leave"
 
-    # Trạng thái nhắc việc hệ thống đang được jobs hiện tại sử dụng.
-    # Vẫn giữ trong danh sách hợp lệ để refactor từng bước không làm vỡ dữ liệu cũ.
-    REGULAR_CHECKOUT_REQUIRED = "regular_checkout_required"
-    OT_CHECKIN_REQUIRED = "ot_checkin_required"
+    REGULAR_CHECKOUT_REQUIRED = "regular_checkout_required"#Nhân viên đã hết giờ làm việc chính thức nhưng quên chưa bấm check-out. Hệ thống nhắc nhở phải hoàn tất ca này trước khi thực hiện các hành động khác
+    OT_CHECKIN_REQUIRED = "ot_checkin_required"#Nhân viên đã được duyệt tăng ca hoặc đã hết giờ hành chính, nhưng cần phải thực hiện một thao tác bấm "Check-in OT" để hệ thống bắt đầu tính giờ làm thêm
 
-    ACTIVE_STATUSES = frozenset({
+    ACTIVE_STATUSES = frozenset({#nhóm Trạng thái đang hoạt động
         WORKING_REGULAR,
         REGULAR_DONE_PENDING_OT_DECISION,
         PRE_OT_REST,
@@ -36,28 +25,31 @@ class AttendanceShiftStatus:
         OT_CHECKIN_REQUIRED,
     })
 
-    TERMINAL_STATUSES = frozenset({
+    TERMINAL_STATUSES = frozenset({ #nhóm Trạng thái kết thúc
         COMPLETED,
         HOLIDAY_OFF,
         WEEKEND_OFF,
         ABSENT,
         LEAVE,
     })
-
-    VALID_STATUSES = frozenset({
-        NOT_STARTED,
-        WORKING_REGULAR,
-        REGULAR_DONE,
-        REGULAR_DONE_PENDING_OT_DECISION,
-        PRE_OT_REST,
-        WORKING_OVERTIME,
-        COMPLETED,
+#Nếu status thuộc TERMINAL_STATUSES, nên khóa tất cả các nút như "Xác thực chấm công" hay "Tăng ca"
+    VALID_STATUSES = frozenset({#nhóm trạng thái hợp lệ
+        NOT_STARTED,#Chưa vào ca
+        WORKING_REGULAR,#Đang làm việc chính thức
+        REGULAR_DONE,#Đã hoàn thành giờ hành chính
+        REGULAR_DONE_PENDING_OT_DECISION,#Xong giờ hành chính - Đang chờ quyết định tăng ca
+        PRE_OT_REST,#Nghỉ giải lao trước khi tăng ca
+        WORKING_OVERTIME,#Đang làm tăng ca
+        COMPLETED,#Hoàn thành ngày công
         HOLIDAY_OFF,
         WEEKEND_OFF,
         ABSENT,
         LEAVE,
         REGULAR_CHECKOUT_REQUIRED,
+#Nhân viên đã hết giờ làm việc chính thức nhưng quên chưa bấm check-out. Hệ thống nhắc nhở phải hoàn tất ca này trước khi thực hiện các hành động khác
         OT_CHECKIN_REQUIRED,
+#Nhân viên đã được duyệt tăng ca hoặc đã hết giờ hành chính, nhưng cần phải thực hiện một thao tác bấm "Check-in OT" để hệ thống bắt đầu tính giờ làm thêm
+#Dùng để kiểm tra dữ liệu đầu vào. Bất kỳ trạng thái nào không nằm trong tập hợp này khi lưu vào Database hoặc trả về Frontend đều bị coi là lỗi dữ liệu
     })
 
     LABELS = {
@@ -76,7 +68,6 @@ class AttendanceShiftStatus:
         OT_CHECKIN_REQUIRED: "Cần check-in tăng ca",
     }
 
-    # Alias để đọc được dữ liệu/trạng thái cũ trong code hiện tại.
     LEGACY_ALIASES = {
         "working": WORKING_REGULAR,
         "late": WORKING_REGULAR,
@@ -96,34 +87,30 @@ class AttendanceShiftStatus:
     def normalize(cls, status: str | None) -> str:
         status_key = (status or cls.NOT_STARTED).strip().lower()
         return cls.LEGACY_ALIASES.get(status_key, status_key)
-
+#Chuyển đổi các giá trị cũ (Legacy), các chuỗi có khoảng trắng hoặc viết hoa/thường lộn xộn về một chuẩn duy nhất. 
+# Nếu dữ liệu rỗng (None), nó tự động đưa về trạng thái mặc định là "Chưa bắt đầu".
     @classmethod
     def is_valid(cls, status: str | None) -> bool:
         return cls.normalize(status) in cls.VALID_STATUSES
-
+#Kiểm tra xem một trạng thái (sau khi đã chuẩn hóa) 
+# có nằm trong danh sách các trạng thái được hệ thống cho phép hay không.
     @classmethod
     def label(cls, status: str | None) -> str:
         return cls.LABELS.get(cls.normalize(status), "Không xác định")
 
 
 class AttendanceType:
-    """
-    Danh sách loại ngày/cách ghi nhận công chuẩn cho `Attendance.attendance_type`.
-    """
-
     NORMAL = "normal"
     WEEKEND = "weekend"
     HOLIDAY = "holiday"
-    OVERTIME = "overtime"
-    ABSENT = "absent"
+    OVERTIME = "overtime"#Làm việc tăng ca
+    ABSENT = "absent"#Vắng mặt
     LEAVE = "leave"
-
-    # Các loại phục vụ vận hành/admin hiện có trong hệ thống.
-    LOCKED = "locked"
-    ABNORMAL = "abnormal"
+    LOCKED = "locked"#Dữ liệu đã khóa (Bản ghi đã chốt công, không được sửa đổi).
+    ABNORMAL = "abnormal"#Bất thường bị từ chối
     ABNORMAL_REJECTED = "abnormal_rejected"
-    ABSENT_UNEXCUSED = "absent_unexcused"
-    LEAVE_APPROVED = "leave_approved"
+    ABSENT_UNEXCUSED = "absent_unexcused"#Vắng mặt không lý do
+    LEAVE_APPROVED = "leave_approved"#Nghỉ phép đã duyệt
 
     VALID_TYPES = frozenset({
         NORMAL,
@@ -156,8 +143,8 @@ class AttendanceType:
     LEGACY_ALIASES = {
         "late": NORMAL,
         "early": NORMAL,
-        "late_early": NORMAL,
-        "checked_out": NORMAL,
+        "late_early": NORMAL,#Vi phạm cả hai nhưng vẫn là ngày làm việc thường.
+        "checked_out": NORMAL,#Đã đăng xuất thành công ngày làm việc thường
     }
 
     @classmethod
@@ -174,15 +161,6 @@ class AttendanceType:
         return cls.LABELS.get(cls.normalize(attendance_type), "Không xác định")
 
 class AttendanceStatus(db.Model):
-    """
-    Bảng danh mục trạng thái chấm công.
-    Ví dụ:
-    1 - PRESENT
-    2 - LATE
-    3 - ABSENT
-    4 - LEAVE
-    """
-
     __tablename__ = "attendance_status"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -190,7 +168,7 @@ class AttendanceStatus(db.Model):
     status_name = db.Column(
         db.String(20),
         nullable=False
-    )  # PRESENT / LATE / ABSENT / LEAVE
+    )
 
     multiplier = db.Column(
         db.Float,
@@ -223,20 +201,11 @@ class Attendance(BaseModel):
         nullable=True
     )
 
-    # =====================================================
-    # BASIC INFO
-    # =====================================================
-
     date = db.Column(
         db.Date,
         nullable=False,
         index=True
     )
-
-    # =====================================================
-    # REGULAR SHIFT
-    # =====================================================
-
     # check-in ca chính
     check_in = db.Column(
         db.DateTime(timezone=True),
@@ -248,12 +217,6 @@ class Attendance(BaseModel):
         db.DateTime(timezone=True),
         nullable=True
     )
-
-    # =====================================================
-    # OVERTIME SHIFT
-    # =====================================================
-
-    # check-in OT (19h+)
     overtime_check_in = db.Column(
         db.DateTime(timezone=True),
         nullable=True
@@ -265,11 +228,6 @@ class Attendance(BaseModel):
         nullable=True
     )
 
-    # =====================================================
-    # HOURS
-    # =====================================================
-
-    # tổng công
     working_hours = db.Column(
         db.Numeric(6, 2),
         default=0
