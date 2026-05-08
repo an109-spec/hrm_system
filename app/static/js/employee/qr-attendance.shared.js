@@ -30,12 +30,12 @@
       } catch (_) {}
     }
 
-    function normalizeOpenError(err) {
+    function normalizeOpenError(err, isLocalDev = false) {
       // In lỗi thực tế ra console để tiện debug khi phát triển
       console.error("QR Scanner Error Detail:", err);
 
       const msg = String(err?.message || err || '').toLowerCase();
-      if (!global.isSecureContext) {
+      if (!global.isSecureContext && !isLocalDev) {
         return new Error('Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng mở hệ thống bằng đường dẫn bảo mật.');
       }
       if (msg.includes('unsupported_camera_api')) {
@@ -171,7 +171,8 @@
           if (!started) throw lastDeviceErr || new Error('Không thể mở bất kỳ camera nào.');
         } catch (secondErr) {
           await close();
-          throw normalizeOpenError(secondErr?.message ? secondErr : firstErr);
+          const err = secondErr?.message ? secondErr : firstErr;
+          throw normalizeOpenError(err, isLocalDev);
         }
       }
     }

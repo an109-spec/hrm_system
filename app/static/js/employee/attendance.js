@@ -149,20 +149,23 @@ export class Attendance {
     btn.classList.add("btn-disabled");
   }
 
-  static async handleQrScan(qrText, serverNow) {
-    const simulatedNow = serverNow || toLocalISO(new Date());
-    this._lockScanButtonTemporarily();
+static async handleQrScan(qrText, serverNow) {
+  const simulatedNow = serverNow || toLocalISO(new Date());
+  this._lockScanButtonTemporarily();
 
-    let res;
-    try { 
-      res = await this.submit({ qr_text: qrText, simulated_now: simulatedNow });
-    } catch (err) {
-      Toast.error(err.message || "Lỗi hệ thống");
-      return;
-    }
-
-    await this._handleResponse(res, qrText, simulatedNow);
+  let res;
+  try { 
+    res = await this.submit({ qr_text: qrText, simulated_now: simulatedNow });
+  } catch (err) {
+    console.error("QR Scan Error:", err);
+    res = {
+      type: "error",
+      action: null,
+      message: err.message || "Lỗi hệ thống",
+    };
   }
+  await this._handleResponse(res, qrText, simulatedNow);
+}
 
   // ── Dispatcher theo action ────────────────────────────────
   static async _handleResponse(res, qrText, simulatedNow) {
