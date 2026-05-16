@@ -44,7 +44,11 @@ class Complaint(BaseModel):
     # RELATIONSHIPS
     # ======================
 
-    employee = relationship('Employee', foreign_keys=[employee_id], backref='complaints')
+    employee = relationship(
+        'Employee',
+        foreign_keys=[employee_id],
+        back_populates='complaints'
+    )
     handler = relationship('Employee', foreign_keys=[handled_by])
 
     messages = relationship(

@@ -8,31 +8,27 @@ class User(BaseModel, UserMixin):
     Kết nối 1-1 với thông tin nhân viên (Employee).
     """
     __tablename__ = 'users'
-
-    # Thông tin đăng nhập
     username = db.Column(db.String(50), unique=True, nullable=False, index=True)
     email = db.Column(db.String(100), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    
-    # Phân quyền (Liên kết với bảng Role)
+
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=True)
     
-    # Trạng thái tài khoản (Cho phép hoặc khóa truy cập)
     is_active = db.Column(db.Boolean, default=True, server_default='true')
     lock_reason = db.Column(db.Text, nullable=True)
     locked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     locked_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     failed_login_attempts = db.Column(db.Integer, default=0)
-    # Relationships
-    # Mối quan hệ 1-1 với Employee (uselist=False đảm bảo tính duy nhất)
-    # back_populates giúp truy cập ngược từ employee.user
+
     employee_profile = relationship('Employee', back_populates='user', uselist=False)
-    
-    # Mối quan hệ với bảng Role
+
     role = relationship('Role', backref='users')
 
-    # Mối quan hệ với bảng Notification
-    notifications = relationship('Notification', backref='user', lazy='dynamic')
+    notifications = relationship(
+        'Notification',
+        back_populates='user',
+        lazy='dynamic'
+    )
 
     def __repr__(self):
         return f"<User {self.username}>"

@@ -13,34 +13,30 @@ def auth_required(fn):
     @wraps(fn)
     @jwt_required(locations=["headers", "cookies"])
     def wrapper(*args, **kwargs):
-        # Đưa import vào đây để tránh lỗi vòng lặp (Circular Import)
         from app.models.user import User 
-
+        from app.models.employee import Employee 
         user_id = get_jwt_identity()
-        
-        # Dùng session.get để tìm user
         user = db.session.get(User, user_id)
-
         if not user or not user.is_active:
             raise UnauthorizedError("Tài khoản không tồn tại hoặc đã bị khóa")
-
-        # Lấy profile nhân viên
         employee = user.employee_profile
-
-        if employee and employee.working_status == 'resigned':
+        if not employee:
+            from app.utils.time import get_current_time
+            employee = Employee(
+                user_id=user.id,
+                full_name=(user.username or user.email or f"User {user.id}").strip(),
+                working_status="active",
+                hire_date=get_current_time().date()
+            )
+            db.session.add(employee)
+            db.session.commit()
+        if employee.working_status == 'resigned':
             raise UnauthorizedError("Nhân viên đã nghỉ việc không thể truy cập")
-
-        # Lưu vào biến g để dùng ở các route hoặc template
         g.user = user
         g.employee = employee
-
         return fn(*args, **kwargs)
-
     return wrapper
 
-# =========================
-# 🔐 ROLE REQUIRED
-# =========================
 def role_required(*role_names):
     def decorator(fn):
         @wraps(fn)

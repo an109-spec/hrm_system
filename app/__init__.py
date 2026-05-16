@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask,redirect, url_for, flash
 from datetime import datetime
 from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
@@ -10,12 +10,50 @@ from app.extensions.jwt import jwt
 from app.extensions.socketio import socketio
 from flask_migrate import Migrate
 from flask_mail import Mail
+from app.common.exceptions import UnauthorizedError, ForbiddenError
 
 
 from app.cli import register_cli
 
 mail = Mail()
 migrate = Migrate()
+
+def ensure_leave_types():
+    from app.models.leave import LeaveType
+    from app.common.constants import LEAVE_TYPE_CONFIGS
+    from app.extensions import db
+    changed = False
+    for code, info in LEAVE_TYPE_CONFIGS.items():
+        existed = LeaveType.query.filter_by(code=code).first()
+        if existed:
+            is_updated = False
+            if existed.name != info["name"]:
+                existed.name = info["name"]
+                is_updated = True
+            if existed.is_paid != info["is_paid"]:
+                existed.is_paid = info["is_paid"]
+                is_updated = True
+            if hasattr(existed, 'default_days') and existed.default_days != info.get("default_days"):
+                existed.default_days = info.get("default_days")
+                is_updated = True
+            if is_updated:
+                changed = True
+        else:
+            new_type = LeaveType(
+                code=code, 
+                name=info["name"], 
+                is_paid=info["is_paid"],
+                default_days=info.get("default_days", 0)
+            )
+            db.session.add(new_type)
+            changed = True
+    if changed:
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Lỗi khi đồng bộ LeaveType: {e}")
+    return LeaveType.query.order_by(LeaveType.id.asc()).all()
 
 def create_app():
     app = Flask(__name__)
@@ -39,7 +77,7 @@ def create_app():
     with app.app_context():
         from app import models
         db.create_all()
-
+        ensure_leave_types()
     # Register blueprints & CLI
     register_blueprints(app)
     register_cli(app)
@@ -100,6 +138,17 @@ def create_app():
 
         if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
             scheduler.start()
+
+
+    @app.errorhandler(UnauthorizedError)
+    def handle_unauthorized(e):
+        flash("Vui lòng đăng nhập để tiếp tục.", "warning")
+        return redirect(url_for("auth.login"))
+
+    @app.errorhandler(ForbiddenError)
+    def handle_forbidden(e):
+        flash("Bạn không có quyền truy cập khu vực này.", "danger")
+        return redirect(url_for("home.index_page")) 
     return app
 
 def ensure_default_admin(app):

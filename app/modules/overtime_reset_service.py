@@ -1,24 +1,28 @@
 from __future__ import annotations
-from datetime import datetime
-
+from decimal import Decimal
 from sqlalchemy import or_
 
 from app.models import Attendance, HistoryLog, Notification, OvertimeRequest, Employee
 from app.models.base import db
+from app.utils.time import get_current_time 
 
-
-def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user_id: int | None = None, source: str = "system", anchor_notification_id: int | None = None) -> dict:
+def reset_overtime_request_flow(
+    *, 
+    overtime_request: OvertimeRequest, 
+    actor_user_id: int | None = None, 
+    source: str = "system", 
+    anchor_notification_id: int | None = None
+) -> dict:
     overtime_date = overtime_request.overtime_date
     employee = Employee.query.get(overtime_request.employee_id)
     user_id = employee.user_id if employee else None
-    now_ts = datetime.utcnow()
+    now_ts = get_current_time()
     same_day_requests = OvertimeRequest.query.filter_by(
         employee_id=overtime_request.employee_id,
         overtime_date=overtime_date,
         is_deleted=False,
     ).all()
     request_ids = [row.id for row in same_day_requests]
-
     notification_ids: set[int] = set()
     if anchor_notification_id is not None:
         notification_ids.add(anchor_notification_id)
@@ -36,7 +40,6 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
             ).all()
             for row in linked:
                 notification_ids.add(row.id)
-
     deleted_notifications = 0
     for notification_id in notification_ids:
         noti = Notification.query.filter_by(id=notification_id, is_deleted=False).first()
@@ -46,7 +49,6 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
         if hasattr(noti, "deleted_at"):
             setattr(noti, "deleted_at", now_ts)
         deleted_notifications += 1
-
     attendance = Attendance.query.filter_by(
         employee_id=overtime_request.employee_id,
         date=overtime_date,
@@ -54,24 +56,41 @@ def reset_overtime_request_flow(*, overtime_request: OvertimeRequest, actor_user
     before_attendance = {
         "attendance_type": attendance.attendance_type if attendance else None,
         "overtime_hours": str(attendance.overtime_hours) if attendance else None,
+        "working_hours": str(attendance.working_hours) if attendance else None,
+        "shift_status": attendance.shift_status if attendance else None
     }
     if attendance:
-        attendance.overtime_hours = 0
-        is_weekend = overtime_date.weekday() >= 5
-        has_approved_payroll = False
-        if attendance.attendance_type in {"overtime", "normal"} and not is_weekend and not has_approved_payroll:
-            attendance.attendance_type = "normal"
-
+        attendance.overtime_hours = Decimal("0.00")
+        attendance.overtime_check_in = None
+        attendance.overtime_check_out = None
+        regular_hours = Decimal(str(attendance.regular_hours or 0))
+        attendance.working_hours = regular_hours.quantize(Decimal("0.01"))
+        if not attendance.is_weekend and not attendance.is_holiday:
+            attendance.set_attendance_type("normal")  
+            if attendance.check_in and attendance.check_out:
+                attendance.set_shift_status("regular_done") 
+            elif attendance.check_in:
+                attendance.set_shift_status("working_regular")
+            else:
+                attendance.set_shift_status("not_started")
+        else:
+            attendance.set_attendance_type("normal")
+            if attendance.is_holiday:
+                attendance.set_shift_status("holiday_off")
+            else:
+                attendance.set_shift_status("weekend_off")
     deleted_requests = 0
     for row in same_day_requests:
         row.is_deleted = True
+        row.status = "cancelled" 
         if hasattr(row, "deleted_at"):
             setattr(row, "deleted_at", now_ts)
         deleted_requests += 1
-
     after_attendance = {
         "attendance_type": attendance.attendance_type if attendance else None,
         "overtime_hours": str(attendance.overtime_hours) if attendance else None,
+        "working_hours": str(attendance.working_hours) if attendance else None,
+        "shift_status": attendance.shift_status if attendance else None
     }
     db.session.add(
         HistoryLog(

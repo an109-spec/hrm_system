@@ -6,7 +6,7 @@ import os
 import uuid
 
 from werkzeug.utils import secure_filename
-
+from app.utils.time import get_current_time
 from app.extensions.db import db
 from app.models import Complaint, Employee, Notification, Salary, User
 from app.models.file_upload import FileUpload
@@ -71,7 +71,7 @@ class EmployeePayrollService:
     @staticmethod
     def payroll_history(user_id: int | None, filters: dict) -> dict:
         employee = EmployeePayrollService._get_employee(user_id)
-        year = int(filters.get("year") or datetime.now(timezone.utc).year)
+        year = int(filters.get("year")or get_current_time().year)
         payroll_status = (filters.get("status") or "").strip()
         paid_state = (filters.get("paid_state") or "").strip()
         complaint_only = str(filters.get("has_complaint") or "").lower() in {"1", "true", "yes"}
@@ -233,6 +233,7 @@ startxref
 
         complaint = Complaint(
             employee_id=employee.id,
+            user_id=employee.user_id,
             salary_id=row.id,
             type="salary",
             title=f"Khiếu nại phiếu lương #{row.id}",
@@ -252,12 +253,17 @@ startxref
             filename = secure_filename(attachment.filename)
             unique_name = f"{uuid.uuid4().hex}_{filename}"
             attachment.save(os.path.join(save_dir, unique_name))
+            file_type = (
+                "image"
+                if ext in {"jpg", "jpeg", "png"}
+                else "pdf"
+            )
             db.session.add(
                 FileUpload(
                     file_name=filename,
                     file_url=f"/static/uploads/complaint/{unique_name}",
-                    file_type="attachment",
-                    uploaded_by=user_id,
+                    file_type=file_type,
+                    uploaded_by=employee.user_id,
                     complaint_id=complaint.id,
                 )
             )
@@ -302,7 +308,7 @@ startxref
         if not complaint:
             raise ValueError("Không tìm thấy khiếu nại")
         complaint.closed_by_employee = True
-        complaint.closed_at = datetime.now(timezone.utc)
+        complaint.closed_at = get_current_time()
         complaint.status = "resolved"
         db.session.add(Notification(user_id=employee.user_id, title="✅ Đã đóng khiếu nại", content=f"Bạn đã đóng khiếu nại #{complaint.id}", type="complaint", link="/employee/payslip"))
         db.session.commit()

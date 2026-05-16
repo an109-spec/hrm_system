@@ -1,16 +1,16 @@
 from __future__ import annotations
-from sqlalchemy import extract
 
-from datetime import date, datetime, time, timezone
+from sqlalchemy import extract
+from datetime import date, datetime, time
 from decimal import Decimal
-import importlib
 import os
-import re
 import uuid
-from sqlalchemy.exc import IntegrityError
+from flask import current_app
 from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
+
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+from sqlalchemy.orm import joinedload
 from app.extensions.db import db
 from app.models import (
     Attendance,
@@ -27,573 +27,291 @@ from app.models import (
     User,
     Holiday,
     ResignationRequest,
+    
 )
+from app.modules.leave.service import LeaveService
+from app.modules.leave.dto import LeaveRequestDTO
 from app.common.exceptions import ValidationError
+from app.common.constants import (
+    RoleName,
+    WorkingStatus,
+    EmploymentType,
+    LeaveStatus,
+    AttendanceStatus,
+    SalaryStatus,
+    AttendanceConstants,
+    WorkConfig,
+    OvertimeConfig,
+    _build_lunar_public_holidays_for_year,
+    _resolve_lunar_date_class,
+    LEAVE_TYPE_CONFIGS,
+    VN_FIXED_PUBLIC_HOLIDAYS,
+    VN_LUNAR_PUBLIC_HOLIDAYS,
+)
 from app.modules.attendance.service import AttendanceService
-from app.utils.time import get_current_time, parse_simulated_time
-from .ess_service import EmployeeESSService
+
+from app.utils.time import get_current_time, is_simulation_mode, VN_TIMEZONE, set_simulated_time
+from app.utils.ui_helpers import get_status_badge, format_minutes_to_string, labelize_enum
+from app.common.security import auth_required, role_required
+from flask import g
+
+from .overtime_service import EmployeeOvertimeService
+from .notification_service import EmployeeNotificationService
+from .complaint_service import EmployeeComplaintService
+from .dependent_service import EmployeeDependentService
 from .payroll_service import EmployeePayrollService
 from . import employee_bp
 from app.modules.resignation_service import ResignationService
 from app.modules.overtime_reset_service import reset_overtime_request_flow
-WORKDAY_CHECKIN_START = time(7, 0, 0)
-WORKDAY_CHECKIN_NORMAL_END = time(8, 0, 0)
-WORKDAY_START = time(8, 0, 0)
-WORKDAY_END = time(17, 0, 0)
-HALF_DAY_LATE_CUTOFF = time(9, 0, 0)
-VN_FIXED_PUBLIC_HOLIDAYS: dict[str, str] = {
-    "01-01": "Tết Dương lịch",
-    "04-30": "Ngày Giải phóng miền Nam",
-    "05-01": "Quốc tế Lao động",
-    "09-02": "Quốc khánh",
-}
-VN_LUNAR_PUBLIC_HOLIDAYS: tuple[tuple[int, int, str], ...] = (
-    (1, 1, "Tết Nguyên đán (Mùng 1)"),
-    (1, 2, "Tết Nguyên đán (Mùng 2)"),
-    (1, 3, "Tết Nguyên đán (Mùng 3)"),
-    (3, 10, "Giỗ Tổ Hùng Vương"),
+from app import ensure_leave_types
+from .constants import (
+ALLOWED_FUNERAL_RELATIONS,
+ENUM_LABELS,
+PERSONAL_SUBTYPES
 )
-UI_CHECKIN_OPEN = time(6, 0, 0)
-LUNCH_START = time(12, 0, 0)
-LUNCH_END = time(13, 0, 0)
-REST_BEFORE_OT_END = time(19, 0, 0)
-OT_UI_OPEN = time(18, 0, 0)
-OT_END = time(22, 0, 0)
-def _resolve_lunar_date_class():
-    spec = importlib.util.find_spec("lunardate")
-    if spec is None:
-        return None
-    module = importlib.import_module("lunardate")
-    return getattr(module, "LunarDate", None)
 
-LUNAR_DATE_CLASS = _resolve_lunar_date_class()
-
-def _build_shift_and_actions(now: datetime, attendance: "Attendance | None") -> dict:
-    """
-    Tính shift_state (thời điểm trong ngày) và attendance_state (trạng thái nhân viên),
-    đồng thời tính action_flags để frontend biết nút nào được bấm.
- 
-    Nguồn sự thật cho attendance_state là Attendance.ShiftStatus từ model/service.
-    Không tự đặt tên lệch ở đây.
-    """
+def _build_shift_and_actions(attendance: "Attendance | None") -> dict:
+    now = get_current_time() # Khớp với simulation trong time.py
     current_time = now.time()
- 
-    # ── Xác định shift_state (slot thời gian) ─────────────────
-    if current_time < WORKDAY_START:
+    today_date = now.date()
+
+    # 1. Xác định trạng thái ca làm việc (Shift State)
+    if current_time < WorkConfig.WORKDAY_START:
         shift_state = "BEFORE_SHIFT"
-    elif LUNCH_START <= current_time < LUNCH_END:
+    elif WorkConfig.LUNCH_START <= current_time < WorkConfig.LUNCH_END:
         shift_state = "LUNCH_BREAK"
-    elif WORKDAY_START <= current_time < WORKDAY_END:
+    elif WorkConfig.WORKDAY_START <= current_time < WorkConfig.WORKDAY_END:
         shift_state = "WORKING"
-    elif WORKDAY_END <= current_time < REST_BEFORE_OT_END:
+    elif WorkConfig.WORKDAY_END <= current_time < WorkConfig.OT_START:
         shift_state = "REST_BEFORE_OT"
-    elif REST_BEFORE_OT_END <= current_time < OT_END:
+    elif WorkConfig.OT_START <= current_time <= WorkConfig.OT_END:
         shift_state = "OT_WINDOW"
     else:
         shift_state = "OFF"
- 
-    # ── Xác định attendance_state từ record (nguồn sự thật) ───
-    today_holiday = _get_holiday_for_date(now.date())
-    is_weekend    = now.weekday() >= 5
- 
+
+    # 2. Xử lý ngày lễ (Dùng Cache tối ưu hiệu năng)
+    lunar_holidays = OvertimeConfig.get_lunar_holidays(today_date.year)
+    date_str = today_date.strftime("%m-%d")
+    
+    holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(date_str) or lunar_holidays.get(date_str)
+    is_holiday = holiday_name is not None
+    is_weekend = now.weekday() >= 5
+
+    # 3. Xác định trạng thái điểm danh (Attendance State)
     if not attendance:
-        # Chưa có bản ghi → xem ngày nghỉ/cuối tuần
-        if today_holiday:
-            attendance_state = Attendance.ShiftStatus.HOLIDAY_OFF
+        if is_holiday:
+            attendance_state = "holiday_off"
         elif is_weekend:
-            attendance_state = Attendance.ShiftStatus.WEEKEND_OFF
+            attendance_state = "weekend_off"
         else:
-            attendance_state = Attendance.ShiftStatus.NOT_STARTED
+            attendance_state = "not_started"
     else:
-        # Dùng normalize để đọc đúng cả legacy alias
-        attendance_state = Attendance.ShiftStatus.normalize(attendance.shift_status)
- 
-    # ── Tính action_flags ──────────────────────────────────────
-    in_lunch     = LUNCH_START <= current_time < LUNCH_END
-    has_checkin  = bool(attendance and attendance.check_in)
-    has_checkout = bool(attendance and attendance.check_out)
-    has_ot_in    = bool(attendance and attendance.overtime_check_in)
-    has_ot_out   = bool(attendance and attendance.overtime_check_out)
- 
+        # Sử dụng hàm normalize đã hợp nhất trong constants.py
+        attendance_state = AttendanceConstants.normalize(attendance.shift_status)
+
+    # 4. Kiểm tra đơn OT đã duyệt
     approved_ot_request = None
     if attendance:
         approved_ot_request = OvertimeRequest.query.filter(
             OvertimeRequest.employee_id == attendance.employee_id,
-            OvertimeRequest.overtime_date == now.date(),
+            OvertimeRequest.overtime_date == today_date,
             OvertimeRequest.is_deleted.is_(False),
-            OvertimeRequest.status == "approved",
+            OvertimeRequest.status == "approved" 
         ).first()
- 
-    # OT check-in mở từ 18:30
-    ot_checkin_open = current_time >= time(18, 30, 0)
- 
+
+    # 5. Thiết lập Action Flags (Logic điều khiển nút bấm)
+    has_checkin = bool(attendance and attendance.check_in)
+    has_checkout = bool(attendance and attendance.check_out)
+    has_ot_in = bool(attendance and attendance.overtime_check_in)
+    has_ot_out = bool(attendance and attendance.overtime_check_out)
+    
+    # Cho phép Check-out ngay cả trong giờ nghỉ trưa để tránh nhân viên bị kẹt
+    # Nhưng chặn Check-in trong giờ nghỉ trưa để đảm bảo đúng quy định
+    in_lunch = WorkConfig.LUNCH_START <= current_time < WorkConfig.LUNCH_END
+
     return {
         "attendance_state": attendance_state,
-        "shift_state":      shift_state,
+        "shift_state": shift_state,
         "action_flags": {
-            # Có thể check-in: từ 06:00 đến trước 17:00, không trong giờ trưa, chưa check-in
-            "can_check_in":  (
-                UI_CHECKIN_OPEN <= current_time < WORKDAY_END
+            "can_check_in": (
+                WorkConfig.CHECKIN_START <= current_time < WorkConfig.WORKDAY_END
                 and not in_lunch
                 and not has_checkin
-                and attendance_state not in {
-                    Attendance.ShiftStatus.HOLIDAY_OFF,
-                    Attendance.ShiftStatus.WEEKEND_OFF,
-                    Attendance.ShiftStatus.ABSENT,
-                    Attendance.ShiftStatus.LEAVE,
-                    Attendance.ShiftStatus.COMPLETED,
-                }
+                and attendance_state == "not_started"
             ),
-            # Có thể check-out ca chính: đã check-in, chưa check-out, không giờ trưa
             "can_check_out": (
-                has_checkin
-                and not has_checkout
-                and not in_lunch
+                has_checkin 
+                and not has_checkout 
+                # Bỏ điều kiện 'not in_lunch' để nhân viên thoải mái về sớm/về trưa
             ),
-            # Có thể check-in OT: từ 18:30, đã checkout ca chính, có OT approved, chưa OT check-in
-            "can_start_ot":  (
-                ot_checkin_open
-                and has_checkout
+            "can_start_ot": (
+                shift_state == "OT_WINDOW"
+                and has_checkout # Bắt buộc phải xong hành chính mới được OT
                 and bool(approved_ot_request)
                 and not has_ot_in
             ),
-            # Có thể check-out OT: đã OT check-in, chưa OT check-out
-            "can_end_ot":    (
-                has_ot_in
+            "can_end_ot": (
+                has_ot_in 
                 and not has_ot_out
             ),
         },
-        # Thêm context để frontend render đúng
-        "today_holiday":      today_holiday.name if today_holiday else None,
-        "is_weekend":         is_weekend,
-        "has_approved_ot":    bool(approved_ot_request),
+        "today_holiday": holiday_name,
+        "is_weekend": is_weekend,
+        "has_approved_ot": bool(approved_ot_request),
+        "current_sim_time": now.strftime("%H:%M:%S") 
     }
 
-def _build_lunar_public_holidays_for_year(year: int) -> dict[str, str]:
-    if LUNAR_DATE_CLASS is None:
-        return {}
-    lookup: dict[str, str] = {}
-    for lunar_month, lunar_day, holiday_name in VN_LUNAR_PUBLIC_HOLIDAYS:
-        try:
-            solar_date = LUNAR_DATE_CLASS(year, lunar_month, lunar_day).toSolarDate()
-        except ValueError:
-            continue
-        lookup[solar_date.strftime("%m-%d")] = holiday_name
-    return lookup
-
-def _current_user() -> User | None:
-    user_id = session.get("user_id")
-    if not user_id:
-        return None
-    return User.query.get(user_id)
-
-
-def _current_employee() -> Employee | None:
-    user = _current_user()
-    if user and user.employee_profile:
-        return user.employee_profile
-    if user:
-        employee = Employee.query.filter_by(user_id=user.id).first()
-        if employee:
-            return employee
-
-        # Tài khoản legacy (đặc biệt là admin seed cũ) có thể chưa có hồ sơ Employee.
-        # Tạo hồ sơ mặc định để không bị lỗi "Không tìm thấy hồ sơ nhân viên"
-        # khi truy cập trang hồ sơ/thông tin cá nhân.
-        employee = Employee(
-            user_id=user.id,
-            full_name=(user.username or user.email or f"User {user.id}").strip(),
-            phone=None,
-            dob=date(2000, 1, 1),
-            gender="other",
-            hire_date=date.today(),
-            working_status="active",
-        )
-        db.session.add(employee)
-        db.session.commit()
-        return employee
-    return Employee.query.order_by(Employee.id.asc()).first()
-
-
-def _ensure_login():
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login", next=request.url))
-    return None
-
-def _redirect_when_missing_employee():
-    user = _current_user()
-    role_name = (user.role.name.lower() if user and user.role else "")
-    if role_name == "admin":
-        return redirect(url_for("admin.admin_dashboard_page"))
-    return redirect(url_for("auth.login"))
-
-def _is_attendance_required(employee: Employee | None) -> bool:
-    if not employee:
-        return False
-    return employee.is_attendance_required is not False
-def _is_dev_or_test_env() -> bool:
-    return (os.getenv("FLASK_ENV", "development") or "development").lower() in {"development", "testing"}
-
-
-
-def _get_holiday_for_date(target_date: date) -> Holiday | None:
-    default_holiday_name = VN_FIXED_PUBLIC_HOLIDAYS.get(target_date.strftime("%m-%d"))
-    lunar_holiday_lookup = _build_lunar_public_holidays_for_year(target_date.year)
-    lunar_holiday_name = lunar_holiday_lookup.get(target_date.strftime("%m-%d"))
-    exact_holiday = Holiday.query.filter_by(date=target_date).first()
-    if exact_holiday:
-        return exact_holiday
-
-    recurring_holiday = (
-        Holiday.query.filter(
-            Holiday.is_recurring.is_(True),
-            db.extract("month", Holiday.date) == target_date.month,
-            db.extract("day", Holiday.date) == target_date.day,
-        )
-        .order_by(Holiday.id.asc())
-        .first()
-    )
-    if recurring_holiday:
-        return recurring_holiday
-
-    if default_holiday_name:
-        return Holiday(
-            name=default_holiday_name,
-            date=target_date,
-            is_paid=True,
-            is_recurring=True,
-        )
-    if lunar_holiday_name:
-        return Holiday(
-            name=lunar_holiday_name,
-            date=target_date,
-            is_paid=True,
-            is_recurring=False,
-        )
-    return None
+def is_public_holiday(target_date: date) -> bool:
+    date_str = target_date.strftime("%m-%d")
+    if date_str in VN_FIXED_PUBLIC_HOLIDAYS:
+        return True
+    lunar_holidays = OvertimeConfig.get_lunar_holidays(target_date.year)
+    if date_str in lunar_holidays:
+        return True
+    return False
 
 def _get_holiday_lookup() -> dict[str, str]:
-    lookup = {
-        holiday.date.strftime("%m-%d"): holiday.name
-        for holiday in Holiday.query.order_by(Holiday.is_recurring.desc(), Holiday.id.asc()).all()
-    }
+    now = get_current_time()
+    current_year = now.year
+    lookup = {}
+    db_holidays = Holiday.query.filter(
+        db.or_(
+            Holiday.is_recurring.is_(True),
+            db.extract('year', Holiday.date) == current_year
+        )
+    ).all()
+    for holiday in db_holidays:
+        key = holiday.date.strftime("%m-%d")
+        lookup[key] = holiday.name
     for holiday_key, holiday_name in VN_FIXED_PUBLIC_HOLIDAYS.items():
         lookup.setdefault(holiday_key, holiday_name)
-    for holiday_key, holiday_name in _build_lunar_public_holidays_for_year(date.today().year).items():
+    lunar_holidays = _build_lunar_public_holidays_for_year(current_year)
+    for holiday_key, holiday_name in lunar_holidays.items():
         lookup.setdefault(holiday_key, holiday_name)
     return lookup
-class EmployeeDashboardService:
-    @staticmethod
-    def get_today_attendance(employee_id: int, target_date: date | None = None):
-        target_date = target_date or date.today()
-        return Attendance.query.filter_by(employee_id=employee_id, date=target_date).first()
 
-    @staticmethod
-    def get_leave_balance(employee_id: int, current_year: int):
-        usage = EmployeeLeaveUsage.query.filter_by(employee_id=employee_id, year=current_year).first()
-        if not usage:
-            usage = EmployeeLeaveUsage(
-                employee_id=employee_id,
-                year=current_year,
-                total_days=12,
-                used_days=0,
-                remaining_days=12,
-            )
-            db.session.add(usage)
-            db.session.commit()
-            usage.update_balance()
-            return usage
-
-        if usage.total_days is None or int(usage.total_days) <= 0:
-            usage.total_days = 12
-        if usage.used_days is None or int(usage.used_days) < 0:
-            usage.used_days = 0
-        usage.update_balance()
-        db.session.commit()
-        return usage
-
-    @staticmethod
-    def get_latest_salary(employee_id: int):
-        return (
-            Salary.query.filter_by(employee_id=employee_id, status="paid")
-            .order_by(Salary.year.desc(), Salary.month.desc())
-            .first()
-        )
-
-    @staticmethod
-    def get_notifications(user_id: int, limit: int = 5):
-        return (
-            Notification.query.filter_by(user_id=user_id, is_deleted=False)
-            .order_by(Notification.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-
-
-def _compute_working_hours(checkin: datetime, checkout: datetime) -> Decimal:
-    total_seconds = Decimal((checkout - checkin).total_seconds())
-    total_hours = (total_seconds / Decimal("3600")).quantize(Decimal("0.0001"))
-
-    if total_hours <= 0:
-        return Decimal("0")
-
-    lunch_start = datetime.combine(checkin.date(), time(12, 0, 0), tzinfo=checkin.tzinfo)
-    lunch_end = datetime.combine(checkin.date(), time(13, 0, 0), tzinfo=checkin.tzinfo)
-    overlap_start = max(checkin, lunch_start)
-    overlap_end = min(checkout, lunch_end)
-    if overlap_end > overlap_start:
-        overlap_seconds = Decimal((overlap_end - overlap_start).total_seconds())
-        total_hours -= (overlap_seconds / Decimal("3600")).quantize(Decimal("0.0001"))
-    return max(total_hours, Decimal("0"))
-
-    return current_time
-def _apply_day_multiplier(hours: Decimal, is_holiday_shift: bool) -> Decimal:
-    if not is_holiday_shift:
-        return hours
-    return (hours * Decimal("3")).quantize(Decimal("0.01"))
+def _compute_working_hours(check_in: time, check_out: time) -> Decimal:
+    if not check_in or not check_out:
+        return Decimal("0.00")
+    today = get_current_time().date() 
+    start = datetime.combine(today, check_in)
+    end = datetime.combine(today, check_out)
+    if end <= start:
+        return Decimal("0.00")
+    total_seconds = Decimal(str((end - start).total_seconds()))
+    lunch_start = datetime.combine(today, WorkConfig.LUNCH_START)
+    lunch_end = datetime.combine(today, WorkConfig.LUNCH_END)
+    overlap_start = max(start, lunch_start)
+    overlap_end = min(end, lunch_end)
+    if overlap_start < overlap_end:
+        overlap_seconds = Decimal(str((overlap_end - overlap_start).total_seconds()))
+        total_seconds -= overlap_seconds
+    total_hours = (total_seconds / Decimal("3600")).quantize(Decimal("0.01"))
+    return max(total_hours, Decimal("0.00"))
 
 def _attendance_metrics(
     record: Attendance | None,
     is_holiday: bool = False,
     is_weekend: bool = False,
 ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
-    if not record:
-        return (
-            Decimal("0.00"),
-            Decimal("0.00"),
-            Decimal("0.00"),
-            Decimal("0.00"),
-            Decimal("0.00"),
-        )
+    
+    if not record or not record.check_in:
+        return (Decimal("0.00"),) * 5
+    day_type = "normal"
+    if is_holiday:
+        day_type = "holiday"
+    elif is_weekend:
+        day_type = "weekend"
 
-    multiplier = Decimal("3.00") if (is_holiday or is_weekend) and (record.check_in or record.check_out) else Decimal("1.00")
+    # 2. Tính toán số giờ thô (raw hours)
+    raw_total = _compute_working_hours(record.check_in, record.check_out)
+    raw_regular = min(raw_total, Decimal("8.00"))
+    raw_overtime = max(raw_total - raw_regular, Decimal("0.00"))
 
-    stored_regular = Decimal(str(record.regular_hours or 0))
-    stored_overtime = Decimal(str(record.overtime_hours or 0))
-    stored_total = Decimal(str(record.working_hours or 0))
-
-    if multiplier > Decimal("1.00"):
-        raw_regular = (stored_regular / multiplier).quantize(Decimal("0.01"))
-        raw_overtime = (stored_overtime / multiplier).quantize(Decimal("0.01"))
-    else:
-        raw_regular = stored_regular.quantize(Decimal("0.01"))
-        raw_overtime = stored_overtime.quantize(Decimal("0.01"))
-    if (
-        raw_overtime <= Decimal("0.00")
-        and record.overtime_check_in
-        and record.overtime_check_out
-    ):
-        computed_total = _compute_working_hours(record.check_in, record.check_out).quantize(Decimal("0.01"))
-        computed_regular = min(computed_total, Decimal("8.00"))
-        computed_overtime = max(computed_total - computed_regular, Decimal("0.00")).quantize(Decimal("0.01"))
-        if computed_overtime > Decimal("0.00"):
-            raw_regular = computed_regular
-            raw_overtime = computed_overtime
-
-    raw_total = (raw_regular + raw_overtime).quantize(Decimal("0.01"))
-    payroll_regular = (raw_regular * multiplier).quantize(Decimal("0.01"))
-    payroll_overtime = (raw_overtime * multiplier).quantize(Decimal("0.01"))
+    # Cộng dồn ca OT riêng (nếu có check-in/out ca OT)
+    if record.overtime_check_in and record.overtime_check_out:
+        raw_overtime += _compute_working_hours(record.overtime_check_in, record.overtime_check_out)
+        raw_total = raw_regular + raw_overtime
+    payroll_regular = OvertimeConfig.apply_multiplier(raw_regular, day_type)
+    ot_type = day_type if day_type != "normal" else "after_shift"
+    payroll_overtime = OvertimeConfig.apply_multiplier(raw_overtime, ot_type)
     payroll_total = (payroll_regular + payroll_overtime).quantize(Decimal("0.01"))
-
-    if stored_total > 0 and multiplier == Decimal("1.00"):
-        payroll_total = stored_total.quantize(Decimal("0.01"))
-        raw_total = payroll_total
-
-    return payroll_total, payroll_regular, raw_overtime, raw_total, payroll_overtime
-
-def _format_minutes_as_hours_minutes(total_minutes: int) -> str:
-    hours, minutes = divmod(total_minutes, 60)
-    if hours > 0 and minutes > 0:
-        return f"{hours} giờ {minutes} phút"
-    if hours > 0:
-        return f"{hours} giờ"
-    return f"{minutes} phút"
-def _late_penalty_message(late_minutes: int) -> str:
-    if late_minutes <= 0:
-        return ""
-    if late_minutes < 15:
-        return " • Mức phạt: 20.000đ"
-    if late_minutes <= 30:
-        return " • Mức phạt: 50.000đ"
-    if late_minutes >= 60:
-        return " • Quy đổi: nửa ngày công"
-    return ""
-
-def _status_badge(status: str) -> tuple[str, str]:
-    mapping = {
-        "pending": ("⏳", "Chờ Manager duyệt"),
-        "pending_hr": ("🧾", "Chờ HR duyệt"),
-        "pending_admin": ("🛡️", "Chờ Admin duyệt"),
-        "approved": ("✅", "Đã duyệt"),
-        "rejected": ("❌", "Từ chối"),
-        "supplement_requested": ("📎", "Yêu cầu bổ sung"),
-        "cancelled": ("🚫", "Hủy đơn"),
-        "complaint": ("📣", "Khiếu nại"),
-    }
-    return mapping.get(status, ("ℹ️", status))
-
-def _labelize_enum(value: str | None) -> str:
-    if not value:
-        return "Chưa cập nhật"
-    labels = {
-        "probation": "Thử việc",
-        "permanent": "Chính thức",
-        "intern": "Thực tập",
-        "contract": "Hợp đồng",
-        "active": "Đang làm việc",
-        "on_leave": "Tạm nghỉ",
-        "resigned": "Đã nghỉ việc",
-        "male": "Nam",
-        "female": "Nữ",
-        "other": "Khác",
-    }
-    return labels.get(value, value)
-
-LEAVE_TYPE_CONFIGS = [
-    {"name": "Nghỉ phép năm", "is_paid": True},
-    {"name": "Nghỉ ốm", "is_paid": True},
-    {"name": "Nghỉ không lương", "is_paid": False},
-    {"name": "Nghỉ lễ", "is_paid": True},
-    {"name": "Nghỉ việc riêng có lương", "is_paid": True},
-    {"name": "Nghỉ thai sản", "is_paid": True},
-]
-
-PERSONAL_SUBTYPES = {
-    "PERSONAL_MARRIAGE": "Kết hôn",
-    "PERSONAL_FUNERAL": "Tang lễ",
-}
-
-ALLOWED_FUNERAL_RELATIONS = {"cha", "mẹ", "vợ", "chồng", "con"}
-
-
-def _ensure_leave_types() -> list[LeaveType]:
-    changed = False
-    for cfg in LEAVE_TYPE_CONFIGS:
-        existed = LeaveType.query.filter_by(name=cfg["name"]).first()
-        if existed:
-            if existed.is_paid != cfg["is_paid"]:
-                existed.is_paid = cfg["is_paid"]
-                changed = True
-            continue
-        db.session.add(LeaveType(name=cfg["name"], is_paid=cfg["is_paid"]))
-        changed = True
-    if changed:
-        db.session.commit()
-    return LeaveType.query.order_by(LeaveType.id.asc()).all()
-
+    return (
+        payroll_total,    # Tổng giờ quy đổi lương
+        payroll_regular,  # Giờ hành chính quy đổi
+        raw_overtime,     # Tổng giờ OT thô
+        raw_total,        # Tổng giờ làm thô
+        payroll_overtime  # Giờ OT quy đổi
+    )
 
 def _save_leave_document(file_storage, category: str) -> str:
     if not file_storage or not file_storage.filename:
         raise ValidationError("Vui lòng tải lên giấy tờ đính kèm.")
-
-    ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+    filename = secure_filename(file_storage.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     allowed_ext = {"pdf", "png", "jpg", "jpeg"}
     if ext not in allowed_ext:
-        raise ValidationError("Chỉ chấp nhận file PDF hoặc ảnh (png/jpg/jpeg).")
-
-    folder = os.path.join("app", "static", "uploads", "leave", category)
-    os.makedirs(folder, exist_ok=True)
-    filename = secure_filename(file_storage.filename)
+        raise ValidationError(f"Định dạng .{ext} không hợp lệ. Chỉ chấp nhận PDF hoặc ảnh.")
+    path_parts = ["static", "uploads", "leave", category.lower()]
+    full_folder_path = os.path.join(current_app.root_path, *path_parts)
+    os.makedirs(full_folder_path, exist_ok=True)
     unique_name = f"{uuid.uuid4().hex}_{filename}"
-    abs_path = os.path.join(folder, unique_name)
-    file_storage.save(abs_path)
-    return f"/static/uploads/leave/{category}/{unique_name}"
+    abs_save_path = os.path.join(full_folder_path, unique_name)
+    file_storage.save(abs_save_path)
+    return "/".join(path_parts[1:] + [unique_name])
 
-@employee_bp.route("/dashboard")
-def dashboard():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
-    if not employee:
-        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return _redirect_when_missing_employee()
-
-    user = _current_user()
-    now = parse_simulated_time({})
-    attendance = EmployeeDashboardService.get_today_attendance(employee.id, now.date())
-    attendance_history = (
-        Attendance.query.filter_by(employee_id=employee.id)
-        .order_by(Attendance.date.desc())
-        .limit(45)
-        .all()
-    )
-    leave_balance = EmployeeDashboardService.get_leave_balance(employee.id, date.today().year)
-    latest_salary = EmployeeDashboardService.get_latest_salary(employee.id)
-    notifications = EmployeeDashboardService.get_notifications(user.id if user else 0)
-    today_holiday = _get_holiday_for_date(now.date())
-    holiday_lookup = _get_holiday_lookup()
-    return render_template(
-        "employee/dashboard.html",
-        employee=employee,
-        attendance=attendance,
-        leave_balance=leave_balance,
-        latest_salary=latest_salary,
-        notifications=notifications,
-        now=now,
-        attendance_history=attendance_history,
-        today_holiday=today_holiday,
-        holiday_lookup=holiday_lookup,
-    )
-
+from app.modules.employee.notification_service import EmployeeNotificationService
 
 @employee_bp.route("/profile", methods=["GET", "POST"])
+@auth_required 
+@role_required("Employee")
 def profile():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    employee = g.employee
+    user = g.user
+    from app.utils.time import get_current_time
+    now = get_current_time()
 
-    employee = _current_employee()
-    user = _current_user()
-
-    if not employee or not user:
+    if not employee:
         flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return _redirect_when_missing_employee()
+        return redirect(url_for("home.index_page"))
 
-    action = request.form.get("action")
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "update_profile":
+            employee.full_name = request.form.get("full_name", employee.full_name).strip()
+            employee.phone = request.form.get("phone", employee.phone).strip()
+            user.email = request.form.get("email", user.email).strip()
 
-    if request.method == "POST" and action == "update_profile":
-        # Cập nhật thông tin cơ bản
-        employee.full_name = request.form.get("full_name", employee.full_name).strip()
-        employee.phone = request.form.get("phone", employee.phone).strip()
-        user.email = request.form.get("email", user.email).strip()
+            employee.province_id = request.form.get("province")
+            employee.district_id = request.form.get("district")
+            employee.ward_id = request.form.get("ward")
+            employee.address_detail = request.form.get("address_detail", "").strip()
 
-        # 🔥 THÊM CÁC DÒNG NÀY ĐỂ LƯU ĐỊA CHỈ PHÂN CẤP
-        # Lưu mã code của Tỉnh/Huyện/Xã
-        employee.province_id = request.form.get("province")
-        employee.district_id = request.form.get("district")
-        employee.ward_id = request.form.get("ward")
-        # Lưu địa chỉ chi tiết (số nhà, tên đường)
-        employee.address_detail = request.form.get("address_detail", "").strip()
-
-        db.session.commit()
-        flash("✅ Đã cập nhật thông tin cá nhân.", "success")
-        return redirect(url_for("employee.profile"))
-
-    if request.method == "POST" and action == "change_password":
-        current_password = request.form.get("current_password", "")
-        new_password = request.form.get("new_password", "")
-        confirm_password = request.form.get("confirm_password", "")
-
-        if not check_password_hash(user.password_hash, current_password):
-            flash("❌ Mật khẩu hiện tại không đúng.", "danger")
+            db.session.commit()
+            flash("✅ Đã cập nhật thông tin cá nhân.", "success")
             return redirect(url_for("employee.profile"))
-
-        if len(new_password) < 8:
-            flash("❌ Mật khẩu mới cần tối thiểu 8 ký tự.", "danger")
+        elif action == "change_password":
+            current_pw = request.form.get("current_password", "")
+            new_pw = request.form.get("new_password", "")
+            confirm_pw = request.form.get("confirm_password", "")
+            if not check_password_hash(user.password_hash, current_pw):
+                flash("❌ Mật khẩu hiện tại không đúng.", "danger")
+            elif len(new_pw) < 8:
+                flash("❌ Mật khẩu mới cần tối thiểu 8 ký tự.", "danger")
+            elif new_pw != confirm_pw:
+                flash("❌ Xác nhận mật khẩu không khớp.", "danger")
+            else:
+                user.password_hash = generate_password_hash(new_pw)
+                db.session.commit()
+                flash("✅ Đổi mật khẩu thành công.", "success")
             return redirect(url_for("employee.profile"))
-
-        if new_password != confirm_password:
-            flash("❌ Xác nhận mật khẩu không khớp.", "danger")
-            return redirect(url_for("employee.profile"))
-
-        user.password_hash = generate_password_hash(new_password)
-        db.session.commit()
-        flash("✅ Đổi mật khẩu thành công.", "success")
-        return redirect(url_for("employee.profile"))
-
-    notifications = EmployeeDashboardService.get_notifications(user.id, limit=20)
+    notifications = (
+        Notification.query.filter_by(user_id=user.id, is_deleted=False)
+        .order_by(Notification.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    unread_count = EmployeeNotificationService.get_unread_count(user.id)
     complaints = (
         Complaint.query.filter_by(employee_id=employee.id)
         .order_by(Complaint.created_at.desc())
@@ -605,21 +323,17 @@ def profile():
         employee=employee,
         user=user,
         notifications=notifications,
+        unread_count=unread_count, 
         complaints=complaints,
+        now=now
     )
 
 @employee_bp.route("/staff-profile")
+@auth_required
+@role_required("Employee")
 def staff_profile():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
-    user = _current_user()
-    if not employee or not user:
-        flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return _redirect_when_missing_employee()
-
+    employee = g.employee
+    user = g.user
     latest_contract = (
         Contract.query.filter_by(employee_id=employee.id)
         .order_by(Contract.start_date.desc(), Contract.created_at.desc())
@@ -633,205 +347,137 @@ def staff_profile():
     )
     history_events = []
     if employee.hire_date:
-        history_events.append(
-            {
-                "time": employee.hire_date,
-                "event": "🎉 Gia nhập công ty",
-                "detail": f"Vị trí: {employee.position.job_title if employee.position else 'Chưa có'}",
-                "source": "Employee + Position",
-            }
-        )
+        history_events.append({
+            "time": employee.hire_date,
+            "event": "🎉 Gia nhập công ty",
+            "detail": f"Vị trí: {employee.position.job_title if employee.position else 'Chuyên viên'}"
+        })
     if user.created_at:
-        history_events.append(
-            {
-                "time": user.created_at,
-                "event": "🔐 Tạo tài khoản",
-                "detail": f"Username: {user.username}",
-                "source": "User",
-            }
-        )
+        history_events.append({
+            "time": user.created_at,
+            "event": "🔐 Tạo tài khoản",
+            "detail": f"Username: {user.username}"
+        })
+
     if employee.updated_at:
-        history_events.append(
-            {
-                "time": employee.updated_at,
-                "event": "🔄 Cập nhật thông tin",
-                "detail": "Sửa đổi hồ sơ nhân sự",
-                "source": "Employee.updated_at",
-            }
-        )
+        history_events.append({
+            "time": employee.updated_at,
+            "event": "🔄 Cập nhật hồ sơ",
+            "detail": "Thông tin nhân sự đã được thay đổi"
+        })
     if latest_contract and latest_contract.start_date:
-        history_events.append(
-            {
-                "time": latest_contract.start_date,
-                "event": "📝 Ký hợp đồng",
-                "detail": f"Mã HĐ: {latest_contract.contract_code}",
-                "source": "Contracts",
-            }
-        )
+        history_events.append({
+            "time": latest_contract.start_date,
+            "event": "📝 Ký hợp đồng",
+            "detail": f"Mã HĐ: {latest_contract.contract_code}"
+        })
     for log in history_logs:
-        history_events.append(
-            {
-                "time": log.created_at,
-                "event": f"📌 {log.action}",
-                "detail": log.description or "Không có mô tả",
-                "source": f"{log.entity_type or 'HistoryLog'}",
-            }
-        )
-
-    def _event_sort_key(item):
-        event_time = item.get("time")
-
-        # 1. Convert về datetime
-        if isinstance(event_time, datetime):
-            dt = event_time
-        elif isinstance(event_time, date):
-            dt = datetime.combine(event_time, time.min)
-        else:
-            return datetime.min.replace(tzinfo=timezone.utc)
-
-        # 2. FIX QUAN TRỌNG: normalize timezone
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        else:
-            dt = dt.astimezone(timezone.utc)
-
-        return dt
-
-    history_events = sorted(history_events, key=_event_sort_key, reverse=True)[:20]
-
+        history_events.append({
+            "time": log.created_at,
+            "event": f"📌 {log.action}",
+            "detail": log.description or "Không có mô tả"
+        })
+    history_events.sort(
+        key=lambda x: (
+            datetime.combine(x["time"], time.min).replace(tzinfo=VN_TIMEZONE) 
+            if isinstance(x["time"], date) and not isinstance(x["time"], datetime)
+            else (x["time"].replace(tzinfo=VN_TIMEZONE) if x["time"].tzinfo is None else x["time"].astimezone(VN_TIMEZONE))
+        ),
+        reverse=True
+    )
+    display_events = history_events[:20]
     return render_template(
         "employee/staff_profile.html",
         employee=employee,
         user=user,
         latest_contract=latest_contract,
-        history_events=history_events,
-        enum_labelize=_labelize_enum,
+        history_events=display_events,
+        enum_labelize=labelize_enum
     )
-@employee_bp.route("/update-profile", methods=["POST"])
-def update_profile_ajax():
-    guard = _ensure_login()
-    if guard:
-        return jsonify({"error": "Unauthorized"}), 401
 
-    employee = _current_employee()
-    user = _current_user()
-    
-    # Lấy dữ liệu JSON từ request.get_json() thay vì request.form
+@employee_bp.route("/update-profile", methods=["POST"])
+@auth_required
+@role_required("Employee")  
+def update_profile_ajax():
+    employee = g.employee
+    if not employee:
+        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên"}), 404
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Không có dữ liệu"}), 400
-
+        return jsonify({"error": "Không có dữ liệu yêu cầu"}), 400
     try:
-
-        dob = data.get("dob")
-        if dob:
-            employee.dob = datetime.strptime(dob, "%Y-%m-%d").date()
-
+        dob_str = data.get("dob")
+        if dob_str:
+            employee.dob = datetime.strptime(dob_str, "%Y-%m-%d").date()
         gender = data.get("gender")
         if gender in {"male", "female", "other"}:
             employee.gender = gender
-
-        # Cập nhật thông tin
         employee.full_name = data.get("full_name", employee.full_name).strip()
         employee.phone = data.get("phone", employee.phone).strip()
-        
-        # Lưu mã địa chỉ
-        employee.province_id = data.get("province")
-        employee.district_id = data.get("district")
-        employee.ward_id = data.get("ward")
-        employee.address_detail = data.get("address_detail", "").strip()
-
+        employee.province_id = data.get("province", employee.province_id)
+        employee.district_id = data.get("district", employee.district_id)
+        employee.ward_id = data.get("ward", employee.ward_id)
+        employee.address_detail = data.get("address_detail", employee.address_detail).strip()
         db.session.commit()
-        return jsonify({"message": "Cập nhật thành công!"})
+        return jsonify({
+            "status": "success",
+            "message": "Cập nhật hồ sơ thành công!",
+            "data": {
+                "full_name": employee.full_name,
+                "phone": employee.phone
+            }
+        }), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        print(f"Update Profile Error: {str(e)}") 
+        return jsonify({"error": "Có lỗi xảy ra trong quá trình lưu dữ liệu"}), 500
     
 @employee_bp.route("/attendance")
+@auth_required
+@role_required("Employee")
 def attendance():
-    # ── 1. Kiểm tra đăng nhập ─────────────────────
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
+    employee = g.employee
+    user = g.user
     if not employee:
         flash("Không tìm thấy hồ sơ nhân viên.", "danger")
-        return _redirect_when_missing_employee()
-
-    # ── 2. Xử lý thời gian hệ thống ───────────────
-    now = parse_simulated_time({})
-
-    # Nếu simulated_now vượt ngày thực tế → điều chỉnh
+        return redirect(url_for("home.index_page"))
+    now = get_current_time()
     latest_attendance = (
         Attendance.query.filter_by(employee_id=employee.id)
         .order_by(Attendance.date.desc())
         .first()
-        if employee
-        else None
     )
-    
     if latest_attendance and latest_attendance.date > now.date():
         fallback_time = (
-            latest_attendance.check_out.time()
-            if latest_attendance.check_out
-            else (
-                latest_attendance.check_in.time()
-                if latest_attendance.check_in
-                else time(17, 0)
-            )
+            latest_attendance.check_out.time() if latest_attendance.check_out
+            else (latest_attendance.check_in.time() if latest_attendance.check_in else time(17, 0))
         )
-        now = datetime.combine(latest_attendance.date, fallback_time)
-        session["simulated_now"] = now.isoformat()
-
-    # ── 3. Lấy tham số lọc tháng/năm từ URL ──────
+        now = datetime.combine(latest_attendance.date, fallback_time).replace(tzinfo=VN_TIMEZONE)
+        set_simulated_time(now)
     try:
         month_param = request.args.get("month")
         year_param = request.args.get("year")
-        
-        # Ưu tiên lấy từ URL
         selected_month = int(month_param) if month_param else now.month
         selected_year = int(year_param) if year_param else now.year
-        
-        # ✅ Validate dữ liệu
-        if selected_month < 1 or selected_month > 12:
-            selected_month = now.month
-        if selected_year < 2020 or selected_year > now.year + 1:
-            selected_year = now.year
-            
+        if not (1 <= selected_month <= 12): selected_month = now.month
+        if not (2020 <= selected_year <= now.year + 1): selected_year = now.year
     except (ValueError, TypeError):
         selected_month = now.month
         selected_year = now.year
-
-    # ── 4. Truy vấn hôm nay ──────────────────────
-    today = (
-        EmployeeDashboardService.get_today_attendance(employee.id, now.date())
-        if employee
-        else None
-    )
-
-    # ── 5. Truy vấn lịch sử (FIX) ────────────────
-    # ✅ Xây dựng filter động để tránh lỗi
-    filters = [Attendance.employee_id == employee.id]
-    
-    if selected_month and 1 <= selected_month <= 12:
-        filters.append(extract('month', Attendance.date) == selected_month)
-    
-    if selected_year and selected_year > 2000:
-        filters.append(extract('year', Attendance.date) == selected_year)
-
+    today = Attendance.query.filter_by(
+        employee_id=employee.id, 
+        date=now.date()
+    ).first()
     try:
         history = AttendanceService.get_history(
             employee.id,
-            session.get("simulated_now"),
+            now.isoformat(),
             month=selected_month,
             year=selected_year,
-        ) if employee else []
+        )
     except ValidationError as e:
         flash(f"Lỗi lọc dữ liệu: {str(e)}", "warning")
         history = []
-
-    # ── 6. Xử lý OT request ──────────────────────
     today_ot_request = (
         OvertimeRequest.query.filter_by(
             employee_id=employee.id,
@@ -840,10 +486,7 @@ def attendance():
         )
         .order_by(OvertimeRequest.id.desc())
         .first()
-        if employee
-        else None
     )
-
     ot_preview_hours = Decimal("0.00")
     if (
         today
@@ -851,25 +494,15 @@ def attendance():
         and (today_ot_request.status or "").lower() in {"approved", "pending_admin"}
         and Decimal(str(today.overtime_hours or 0)) <= Decimal("0.00")
     ):
-        ot_preview_hours = Decimal(
-            str(
-                today_ot_request.approved_hours
-                or today_ot_request.requested_hours
-                or today_ot_request.overtime_hours
-                or 0
-            )
-        ).quantize(Decimal("0.01"))
-
-    # ── 7. Thông tin khác ────────────────────────
-    shift_info = _build_shift_and_actions(now, today)
-    today_holiday = _get_holiday_for_date(now.date())
+        val = (today_ot_request.approved_hours or 
+               today_ot_request.requested_hours or 
+               today_ot_request.overtime_hours or 0)
+        ot_preview_hours = Decimal(str(val)).quantize(Decimal("0.01"))
+    shift_info = _build_shift_and_actions(today)
+    today_holiday = is_public_holiday(now.date())
     holiday_lookup = _get_holiday_lookup()
-
-    user = _current_user()
     role_name = (user.role.name.lower() if user and user.role else "")
-    can_reset_ot_request = role_name == "admin" or _is_dev_or_test_env()
-
-    # ✅ RENDER - pass đúng selected_month & selected_year
+    can_reset_ot_request = (role_name == RoleName.ADMIN.lower() or os.getenv("FLASK_ENV") == "development")
     return render_template(
         "employee/attendance.html",
         employee=employee,
@@ -883,160 +516,146 @@ def attendance():
         holiday_lookup=holiday_lookup,
         today_ot_request=today_ot_request,
         ot_preview_hours=ot_preview_hours,       
-        shift_info=shift_info,                    
+        shift_info=shift_info,                                    
         can_reset_ot_request=can_reset_ot_request,
+        enum_labelize=labelize_enum 
     )
 
 @employee_bp.route("/system/time", methods=["GET", "POST"])
+@auth_required
+@role_required("Employee")  
 def system_time_control():
-    guard = _ensure_login()
-    if guard:
-        return jsonify({"message": "Unauthorized"}), 401
- 
-    from app.utils.time import get_current_time
-    from app.models import OvertimeRequest
- 
+    employee = g.employee
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         now = get_current_time(payload)
         session["simulated_now"] = now.isoformat()
         session["system_time_mode"] = "SIMULATED"
     else:
-        now = get_current_time({})
+        now = get_current_time()
         session["system_time_mode"] = "SIMULATED" if session.get("simulated_now") else "REAL"
- 
-    employee = _current_employee()
-    attendance = None
-    ot_request = None
-    if employee:
-        attendance = AttendanceService.get_today(employee.id, now.isoformat())
-        ot_request = (
-            OvertimeRequest.query.filter_by(
-                employee_id=employee.id,
-                overtime_date=now.date(),
-                is_deleted=False,
-            )
-            .order_by(OvertimeRequest.id.desc())
-            .first()
+    attendance = AttendanceService.get_today(employee.id, now.isoformat())
+    ot_request = (
+        OvertimeRequest.query.filter_by(
+            employee_id=employee.id,
+            overtime_date=now.date(),
+            is_deleted=False,
         )
- 
-    # ── SINGLE SOURCE OF TRUTH — không tính state riêng nữa ─────────────
+        .order_by(OvertimeRequest.id.desc())
+        .first()
+    )
     state_result = AttendanceService.compute_attendance_state(now, attendance, ot_request)
- 
-    att_payload    = AttendanceService.build_attendance_payload(attendance) if attendance else {}
-    regular_hours  = float(att_payload.get("regular_hours",  0) or 0) if att_payload else 0.0
-    overtime_hours = float(att_payload.get("overtime_hours", 0) or 0) if att_payload else 0.0
-    if attendance and attendance.check_in and not attendance.check_out:
-        regular_hours = float(AttendanceService.calculate_regular_hours_raw(attendance.check_in, now))
-
-    if attendance and attendance.overtime_check_in and not attendance.overtime_check_out:
-        overtime_hours = float(AttendanceService.calculate_overtime_hours_raw(attendance.overtime_check_in, now))
+    regular_hours = 0.0
+    overtime_hours = 0.0
+    if attendance:
+        if attendance.check_in and not attendance.check_out:
+            regular_hours = float(AttendanceService.calculate_regular_hours_raw(attendance.check_in, now))
+        else:
+            regular_hours = float(attendance.regular_hours or 0)
+        if attendance.overtime_check_in and not attendance.overtime_check_out:
+            overtime_hours = float(AttendanceService.calculate_overtime_hours_raw(attendance.overtime_check_in, now))
+        else:
+            overtime_hours = float(attendance.overtime_hours or 0)
     return jsonify({
-        "mode":             session.get("system_time_mode", "REAL"),
-        "current_time":     now.isoformat(),
+        "status": "success",
+        "mode": session.get("system_time_mode", "REAL"),
+        "current_time": now.isoformat(),
         "attendance_state": state_result.state,
-        "button_enabled":   state_result.button_enabled,
-        "button_text":      state_result.button_text,
-        "can_scan":         state_result.can_scan,
-        "message":          state_result.message,
-        "overtime_status":  state_result.overtime_status,
-        "regular_hours":    regular_hours,
-        "overtime_hours":   overtime_hours,
-        # backward compat với FE cũ
-        "can_check_in":     state_result.state == "not_started",
-        "can_check_out":    state_result.state == "working_regular" and state_result.button_enabled,
-    })
+        "button_enabled": state_result.button_enabled,
+        "button_text": state_result.button_text,
+        "can_scan": state_result.can_scan,
+        "message": state_result.message,
+        "overtime_status": state_result.overtime_status,
+        "regular_hours": round(regular_hours, 2),
+        "overtime_hours": round(overtime_hours, 2),
+        "can_check_in": state_result.state == "not_started",
+        "can_check_out": state_result.state == "working_regular" and state_result.button_enabled,
+        "employee_name": employee.full_name
+    }), 200
 
 @employee_bp.route("/attendance/state", methods=["GET"])
+@auth_required
+@role_required(RoleName.EMPLOYEE) 
 def attendance_state_api():
-    guard = _ensure_login()
-    if guard:
-        return jsonify({"message": "Unauthorized"}), 401
- 
-    employee = _current_employee()
+    employee = g.employee
     if not employee:
         return jsonify({"message": "Employee not found"}), 404
- 
-    now              = get_current_time({})
+    from app.utils.time import get_current_time
+    now = get_current_time() 
     today_attendance = Attendance.query.filter_by(
-        employee_id=employee.id, date=now.date()
+        employee_id=employee.id, 
+        date=now.date()
     ).first()
- 
-    state = _build_shift_and_actions(now, today_attendance)
- 
-    # Lấy trạng thái OT request hiện tại
-    today_ot_request = OvertimeRequest.query.filter_by(
-        employee_id=employee.id,
-        overtime_date=now.date(),
-        is_deleted=False,
-    ).order_by(OvertimeRequest.id.desc()).first()
- 
+    today_ot_request = (
+        OvertimeRequest.query.filter_by(
+            employee_id=employee.id,
+            overtime_date=now.date(),
+            is_deleted=False,
+        )
+        .order_by(OvertimeRequest.id.desc())
+        .first()
+    )
+    state_result = AttendanceService.compute_attendance_state(
+        now, today_attendance, today_ot_request
+    )
     return jsonify({
         "current_time": now.isoformat(),
-        "mode":         "SIMULATED" if session.get("simulated_now") else "REAL",
-        "today": AttendanceService.build_attendance_payload(today_attendance),
+        "mode": "SIMULATED" if session.get("simulated_now") else "REAL",
+        "today": AttendanceService.build_attendance_payload(today_attendance) if today_attendance else None,
         "today_ot_request": {
-            "id":     today_ot_request.id     if today_ot_request else None,
+            "id": today_ot_request.id if today_ot_request else None,
             "status": today_ot_request.status if today_ot_request else None,
         },
-        **state,
+        "state": state_result.state,
+        "button_enabled": state_result.button_enabled,
+        "button_text": state_result.button_text,
+        "can_scan": state_result.can_scan,
+        "message": state_result.message,
+        "overtime_status": state_result.overtime_status,
+        "can_check_in": state_result.state == "not_started",
+        "can_check_out": state_result.state == "working_regular" and state_result.button_enabled,
     })
+
 @employee_bp.route("/attendance/check", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def employee_attendance_check_api():
-    guard = _ensure_login()
-    if guard:
-        return jsonify({"message": "Unauthorized"}), 401
-
-    employee = _current_employee()
-    if not employee:
-        return jsonify({"message": "Employee not found"}), 404
-
+    employee = g.employee
     payload = request.get_json(silent=True) or {}
-    simulated_now = payload.get("simulated_now") or session.get("simulated_now")
-    if simulated_now:
-        session["simulated_now"] = simulated_now
-
+    now = get_current_time(payload) 
+    if "simulated_now" in payload:
+        session["simulated_now"] = now.isoformat()
     try:
-        result = AttendanceService.process_employee_action(employee.id, payload, simulated_now)
-        action = result.get("action")
-        response_type = result.get("type", "success")
-        response_payload = {
+        result = AttendanceService.process_employee_action(
+            employee_id=employee.id, 
+            payload=payload, 
+            current_time=now 
+        )
+        return jsonify({
             "status": "success",
+            "message": result.get("message", "Thao tác thành công"),
+            "current_time": now.isoformat(), # Trả về để UI cập nhật lại đồng hồ
             **result
-        }
-
-        return jsonify(response_payload)
+        })
     except ValidationError as e:
         return jsonify({
             "status": "error",
-            "type": "error",
-            "message": str(e),
-            "error_code": "ATTENDANCE_VALIDATION_FAILED",
+            "type": "validation",
+            "message": str(e)
         }), 400
     except Exception as e:
-        db.session.rollback()
+        db.session.rollback() 
         return jsonify({
             "status": "error",
-            "type": "error",
-            "message": f"Lỗi hệ thống: {str(e)}",
-            "error_code": "ATTENDANCE_CHECK_FAILED",
+            "type": "system",
+            "message": f"Lỗi hệ thống: {str(e)}"
         }), 500
+
 @employee_bp.route("/attendance/delete", methods=["DELETE"])
+@auth_required
+@role_required("Employee") 
 def delete_attendance_record():
-    guard = _ensure_login()
-    if guard:
-        return jsonify({
-            "status": "error",
-            "message": "Bạn chưa đăng nhập",
-        }), 401
-
-    employee = _current_employee()
-    if not employee:
-        return jsonify({
-            "status": "error",
-            "message": "Không tìm thấy nhân viên",
-        }), 404
-
+    employee = g.employee 
     payload = request.get_json(silent=True) or {}
     date_str = payload.get("date")
     if not date_str:
@@ -1044,19 +663,19 @@ def delete_attendance_record():
             "status": "error",
             "message": "Thiếu ngày cần xóa",
         }), 400
-
+    now = get_current_time()
     try:
         new_last_date = AttendanceService.delete_attendance(employee.id, date_str)
         rollback_date = (
             new_last_date.isoformat()
             if new_last_date
-            else datetime.now().date().isoformat()
+            else now.date().isoformat()
         )
-
         return jsonify({
             "status": "success",
             "message": f"Đã xóa chấm công ngày {date_str}",
-            "rollback_date": rollback_date
+            "rollback_date": rollback_date,
+            "system_time_mode": "SIMULATED" if session.get("simulated_now") else "REAL"
         })
     except ValidationError as e:
         return jsonify({
@@ -1071,270 +690,246 @@ def delete_attendance_record():
         }), 500
 
 @employee_bp.route("/leave", methods=["GET", "POST"])
+@auth_required
+@role_required("Employee")
 def leave_request():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
+    employee = g.employee
+    now = get_current_time()
+    
     if not employee:
         flash("Không tìm thấy hồ sơ nhân viên", "danger")
-        return redirect(url_for("employee.dashboard"))
-
-    now = parse_simulated_time({})
-    usage = EmployeeDashboardService.get_leave_balance(employee.id, now.year)
-    leave_types = _ensure_leave_types()
+        return redirect(url_for("home.index_page"))
+    usage = LeaveService.get_leave_balance(employee.id, now.year)
+    leave_types = ensure_leave_types()
     leave_type_by_id = {t.id: t for t in leave_types}
+    
     annual_type = next((t for t in leave_types if t.name == "Nghỉ phép năm"), None)
     holiday_type = next((t for t in leave_types if t.name == "Nghỉ lễ"), None)
 
     if request.method == "POST":
         leave_type_id = request.form.get("leave_type_id", type=int)
-        from_date = request.form.get("from_date")
-        to_date = request.form.get("to_date")
+        from_date_str = request.form.get("from_date")
+        to_date_str = request.form.get("to_date")
         reason = request.form.get("reason", "").strip()
-        personal_subtype = request.form.get("personal_subtype", "").strip()
+        subtype = request.form.get("personal_subtype", "").strip()
         relation = request.form.get("relation", "").strip().lower()
         leave_document = request.files.get("leave_document")
-
         selected_type = leave_type_by_id.get(leave_type_id)
         if not selected_type:
             flash("❌ Loại nghỉ không hợp lệ.", "danger")
             return redirect(url_for("employee.leave_request"))
-        try:
-            from_obj = datetime.strptime(from_date, "%Y-%m-%d").date()
-            to_obj = datetime.strptime(to_date, "%Y-%m-%d").date()
-        except (TypeError, ValueError):
-            flash("❌ Ngày nghỉ không hợp lệ.", "danger")
-            return redirect(url_for("employee.leave_request"))
 
-        if to_obj < from_obj:
-            flash("❌ Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.", "danger")
-            return redirect(url_for("employee.leave_request"))
-
-        requested_days = (to_obj - from_obj).days + 1
         if selected_type.name == "Nghỉ lễ":
             flash("❌ Nghỉ lễ do hệ thống tự động xử lý, không cần gửi đơn.", "danger")
             return redirect(url_for("employee.leave_request"))
-        if selected_type.name == "Nghỉ phép năm":
-            remaining_days = Decimal(str(usage.remaining_days)) if usage else Decimal("0")
-            if remaining_days <= 0:
-                flash("❌ Bạn đã dùng hết phép năm.", "danger")
-                return redirect(url_for("employee.leave_request"))
-            if remaining_days < Decimal(requested_days):
-                flash("❌ Bạn không đủ ngày phép còn lại.", "danger")
-                return redirect(url_for("employee.leave_request"))
-
-        document_url = None
-        subtype = None
-        normalized_relation = None
-
-        if selected_type.name == "Nghỉ ốm":
-            try:
-                document_url = _save_leave_document(leave_document, "sick")
-            except ValidationError as e:
-                flash(f"❌ {str(e)}", "danger")
-                return redirect(url_for("employee.leave_request"))
-
-        if selected_type.name == "Nghỉ việc riêng có lương":
-            if personal_subtype not in PERSONAL_SUBTYPES:
-                flash("❌ Vui lòng chọn lý do nghỉ việc riêng (kết hôn/tang lễ).", "danger")
-                return redirect(url_for("employee.leave_request"))
-            if requested_days > 3:
-                flash("❌ Nghỉ việc riêng có lương chỉ tối đa 3 ngày.", "danger")
-                return redirect(url_for("employee.leave_request"))
-            subtype = personal_subtype
-
-            if personal_subtype == "PERSONAL_FUNERAL":
-                if relation not in ALLOWED_FUNERAL_RELATIONS:
-                    flash("❌ Tang lễ chỉ áp dụng cho cha/mẹ/vợ/chồng/con.", "danger")
-                    return redirect(url_for("employee.leave_request"))
-                normalized_relation = relation
-
-            try:
-                document_url = _save_leave_document(leave_document, "personal")
-            except ValidationError as e:
-                flash(f"❌ {str(e)}", "danger")
-                return redirect(url_for("employee.leave_request"))
-
-        if selected_type.name == "Nghỉ thai sản":
-            if (employee.gender or "").lower() != "female":
-                flash("❌ Nghỉ thai sản chỉ áp dụng cho nhân viên nữ.", "danger")
-                return redirect(url_for("employee.leave_request"))
-            if requested_days > 180:
-                flash("❌ Nghỉ thai sản tối đa 180 ngày.", "danger")
-                return redirect(url_for("employee.leave_request"))
-
-            overlap = (
-                LeaveRequest.query.filter(
-                    LeaveRequest.employee_id == employee.id,
-                    LeaveRequest.is_deleted.is_(False),
-                    LeaveRequest.status.in_(["pending", "approved"]),
-                    LeaveRequest.from_date <= to_obj,
-                    LeaveRequest.to_date >= from_obj,
-                )
-                .first()
+        try:
+            from_obj = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+            to_obj = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+            document_url = None
+            if leave_document and leave_document.filename != '':
+                upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'leave_docs')
+                if not os.path.exists(upload_folder):
+                    os.makedirs(upload_folder)
+                filename = secure_filename(leave_document.filename)
+                unique_filename = f"{now.strftime('%Y%m%d%H%M%S')}_{filename}"
+                leave_document.save(os.path.join(upload_folder, unique_filename))
+                document_url = f"uploads/leave_docs/{unique_filename}"
+            dto = LeaveRequestDTO(
+                employee_id=employee.id,
+                leave_type_id=leave_type_id,
+                from_date=from_obj,
+                to_obj=to_obj,
+                reason=reason,
+                document_url=document_url,
+                subtype=subtype if subtype else None,
+                relation=relation if relation else None,
+                approved_by=employee.manager_id
             )
-            if overlap:
-                flash("❌ Khoảng thời gian nghỉ thai sản không được trùng với đơn nghỉ khác.", "danger")
-                return redirect(url_for("employee.leave_request"))
-
-            try:
-                document_url = _save_leave_document(leave_document, "maternity")
-            except ValidationError as e:
-                flash(f"❌ {str(e)}", "danger")
-                return redirect(url_for("employee.leave_request"))
-        req = LeaveRequest(
-            employee_id=employee.id,
-            leave_type_id=leave_type_id,
-            from_date=from_obj,
-            to_date=to_obj,
-            reason=reason,
-            document_url=document_url,
-            subtype=subtype,
-            relation=normalized_relation,
-            approved_by=employee.manager_id,
-        )
-        db.session.add(req)
-
-
-        if employee.manager and employee.manager.user_id:
-            db.session.add(
-                Notification(
-                    user_id=employee.manager.user_id,
-                    title="Đơn nghỉ phép mới cần duyệt",
-                    content=f"{employee.full_name} gửi đơn nghỉ từ {from_obj.strftime('%d/%m/%Y')} đến {to_obj.strftime('%d/%m/%Y')}.",
-                    type="leave",
-                    link=url_for("employee.leave_request"),
-                )
-            )
-
-
-        db.session.commit()
-        flash("✅ Đã gửi đơn nghỉ phép thành công.", "success")
+            LeaveService.create_leave_request(dto)
+            flash("✅ Đã gửi đơn nghỉ phép thành công.", "success")
+            return redirect(url_for("employee.leave_request"))
+        except ValueError as e:
+            flash(f"❌ {str(e)}", "danger")
+        except Exception as e:
+            flash(f"❌ Lỗi hệ thống: {str(e)}", "danger")
         return redirect(url_for("employee.leave_request"))
-
-    requests = LeaveRequest.query.filter_by(employee_id=employee.id).order_by(LeaveRequest.created_at.desc()).all()    
-    today_holiday = _get_holiday_for_date(now.date())
+    requests_list = LeaveService.get_my_requests(employee.id)
+    today_holiday = is_public_holiday(now.date())
 
     return render_template(
         "employee/leave.html",
         employee=employee,
         leave_types=leave_types,
-        requests=requests,
+        requests=requests_list,
         usage=usage,
         current_year=now.year,
         now=now,
         annual_type_id=annual_type.id if annual_type else None,
         holiday_type_id=holiday_type.id if holiday_type else None,
-        personal_subtypes=PERSONAL_SUBTYPES,
+        personal_subtypes=PERSONAL_SUBTYPES, 
         today_holiday=today_holiday,
         allowed_funeral_relations=sorted(ALLOWED_FUNERAL_RELATIONS),
-        status_badge=_status_badge,
+        status_badge=get_status_badge
     )
 
-
 @employee_bp.route("/payslip", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def payslip():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
-    if not employee:
-        return redirect(url_for("employee.dashboard"))
-
-    return render_template("employee/payslip.html", current_year=date.today().year)
-
-@employee_bp.route("/payslip/api/history", methods=["GET"])
-def employee_payroll_history_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    user_id = g.user.id 
+    now = get_current_time()
     filters = {
-        "year": request.args.get("year", type=int),
-        "status": request.args.get("status", type=str),
-        "has_complaint": request.args.get("has_complaint", type=str),
-        "paid_state": request.args.get("paid_state", type=str),
+        "year": request.args.get("year", default=now.year, type=int),
+        "status": request.args.get("status", default="").strip(),
+        "paid_state": request.args.get("paid_state", default="").strip(),
+        "has_complaint": request.args.get("has_complaint", default="false")
     }
     try:
-        return jsonify(EmployeePayrollService.payroll_history(session.get("user_id"), filters))
+        payroll_data = EmployeePayrollService.payroll_history(user_id=user_id, filters=filters)
+        return render_template(
+            "employee/payslip.html",
+            summary=payroll_data["summary"],           # Thông tin kỳ lương mới nhất
+            payslips=payroll_data["items"],            # Danh sách các phiếu lương để loop
+            dependents=payroll_data["number_of_dependents"],
+            selected_year=filters["year"],             # Năm đang chọn để lọc
+            current_year=now.year,                     # Năm hiện tại của simulation
+            now=now
+        )
+    except ValueError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("home.index_page"))
+    except Exception as e:
+        flash(f"Lỗi hệ thống: {str(e)}", "danger")
+        return redirect(url_for("home.index_page"))
+
+@employee_bp.route("/payslip/api/history", methods=["GET"])
+@auth_required
+@role_required("Employee")
+def employee_payroll_history_api():
+    user_id = g.user.id
+    now = get_current_time()
+    filters = {
+        "year": request.args.get("year", default=now.year, type=int),
+        "status": request.args.get("status"),
+        "has_complaint": request.args.get("has_complaint"),
+        "paid_state": request.args.get("paid_state"),
+    }
+    try:
+        data = EmployeePayrollService.payroll_history(user_id, filters)
+        return jsonify(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
+    except Exception as e:
+        return jsonify({"error": "Đã xảy ra lỗi hệ thống", "detail": str(e)}), 500
 
 @employee_bp.route("/payslip/api/<int:salary_id>", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def employee_payroll_detail_api(salary_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
+    user_id = g.user.id
     try:
-        return jsonify(EmployeePayrollService.payroll_detail(session.get("user_id"), salary_id))
+        detail_data = EmployeePayrollService.payroll_detail(user_id, salary_id)
+        return jsonify(detail_data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
-
+    except Exception as e:
+        return jsonify({"error": "Lỗi hệ thống khi tải chi tiết lương", "detail": str(e)}), 500
 
 @employee_bp.route("/payslip/api/<int:salary_id>/pdf", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def employee_payroll_pdf_api(salary_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
+    user_id = g.user.id
     try:
-        filename, content = EmployeePayrollService.payslip_pdf(session.get("user_id"), salary_id)
-        return Response(content, mimetype="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-
-@employee_bp.route("/payslip/api/<int:salary_id>/complaint", methods=["POST"])
-def employee_payroll_complaint_api(salary_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-    try:
-        return jsonify(
-            EmployeePayrollService.submit_complaint(
-                session.get("user_id"),
-                salary_id,
-                request.form.get("issue_type", "other"),
-                request.form.get("description", ""),
-                request.files.get("attachment"),
-            )
+        filename, content = EmployeePayrollService.payslip_pdf(user_id, salary_id)
+        return Response(
+            content,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Cache-Control": "no-cache"
+            }
         )
     except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as e:
+        return jsonify({"error": "Lỗi khi tạo file PDF", "detail": str(e)}), 500
+
+@employee_bp.route("/payslip/api/<int:salary_id>/complaint", methods=["POST"])
+@auth_required
+@role_required("Employee")
+def employee_payroll_complaint_api(salary_id: int):
+    # 1. Lấy user_id từ đối tượng g (do decorator thiết lập)
+    user_id = g.user.id
+    
+    # 2. Thu thập dữ liệu từ request (form-data và files)
+    # Service của bạn yêu cầu: user_id, salary_id, issue_type, description, attachment
+    issue_type = request.form.get("issue_type", "other")
+    description = request.form.get("description", "").strip()
+    attachment = request.files.get("attachment")
+
+    try:
+        # 3. Gọi Service xử lý nghiệp vụ gửi khiếu nại
+        # Hàm này sẽ tự handle: Tạo Complaint, Lưu File, Gửi thông báo cho Manager/HR
+        result = EmployeePayrollService.submit_complaint(
+            user_id=user_id,
+            salary_id=salary_id,
+            issue_type=issue_type,
+            description=description,
+            attachment=attachment
+        )
+        
+        return jsonify(result)
+
+    except ValueError as exc:
+        # Bắt các lỗi validate từ Service (thiếu mô tả, sai định dạng file, không tìm thấy lương)
         return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        # Bắt lỗi hệ thống (lỗi upload file, lỗi commit database)
+        return jsonify({"error": "Lỗi hệ thống khi gửi khiếu nại", "detail": str(e)}), 500
 
 @employee_bp.route("/payslip/api/complaints", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def employee_payroll_complaints_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    user_id = g.user.id
     try:
-        return jsonify({"items": EmployeePayrollService.salary_complaints(session.get("user_id"))})
+        complaints_list = EmployeePayrollService.salary_complaints(user_id)
+        return jsonify({
+            "items": complaints_list,
+            "total": len(complaints_list)
+        })
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
+    except Exception as e:
+        return jsonify({"error": "Không thể tải danh sách khiếu nại", "detail": str(e)}), 500
+    
 @employee_bp.route("/payslip/api/complaints/<int:complaint_id>/close", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def employee_payroll_close_complaint_api(complaint_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
+    user_id = g.user.id
     try:
-        return jsonify(EmployeePayrollService.close_salary_complaint(session.get("user_id"), complaint_id))
+        result = EmployeePayrollService.close_salary_complaint(user_id, complaint_id)
+        return jsonify(result)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        return jsonify({"error": "Lỗi khi đóng khiếu nại", "detail": str(e)}), 500
 
+from flask import render_template, g, current_app
+from app.utils.time import get_current_time, VN_TIMEZONE
+from app.models import Complaint  # Import đúng Model bạn vừa gửi
+from .notification_service import EmployeeNotificationService # Import Class Service mới
 
-@employee_bp.route("/notifications")
+@employee_bp.route("/notifications", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def notifications():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    user = _current_user()
-    employee = _current_employee()
-    items = EmployeeDashboardService.get_notifications(user.id if user else 0, limit=50)
-
+    user = g.user
+    employee = g.employee  
+    now = get_current_time()
+    items = EmployeeNotificationService.get_notifications(user_id=user.id, limit=50)
     complaint_map: dict[int, dict] = {}
     if employee:
         active_complaints = (
@@ -1350,187 +945,179 @@ def notifications():
                     "has_reply": bool(complaint.admin_reply),
                     "closed": bool(complaint.closed_by_employee),
                 }
-
     return render_template(
         "employee/notifications.html",
-        notifications=items,
+        notifications=items,      
         complaint_map=complaint_map,
+        now=now
     )
 
 @employee_bp.route("/notifications/<int:noti_id>/read", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def mark_notification_read(noti_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    noti = Notification.query.filter_by(id=noti_id, user_id=user.id).first()
-    if not noti:
-        return jsonify({"error": "Notification not found"}), 404
-
-    noti.is_read = True
-    db.session.commit()
-    return jsonify({"success": True, "id": noti.id, "is_read": noti.is_read})
-
-@employee_bp.route("/notifications/<int:noti_id>/feedback", methods=["POST"])
-def send_notification_feedback(noti_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    user = _current_user()
-    employee = _current_employee()
-    if not user or not employee:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    noti = Notification.query.filter_by(id=noti_id, user_id=user.id).first()
-    if not noti:
-        return jsonify({"error": "Notification not found"}), 404
-
-    issue_type = request.form.get("issue_type", "other").strip() or "other"
-    detail = request.form.get("description", "").strip()
+    user_id = g.user.id
     try:
-        result = EmployeeESSService.submit_notification_complaint(
-            user=user,
-            employee=employee,
-            noti_id=noti.id,
-            issue_type=issue_type,
-            description=detail,
-            attachment=request.files.get("attachment"),
+        noti_detail = EmployeeNotificationService.notification_detail(
+            user_id=user_id, 
+            noti_id=noti_id
         )
-        return jsonify({"success": True, **result})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@employee_bp.route("/notifications/<int:noti_id>/detail", methods=["GET"])
-def notification_detail_api(noti_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        return jsonify(EmployeeESSService.notification_detail(user.id, noti_id))
+        return jsonify({
+            "success": True, 
+            "id": noti_detail["id"], 
+            "is_read": noti_detail["is_read"]
+        })
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
+    except Exception as e:
+        return jsonify({"error": "Lỗi hệ thống khi cập nhật trạng thái thông báo", "detail": str(e)}), 500
+
+@employee_bp.route("/notifications/<int:noti_id>/feedback", methods=["POST"])
+@auth_required
+@role_required("Employee")
+def send_notification_feedback(noti_id: int):
+    user = g.user
+    employee = g.employee
+    issue_type = request.form.get("issue_type", "other").strip() or "other"
+    description = request.form.get("description", "").strip()
+    attachment = request.files.get("attachment")
+    try:
+        result = EmployeeNotificationService.submit_notification_complaint(
+            user=user,
+            employee=employee,
+            noti_id=noti_id,
+            issue_type=issue_type,
+            description=description,
+            attachment=attachment
+        )
+        return jsonify({
+            "success": True, 
+            **result
+        })
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        return jsonify({"error": "Lỗi hệ thống khi gửi phản hồi thông báo", "detail": str(e)}), 500
+
+@employee_bp.route("/notifications/<int:noti_id>/detail", methods=["GET"])
+@auth_required
+@role_required("Employee")
+def notification_detail_api(noti_id: int):
+    user_id = g.user.id
+    try:
+        noti_detail = EmployeeNotificationService.notification_detail(
+            user_id=user_id, 
+            noti_id=noti_id
+        )
+        return jsonify(noti_detail)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as e:
+        return jsonify({"error": "Không thể tải chi tiết thông báo", "detail": str(e)}), 500
 
 @employee_bp.route("/notifications/<int:noti_id>/delete", methods=["DELETE"])
+@auth_required
+@role_required("Employee")
 def delete_notification_with_cascade(noti_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-
+    user_id = g.user.id
     try:
-        result = AttendanceService.delete_notification_cascade(noti_id, user.id)
-        return jsonify({"ok": True, **result})
-    except ValidationError as exc:
+        result = AttendanceService.delete_notification_cascade(
+            notification_id=noti_id, 
+            user_id=user_id
+        )
+        return jsonify({
+            "ok": True, 
+            **result
+        })
+    except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"error": f"Không thể xóa thông báo: {exc}"}), 500
-@employee_bp.route("/notifications/<int:noti_id>/overtime-reset", methods=["POST"])
-def reset_overtime_from_notification(noti_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
-    user = _current_user()
-    employee = _current_employee()
-    if not user or not employee:
-        return jsonify({"error": "Unauthorized"}), 401
-    noti = Notification.query.filter_by(id=noti_id, user_id=user.id).first()
-    if not noti:
-        return jsonify({"error": "Notification not found"}), 404
-    row = (
-        OvertimeRequest.query.filter_by(employee_id=employee.id)
-        .filter(OvertimeRequest.created_at <= (noti.created_at or noti.updated_at))
-        .order_by(OvertimeRequest.created_at.desc())
-        .first()
-    )
-    if not row:
-        if noti.is_deleted is False:
-            noti.is_deleted = True
-            db.session.commit()
         return jsonify({
-            "ok": True,
-            "already_deleted": True,
-            "message": "OT request liên quan đã được xóa trước đó",
-        })
-    return jsonify(reset_overtime_request_flow(
-        overtime_request=row,
-        actor_user_id=user.id,
-        source="employee",
-        anchor_notification_id=noti.id,
-    ))
+            "error": f"Không thể xóa thông báo do lỗi hệ thống", 
+            "detail": str(exc)
+        }), 500
+    
+@employee_bp.route("/notifications/<int:noti_id>/overtime-reset", methods=["POST"])
+@auth_required
+@role_required("Employee")
+def reset_overtime_from_notification(noti_id: int):
+    user = g.user
+    employee = g.employee
+    try:
+        result = AttendanceService.process_overtime_reset_from_notification(
+            user_id=user.id,
+            employee_id=employee.id,
+            noti_id=noti_id
+        )
+        return jsonify(result), 200
+    except ValueError as val_err:
+        return jsonify({"success": False, "error": str(val_err)}), 404
 
 
 @employee_bp.route("/complaints/<int:complaint_id>/close", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def close_complaint_api(complaint_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
     try:
-        return jsonify(EmployeeESSService.close_complaint(session.get("user_id"), complaint_id))
+        result = EmployeeComplaintService.close_complaint(
+            user_id=g.user.id, 
+            complaint_id=complaint_id
+        )
+        return jsonify(result), 200
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
 @employee_bp.route("/resignation/my", methods=["GET"])
+@auth_required
 def my_resignation_requests():
-    employee = _current_employee()
-    if not employee:
-        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên"}), 404
+    employee = g.employee
     rows = (
-        ResignationRequest.query.filter_by(employee_id=employee.id)
+        ResignationRequest.query.filter_by(
+            employee_id=employee.id,
+            is_deleted=False 
+        )
         .order_by(ResignationRequest.created_at.desc())
         .all()
     )
-    return jsonify([row.to_dict() for row in rows])
+    return jsonify([row.to_dict() for row in rows]), 200
 
 
 @employee_bp.route("/resignation", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def submit_resignation_request():
-    employee = _current_employee()
+    employee = getattr(g, "current_employee", None)
+    
     if not employee:
-        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên"}), 404
-
+        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên hợp lệ cho tài khoản này"}), 404
     expected_last_day = request.form.get("expected_last_day")
     reason_category = (request.form.get("reason_category") or "").strip().lower()
     reason_text = (request.form.get("reason_text") or "").strip() or None
     extra_note = (request.form.get("extra_note") or "").strip() or None
     handover_employee_id = request.form.get("handover_employee_id", type=int)
-
     if not expected_last_day:
         return jsonify({"error": "Ngày dự kiến nghỉ là bắt buộc"}), 400
     try:
         expected_last_day_date = date.fromisoformat(expected_last_day)
     except ValueError:
-        return jsonify({"error": "Định dạng ngày không hợp lệ"}), 400
-
+        return jsonify({"error": "Định dạng ngày không hợp lệ. Vui lòng dùng YYYY-MM-DD"}), 400
     allowed_reasons = {"transfer", "personal", "health", "study", "other"}
     if reason_category not in allowed_reasons:
         return jsonify({"error": "Lý do nghỉ việc không hợp lệ"}), 400
-
     attachment_url = None
     file = request.files.get("attachment")
     if file and file.filename:
         filename = secure_filename(file.filename)
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         if ext not in {"pdf", "jpg", "jpeg", "png", "doc", "docx"}:
-            return jsonify({"error": "File đính kèm không hợp lệ"}), 400
-        folder = os.path.join("app", "static", "uploads", "resignation")
+            return jsonify({"error": "Định dạng file đính kèm không được hỗ trợ"}), 400
+        folder = os.path.join(os.getcwd(), "app", "static", "uploads", "resignation")
         os.makedirs(folder, exist_ok=True)
         unique_name = f"{uuid.uuid4().hex}_{filename}"
         absolute_path = os.path.join(folder, unique_name)
         file.save(absolute_path)
         attachment_url = f"/static/uploads/resignation/{unique_name}"
-
     try:
         request_item = ResignationService.create_request(
             employee=employee,
@@ -1544,79 +1131,127 @@ def submit_resignation_request():
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
+    return jsonify({
+        "message": "Đã gửi đơn nghỉ việc, chờ Manager duyệt", 
+        "request": request_item.to_dict()
+    }), 201
 
-    return jsonify({"message": "Đã gửi đơn nghỉ việc, chờ Manager duyệt", "request": request_item.to_dict()})
 @employee_bp.route("/profile/dependents", methods=["GET"])
+@auth_required
+@role_required("Employee")
 def employee_dependents_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    employee = getattr(g, "current_employee", None)
+    if not employee:
+        return jsonify({"error": "Không tìm thấy hồ sơ nhân viên hợp lệ cho tài khoản này"}), 404
     try:
-        return jsonify(EmployeeESSService.list_dependents(session.get("user_id")))
+        data = EmployeeDependentService.list_dependents(employee=employee)
+        return jsonify(data), 200
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
+    except Exception as e:
+        return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
 
 @employee_bp.route("/profile/dependents", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def employee_create_dependent_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    employee = getattr(g, "current_employee", None)
+    current_user = getattr(g, "current_user", None)
+    if not employee or not current_user:
+        return jsonify({"error": "Không tìm thấy thông tin nhân viên hợp lệ"}), 404
     payload = request.get_json(silent=True) or {}
     try:
-        return jsonify(EmployeeESSService.create_dependent(session.get("user_id"), payload, actor_user_id=session.get("user_id")))
+        result = EmployeeDependentService.create_dependent(
+            employee=employee,
+            payload=payload,
+            actor_user_id=current_user.id
+        )
+        return jsonify(result), 201
+        
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
+    except Exception as e:
+        return jsonify({"error": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
 
 @employee_bp.route("/profile/dependents/<int:dependent_id>", methods=["PUT"])
+@auth_required
+@role_required("Employee")
 def employee_update_dependent_api(dependent_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
+    employee = getattr(g, "current_employee", None)
+    current_user = getattr(g, "current_user", None)
+    if not employee or not current_user:
+        return jsonify({"error": "Không tìm thấy thông tin nhân viên hợp lệ"}), 404
     payload = request.get_json(silent=True) or {}
     try:
-        return jsonify(EmployeeESSService.update_dependent(session.get("user_id"), dependent_id, payload, actor_user_id=session.get("user_id")))
+        result = EmployeeDependentService.update_dependent(
+            employee=employee,
+            dependent_id=dependent_id,
+            payload=payload,
+            actor_user_id=current_user.id
+        )
+        return jsonify(result), 200
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
+    except Exception as e:
+        return jsonify({"error": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
 
 @employee_bp.route("/profile/dependents/<int:dependent_id>", methods=["DELETE"])
+@auth_required
+@role_required("Employee")
 def employee_delete_dependent_api(dependent_id: int):
-    guard = _ensure_login()
-    if guard:
-        return guard
+    employee = getattr(g, "current_employee", None)
+    current_user = getattr(g, "current_user", None)
+    
+    if not employee or not current_user:
+        return jsonify({"error": "Không tìm thấy thông tin nhân viên hợp lệ"}), 404
     try:
-        return jsonify(EmployeeESSService.delete_dependent(session.get("user_id"), dependent_id, actor_user_id=session.get("user_id")))
+        result = EmployeeDependentService.delete_dependent(
+            employee=employee,
+            dependent_id=dependent_id,
+            actor_user_id=current_user.id
+        )
+        return jsonify(result), 200
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
 
 
 @employee_bp.route("/attendance/overtime-request", methods=["POST"])
+@auth_required
+@role_required("Employee")
 def submit_overtime_request_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
+    current_user = getattr(g, "current_user", None)
+    if not current_user:
+        return jsonify({"error": "Không tìm thấy thông tin phiên đăng nhập hợp lệ"}), 401
     payload = request.get_json(silent=True) or {}
     try:
-        return jsonify(EmployeeESSService.submit_overtime(session.get("user_id"), payload, actor_user_id=session.get("user_id")))
+        result = EmployeeOvertimeService.submit_overtime(
+            user_id=current_user.id,
+            payload=payload,
+            actor_user_id=current_user.id
+        )
+        return jsonify(result), 201
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Lỗi hệ thống trong quá trình xử lý: {str(e)}"}), 500
+    
 @employee_bp.route("/attendance/overtime-request/reset", methods=["DELETE"])
+@auth_required
+@role_required("Employee")
 def reset_overtime_request_api():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    user = _current_user()
-    employee = _current_employee()
+    user = getattr(g, "current_user", None)
+    employee = getattr(g, "current_employee", None)
     if not user or not employee:
-        return jsonify({"error": "Không tìm thấy người dùng hoặc nhân viên"}), 404
-
+        return jsonify({"error": "Không tìm thấy thông tin người dùng hoặc nhân viên hợp lệ"}), 404
     role_name = (user.role.name.lower() if user.role else "")
-    if role_name != "admin" and not _is_dev_or_test_env():
+    is_dev_or_test = current_app.config.get("DEBUG") or current_app.config.get("TESTING")
+    
+    if role_name != "admin" and not is_dev_or_test:
         return jsonify({"error": "Chỉ ADMIN hoặc môi trường DEV/TEST mới được reset OT Request"}), 403
-
     ot_request = (
         OvertimeRequest.query.filter_by(
             employee_id=employee.id,
@@ -1627,37 +1262,38 @@ def reset_overtime_request_api():
         .first()
     )
     if not ot_request:
-        return jsonify({"error": "Không có OT Request hiện tại để reset"}), 404
-
+        return jsonify({"error": "Không có yêu cầu OT nào trong ngày hôm nay để reset"}), 404
     ot_date = ot_request.overtime_date
     ot_id = ot_request.id
-    allowed_statuses = {"pending_hr", "pending_admin", "approved", "rejected"}
+    allowed_statuses = {
+        EmployeeOvertimeService.STATUS_PENDING_MANAGER,  # "pending_manager"
+        EmployeeOvertimeService.STATUS_APPROVED,         # "approved"
+        EmployeeOvertimeService.STATUS_REJECTED          # "rejected"
+    }
     if ot_request.status not in allowed_statuses:
-        return jsonify({"error": "OT Request hiện tại không thuộc trạng thái cho phép reset trong DEV/TEST"}), 400
-
+        return jsonify({"error": f"Yêu cầu OT có trạng thái '{ot_request.status}' không được hỗ trợ để reset"}), 400
     notifications = Notification.query.filter(
         Notification.is_deleted.is_(False),
         Notification.type == "overtime",
         db.or_(
             Notification.link.like("/employee/attendance%"),
+            Notification.link.like("/manager/overtime%"),  
             Notification.link.like("/hr/attendance%"),
             Notification.link.like("/admin/attendance%"),
         ),
         db.or_(
-            Notification.content.ilike(f"%EMP{employee.id:04d}%"),
+            Notification.content.ilike(f"%{employee.full_name}%"),
             Notification.content.ilike(f"%#{ot_id}%"),
-            Notification.content.ilike(f"%{ot_date.strftime('%d/%m/%Y')}%"),
+            Notification.content.ilike(f"%{ot_date.strftime('%d/%m')}%"),
         ),
     ).all()
     for item in notifications:
         item.is_deleted = True
-
     attendance = Attendance.query.filter_by(employee_id=employee.id, date=ot_date).first()
     if attendance:
         attendance.overtime_hours = Decimal("0.00")
         if attendance.attendance_type == "overtime":
             attendance.attendance_type = "normal"
-
     ot_request.is_deleted = True
     db.session.add(
         HistoryLog(
@@ -1665,52 +1301,54 @@ def reset_overtime_request_api():
             action="OVERTIME_RESET_TEST_MODE",
             entity_type="overtime_request",
             entity_id=ot_id,
-            description=f"Reset OT request DEV/TEST ({ot_request.status}) ngày {ot_date.isoformat()}",
+            description=f"Reset OT request test-mode (Hủy trạng thái {ot_request.status}) ngày {ot_date.isoformat()}",
             performed_by=user.id,
         )
     )
     db.session.commit()
-    return jsonify({"message": "Đã reset OT Request để test lại", "status": "RESET_OK"})
+    return jsonify({
+        "message": "Đã tiến hành reset toàn bộ dữ liệu đơn OT trong ngày (Môi trường Test)",
+        "status": "RESET_OK"
+    }), 200
 
-@employee_bp.route("/search")
-def search():
-    q = (request.args.get("q") or "").strip()
-    results = []
-    if q:
-        results = Employee.query.filter(Employee.full_name.ilike(f"%{q}%")).limit(20).all()
-    return render_template("employee/search.html", q=q, results=results)
-@employee_bp.route("/dev-login")
-def dev_login():
-    session["user_id"] = 1
-    return redirect("/employee/dashboard")
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @employee_bp.route("/upload-avatar", methods=["POST"])
+@auth_required                 
+@role_required("Employee")         
 def upload_avatar():
-    guard = _ensure_login()
-    if guard:
-        return guard
-
-    employee = _current_employee()
+    employee = getattr(g, "current_employee", None) or getattr(g, "current_user", None)
+    
     if not employee:
-        return jsonify({"error": "Không tìm thấy nhân viên"}), 404
-
+        return jsonify({"status": "error", "message": "Không tìm thấy thông tin nhân viên trong phiên làm việc"}), 404
+    if "avatar" not in request.files:
+        return jsonify({"status": "error", "message": "Vui lòng chọn file ảnh để tải lên"}), 400
     file = request.files.get("avatar")
-    if not file:
-        return jsonify({"error": "Không có file"}), 400
-
-    filename = secure_filename(file.filename)
-
-    upload_folder = os.path.join("app", "static", "uploads")
+    if file.filename == "":
+        return jsonify({"status": "error", "message": "Tên file không hợp lệ"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"status": "error", "message": "Định dạng file không hỗ trợ (Chỉ nhận JPG, JPEG, PNG, GIF)"}), 400
+    original_filename = secure_filename(file.filename)
+    extension = original_filename.rsplit('.', 1)[1].lower()
+    unique_filename = f"{uuid.uuid4().hex}.{extension}"
+    upload_folder = os.path.join(current_app.root_path, "static", "uploads")
     os.makedirs(upload_folder, exist_ok=True)
 
-    filepath = os.path.join(upload_folder, filename)
-    file.save(filepath)
-
-    # 🔥 QUAN TRỌNG: lưu vào employee, không phải user
-    employee.avatar = f"/static/uploads/{filename}"
-    db.session.commit()
-
-    return jsonify({
-        "message": "Upload thành công",
-        "url": employee.avatar
-    })
+    filepath = os.path.join(upload_folder, unique_filename)
+    try:
+        file.save(filepath)
+        employee.avatar = f"/static/uploads/{unique_filename}"
+        db.session.commit()
+        return jsonify({
+            "status": "success",
+            "message": "Cập nhật ảnh đại diện thành công",
+            "url": employee.avatar
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return jsonify({"status": "error", "message": f"Lỗi hệ thống: {str(e)}"}), 500

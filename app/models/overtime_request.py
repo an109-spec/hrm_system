@@ -34,7 +34,11 @@ class OvertimeRequest(BaseModel):
     approved_by = db.Column(db.Integer, db.ForeignKey("employees.id"), nullable=True)#ID người phê duyệt cuối cùng.
     approved_at = db.Column(db.DateTime(timezone=True), nullable=True)#Thời điểm phê duyệt cuối cùng.
     rejection_reason = db.Column(db.Text, nullable=True)#Lý do từ chối (nếu đơn bị bác bỏ).
-    employee = relationship("Employee", foreign_keys=[employee_id])
+    employee = relationship(
+        "Employee",
+        foreign_keys=[employee_id],
+        back_populates="overtime_requests"
+    )
 
     def __repr__(self):
         return f"<OvertimeRequest {self.id} Emp:{self.employee_id} {self.status}>"

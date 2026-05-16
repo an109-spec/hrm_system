@@ -1,7 +1,7 @@
 from flask import request, render_template, redirect, url_for, session, current_app
 from flask_jwt_extended import create_access_token, set_access_cookies
 from app.common.exceptions import UnauthorizedError, ValidationError, ConflictError
-
+from app.models import User, Role
 from . import auth_bp
 from .validators import validate_login, validate_register
 # CHỈ import các Class cần thiết, KHÔNG import module 'dto' trùng tên
@@ -222,3 +222,25 @@ def verify_otp():
             error=str(e),
             identifier=data.get("identifier"),
         )
+
+@auth_bp.route("/dev-login/<string:role_name>", methods=["GET"])
+def dev_login(role_name):
+    if not current_app.config.get("DEBUG") and not current_app.config.get("TESTING"):
+        return "Cơ chế bảo vệ: Tính năng này chỉ dùng trong môi trường Phát triển/Demo!", 403
+    normalized_role = role_name.strip().lower()
+    role_record = Role.query.filter(Role.name.ilike(normalized_role)).first()
+    if not role_record:
+        return f"Vai trò '{role_name}' không tồn tại trong hệ thống cấu hình quyền.", 400
+    user = User.query.filter_by(role_id=role_record.id, is_deleted=False).first()
+    if not user:
+        return f"Không tìm thấy tài khoản mẫu nào thuộc vai trò '{role_record.name}' để demo.", 404
+    session.clear() 
+    session["user_id"] = user.id
+    actual_role_name = role_record.name.lower()
+    if "admin" in actual_role_name:
+        return redirect("/admin/dashboard")
+    elif "manager" in actual_role_name:
+        return redirect("/manager/dashboard")
+    elif "hr" in actual_role_name:
+        return redirect("/hr/dashboard") 
+    return redirect("/employee/dashboard")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, date, time 
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +16,7 @@ from app.models import (
     LeaveRequest,
     Notification,
 )
+from app.utils.time import get_current_time
 from app.common.exceptions import ValidationError
 from app.modules.attendance.dto import AttendanceStateDTO, WorkUnitDTO
 from app.modules.attendance.constants import (
@@ -23,6 +24,7 @@ from app.modules.attendance.constants import (
     REGULAR_END,
     LUNCH_START, 
     LUNCH_END, 
+    HALF_DAY_THRESHOLD,
     OT_CHECKIN_OPEN, 
     OT_END_LIMIT, 
     REGULAR_DAY_RATE, 
@@ -30,8 +32,7 @@ from app.modules.attendance.constants import (
     HOLIDAY_RATE, 
 )
 
-from app.modules.attendance.dto import AttendanceStateDTO
-from app.common.constants import AttendanceConstants
+from app.common.constants import AttendanceConstants, VN_TIMEZONE
 
 class AttendanceService:
     ACTION_CHECK_IN = "check_in"
@@ -48,36 +49,51 @@ class AttendanceService:
     ACTION_HOLIDAY_OFF = "holiday_off"
     ACTION_WEEKEND_OFF = "weekend_off"
     ACTION_OVERTIME_DECISION_RECORDED = "overtime_decision_recorded"
+    REGULAR_START = REGULAR_START
+    HALF_DAY_THRESHOLD = HALF_DAY_THRESHOLD
+    OT_CHECKIN_OPEN = OT_CHECKIN_OPEN
 
-    # =========================
-    # STATE MACHINE
-    # =========================
     @staticmethod
     def compute_attendance_state(
-        now: datetime,
+        now: datetime | None,
         attendance: Attendance | None,
         ot_request: OvertimeRequest | None = None,
     ) -> AttendanceStateDTO:
 
-        current_time = now.time()
+        # =====================================================
+        # TIME SOURCE STANDARDIZATION
+        # =====================================================
+        if now is None:
+            now = get_current_time()
 
-        # =========================================================
+        # normalize timezone
+        if now.tzinfo is not None:
+            now = now.astimezone(VN_TIMEZONE)
+
+        # convert to naive time for comparison
+        current_time = now.timetz().replace(tzinfo=None)
+
+        # =====================================================
         # NOT EXISTS
-        # =========================================================
+        # =====================================================
         if not attendance:
+        # Nếu là sáng sớm, báo là chưa có ca mới thay vì ép check-in
+            msg = "Bạn chưa bắt đầu ngày làm việc."
+            if now.hour < 5:
+                msg = "Chưa đến giờ làm việc ngày mới hoặc ca đêm đã kết thúc."
             return AttendanceStateDTO(
-                state=Attendance.ShiftStatus.NOT_STARTED,
-                button_enabled=True,
-                button_text="🔳 XÁC THỰC CHẤM CÔNG",
-                can_scan=True,
-                message="Bạn chưa bắt đầu ngày làm việc.",
-            )
+                        state=Attendance.ShiftStatus.NOT_STARTED,
+                        button_enabled=True,
+                        button_text="🔳 XÁC THỰC CHẤM CÔNG",
+                        can_scan=True,
+                        message=msg,
+                    )
+        is_yesterday = attendance.date < now.date()
+        date_str = attendance.date.strftime('%d/%m')
+        raw_state = Attendance.ShiftStatus.normalize(
+            attendance.shift_status
+        )
 
-        raw_state = Attendance.ShiftStatus.normalize(attendance.shift_status)
-
-        # =========================================================
-        # FINAL STATES
-        # =========================================================
         if raw_state == Attendance.ShiftStatus.COMPLETED:
             return AttendanceStateDTO(
                 state=raw_state,
@@ -123,9 +139,9 @@ class AttendanceService:
                 message="Bạn bị ghi nhận vắng mặt.",
             )
 
-        # =========================================================
+        # =====================================================
         # NOT STARTED
-        # =========================================================
+        # =====================================================
         if raw_state == Attendance.ShiftStatus.NOT_STARTED:
             return AttendanceStateDTO(
                 state=raw_state,
@@ -135,11 +151,18 @@ class AttendanceService:
                 message="Vui lòng check-in để bắt đầu.",
             )
 
-        # =========================================================
+        # =====================================================
         # WORKING REGULAR
-        # =========================================================
+        # =====================================================
         if raw_state == Attendance.ShiftStatus.WORKING_REGULAR:
-
+            if is_yesterday:
+                            return AttendanceStateDTO(
+                                state=Attendance.ShiftStatus.REGULAR_CHECKOUT_REQUIRED,
+                                button_enabled=True,
+                                button_text=f"🔳 CHECKOUT CA {date_str}",
+                                can_scan=True,
+                                message=f"Bạn quên chưa checkout ca làm việc ngày {date_str}.",
+                            )
             if LUNCH_START <= current_time < LUNCH_END:
                 return AttendanceStateDTO(
                     state="lunch_break",
@@ -166,57 +189,37 @@ class AttendanceService:
                 message="Hết giờ làm, vui lòng checkout.",
             )
 
-        # =========================================================
+        # =====================================================
         # CHECKOUT REQUIRED
-        # =========================================================
+        # =====================================================
         if raw_state == Attendance.ShiftStatus.REGULAR_CHECKOUT_REQUIRED:
+            btn_text = "🔳 CHECKOUT CA CHÍNH"
+            msg = "Bạn chưa checkout."
+            
+            if is_yesterday:
+                btn_text = f"🔳 CHECKOUT CA {date_str}"
+                msg = f"Bạn chưa checkout ca làm việc ngày {date_str}."
+
             return AttendanceStateDTO(
                 state=raw_state,
                 button_enabled=True,
-                button_text="🔳 CHECKOUT CA CHÍNH",
+                button_text=btn_text,
                 can_scan=True,
-                message="Bạn chưa checkout.",
+                message=msg,
             )
 
-        # =========================================================
-        # DONE REGULAR
-        # =========================================================
+        # =====================================================
+        # REGULAR DONE
+        # =====================================================
         if raw_state == Attendance.ShiftStatus.REGULAR_DONE:
-            return AttendanceStateDTO(
-                state=raw_state,
-                button_enabled=True,
-                button_text="🕒 ĐĂNG KÝ TĂNG CA",
-                can_scan=False,
-                message="Đã xong ca chính.",
-            )
-
-        # =========================================================
-        # OT PENDING
-        # =========================================================
-        if raw_state == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
-
-            return AttendanceStateDTO(
-                state=raw_state,
-                button_enabled=False,
-                button_text="⏳ CHỜ DUYỆT OT",
-                can_scan=False,
-                overtime_status=(ot_request.status.upper() if ot_request else "PENDING"),
-                message="Đang chờ duyệt tăng ca.",
-            )
-
-        # =========================================================
-        # PRE OT REST
-        # =========================================================
-        if raw_state == Attendance.ShiftStatus.PRE_OT_REST:
 
             if current_time < OT_CHECKIN_OPEN:
                 return AttendanceStateDTO(
-                    state=raw_state,
+                    state="rest_before_ot",
                     button_enabled=False,
-                    button_text="⏳ CHỜ OT",
+                    button_text="⏳ NGHỈ CHỜ TĂNG CA",
                     can_scan=False,
-                    overtime_status="APPROVED",
-                    message="Chưa đến giờ OT.",
+                    message="Đã hoàn tất ca chính. Đang nghỉ trước tăng ca.",
                 )
 
             return AttendanceStateDTO(
@@ -224,27 +227,48 @@ class AttendanceService:
                 button_enabled=True,
                 button_text="🔳 CHECKIN OT",
                 can_scan=True,
-                overtime_status="APPROVED",
-                message="Đến giờ OT.",
+                overtime_status="AVAILABLE",
+                message="Đến giờ tăng ca. Bạn có thể check-in OT.",
             )
 
-        # =========================================================
-        # OT WORKING
-        # =========================================================
-        if raw_state == Attendance.ShiftStatus.WORKING_OVERTIME:
+        # =====================================================
+        # OT PENDING
+        # =====================================================
+        if raw_state == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
 
             return AttendanceStateDTO(
                 state=raw_state,
-                button_enabled=True,
-                button_text="🔳 KẾT THÚC OT",
-                can_scan=True,
-                overtime_status="APPROVED",
-                message="Đang làm OT.",
+                button_enabled=False,
+                button_text="⏳ CHỜ DUYỆT OT",
+                can_scan=False,
+                overtime_status=(
+                    ot_request.status.upper()
+                    if ot_request
+                    else "PENDING"
+                ),
+                message="Đang chờ duyệt tăng ca.",
             )
 
-        # =========================================================
+        if raw_state == Attendance.ShiftStatus.WORKING_OVERTIME:
+                display_msg = "Đang trong ca tăng ca."
+                btn_text = "🔳 KẾT THÚC OT"
+                
+                if is_yesterday:
+                    display_msg = f"Đang kết thúc ca tăng ca từ hôm qua ({date_str})."
+                    btn_text = "🔳 CHỐT CA ĐÊM"
+
+                return AttendanceStateDTO(
+                    state=raw_state,
+                    button_enabled=True,
+                    button_text=btn_text,
+                    can_scan=True,
+                    overtime_status="APPROVED",
+                    message=display_msg,
+                )
+
+        # =====================================================
         # FALLBACK
-        # =========================================================
+        # =====================================================
         return AttendanceStateDTO(
             state="unknown",
             button_enabled=False,
@@ -252,34 +276,36 @@ class AttendanceService:
             can_scan=False,
             message=f"Invalid state: {raw_state}",
         )
-
+   
     @staticmethod
-    def parse_time(sim_time_str: str | None = None) -> datetime:
-        if not sim_time_str:
-            return datetime.now()
-        now_dt = datetime.fromisoformat(sim_time_str.replace("Z", "+00:00"))
-        if now_dt.tzinfo is not None:
-            now_dt = now_dt.replace(tzinfo=None)
-        return now_dt
+    def get_or_create_today(
+        employee_id: int,
+        now_dt: datetime,
+    ) -> Attendance:
 
-    @staticmethod
-    def get_or_create_today(employee_id: int, now_dt: datetime) -> Attendance:
+        # =====================================================
+        # TIME NORMALIZATION
+        # =====================================================
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=VN_TIMEZONE)
+        else:
+            now_dt = now_dt.astimezone(VN_TIMEZONE)
 
         today = now_dt.date()
 
         # =====================================================
-        # 1. EXISTING RECORD CHECK
+        # EXISTING RECORD CHECK
         # =====================================================
         record = Attendance.query.filter_by(
             employee_id=employee_id,
-            date=today
+            date=today,
         ).first()
 
         if record:
             return record
 
         # =====================================================
-        # 2. EMPLOYEE VALIDATION (HARD GATE)
+        # EMPLOYEE VALIDATION
         # =====================================================
         employee = Employee.query.get(employee_id)
 
@@ -287,22 +313,25 @@ class AttendanceService:
             raise ValidationError("Nhân viên không tồn tại")
 
         if not employee.is_attendance_required:
-            raise ValidationError("Nhân viên không thuộc đối tượng chấm công")
+            raise ValidationError(
+                "Nhân viên không thuộc đối tượng chấm công"
+            )
 
         from app.common.constants import WorkingStatus
 
         if employee.working_status == WorkingStatus.RESIGNED:
-            raise ValidationError("Nhân viên không còn hoạt động")
+            raise ValidationError(
+                "Nhân viên không còn hoạt động"
+            )
 
         # =====================================================
-        # 3. TIME CONTEXT FLAGS
+        # DAY FLAGS
         # =====================================================
         is_weekend = today.weekday() >= 5
 
-        is_holiday = Holiday.query.filter(
-            Holiday.date == today,
-            getattr(Holiday, "is_active", True)
-        ).first() is not None
+        holiday = AttendanceService._get_holiday(today)
+
+        is_holiday = holiday is not None
 
         leave_request = LeaveRequest.query.filter(
             LeaveRequest.employee_id == employee_id,
@@ -312,7 +341,8 @@ class AttendanceService:
         ).first()
 
         # =====================================================
-        # 4. RULE RESOLUTION (DETERMINISTIC PRIORITY ENGINE)
+        # PRIORITY ENGINE
+        # leave > holiday > weekend > normal
         # =====================================================
         if leave_request:
             shift_status = Attendance.ShiftStatus.LEAVE
@@ -331,7 +361,7 @@ class AttendanceService:
             attendance_type = Attendance.Type.NORMAL
 
         # =====================================================
-        # 5. RECORD CREATION (CLEAN INITIAL STATE)
+        # CREATE RECORD
         # =====================================================
         record = Attendance(
             employee_id=employee_id,
@@ -352,13 +382,18 @@ class AttendanceService:
         record.set_attendance_type(attendance_type)
 
         # =====================================================
-        # 6. ATTACH CONTEXT FLAGS (IMPORTANT FIX)
+        # CONTEXT FLAGS
         # =====================================================
         record.is_leave_day = bool(leave_request)
-        record.is_offday = is_weekend or is_holiday or bool(leave_request)
+
+        record.is_offday = (
+            is_weekend
+            or is_holiday
+            or bool(leave_request)
+        )
 
         # =====================================================
-        # 7. PERSIST
+        # SAVE
         # =====================================================
         db.session.add(record)
 
@@ -367,9 +402,10 @@ class AttendanceService:
 
         except IntegrityError:
             db.session.rollback()
+
             return Attendance.query.filter_by(
                 employee_id=employee_id,
-                date=today
+                date=today,
             ).first()
 
         return record
@@ -397,60 +433,58 @@ class AttendanceService:
         ).first()
     @staticmethod
     def _get_holiday(target_date: date) -> Holiday | None:
-        fixed_holiday = Holiday.query.filter(
-            Holiday.is_recurring.is_(False),
-            Holiday.date == target_date
-        ).first()
 
-        if fixed_holiday:
-            return fixed_holiday
-        recurring_holiday = Holiday.query.filter(
-            Holiday.is_recurring.is_(True),
-            db.extract("month", Holiday.date) == target_date.month,
-            db.extract("day", Holiday.date) == target_date.day,
-        ).first()
-        return recurring_holiday
-    @staticmethod
-    def _get_holiday(target_date: date) -> Holiday | None:
         holiday = Holiday.query.filter(
             Holiday.date == target_date,
-            Holiday.is_recurring.is_(False)
+            Holiday.is_recurring.is_(False),
+            Holiday.is_active.is_(True),
         ).first()
+
         if holiday:
             return holiday
+
         return Holiday.query.filter(
             Holiday.is_recurring.is_(True),
+            Holiday.is_active.is_(True),
             db.extract("month", Holiday.date) == target_date.month,
             db.extract("day", Holiday.date) == target_date.day,
         ).first()
-    
     @staticmethod
-    def _get_day_rate(attendance_type: str | None) -> Decimal:
+    def _get_day_rate(
+        attendance_type: str | None
+    ) -> Decimal:
 
-        normalized_type = Attendance.Type.normalize(attendance_type)
+        normalized_type = Attendance.Type.normalize(
+            attendance_type
+        )
 
-        if normalized_type == AttendanceConstants.Type.NORMAL:
-            return REGULAR_DAY_RATE
+        RATE_MAP = {
+            AttendanceConstants.Type.NORMAL:
+                REGULAR_DAY_RATE,
 
-        if normalized_type == AttendanceConstants.Type.WEEKEND:
-            return WEEKEND_RATE
+            AttendanceConstants.Type.WEEKEND:
+                WEEKEND_RATE,
 
-        if normalized_type == AttendanceConstants.Type.HOLIDAY:
-            return HOLIDAY_RATE
+            AttendanceConstants.Type.HOLIDAY:
+                HOLIDAY_RATE,
 
-        if normalized_type == AttendanceConstants.Type.LEAVE_APPROVED:
-            return REGULAR_DAY_RATE
+            AttendanceConstants.Type.LEAVE_APPROVED:
+                REGULAR_DAY_RATE,
+        }
 
-        ABSENT_BUCKET = {
+        ABSENT_TYPES = {
             AttendanceConstants.Type.ABSENT,
             AttendanceConstants.Type.ABSENT_UNEXCUSED,
             AttendanceConstants.Type.ABNORMAL_REJECTED,
         }
 
-        if normalized_type in ABSENT_BUCKET:
-            return Decimal("0.0")
+        if normalized_type in ABSENT_TYPES:
+            return Decimal("0.00")
 
-        return REGULAR_DAY_RATE
+        return RATE_MAP.get(
+            normalized_type,
+            REGULAR_DAY_RATE,
+        )
 
     @staticmethod
     def _resolve_attendance_type(
@@ -477,67 +511,57 @@ class AttendanceService:
     def calculate_regular_work_units(
         attendance: Attendance
     ) -> WorkUnitDTO:
-
         if not attendance.check_in or not attendance.check_out:
             return WorkUnitDTO(
                 units=Decimal("0.00"),
                 is_half_day=False,
                 worked_hours=Decimal("0.00"),
             )
-
         normalized_type = Attendance.Type.normalize(
             attendance.attendance_type
         )
-
-        if normalized_type in {
+        ABSENT_TYPES = {
             Attendance.Type.ABSENT,
             Attendance.Type.ABSENT_UNEXCUSED,
             Attendance.Type.ABNORMAL_REJECTED,
-        }:
+        }
+
+        if normalized_type in ABSENT_TYPES:
             return WorkUnitDTO(
                 units=Decimal("0.00"),
                 is_half_day=False,
                 worked_hours=Decimal("0.00"),
             )
-
         if normalized_type == Attendance.Type.LEAVE_APPROVED:
             return WorkUnitDTO(
                 units=Decimal("1.00"),
                 is_half_day=False,
                 worked_hours=Decimal("8.00"),
             )
-
-        raw_hours = attendance.regular_hours or Decimal("0.00")
-
+        raw_hours = Decimal(str(attendance.regular_hours or 0))
         late_minutes = attendance.late_minutes or 0
-
-        half_day_minutes = (
-            (
-                AttendanceService.HALF_DAY_THRESHOLD.hour * 60
-                + AttendanceService.HALF_DAY_THRESHOLD.minute
-            )
-            - (
-                AttendanceService.REGULAR_START.hour * 60
-                + AttendanceService.REGULAR_START.minute
-            )
+        start_minutes = (
+            AttendanceService.REGULAR_START.hour * 60
+            + AttendanceService.REGULAR_START.minute
         )
-
-        is_half_day = late_minutes >= half_day_minutes
-
+        threshold_minutes = (
+            AttendanceService.HALF_DAY_THRESHOLD.hour * 60
+            + AttendanceService.HALF_DAY_THRESHOLD.minute
+        )
+        half_day_limit = threshold_minutes - start_minutes
+        is_half_day = late_minutes >= half_day_limit
         if raw_hours < Decimal("2.00"):
             return WorkUnitDTO(
                 units=Decimal("0.00"),
                 is_half_day=is_half_day,
                 worked_hours=raw_hours,
             )
-
         if is_half_day or raw_hours < Decimal("4.00"):
             return WorkUnitDTO(
                 units=Decimal("0.50"),
                 is_half_day=True,
                 worked_hours=raw_hours,
             )
-
         return WorkUnitDTO(
             units=Decimal("1.00"),
             is_half_day=False,
@@ -564,40 +588,34 @@ class AttendanceService:
         overtime_check_in: datetime,
         overtime_check_out: datetime
     ) -> Decimal:
-
         if not overtime_check_in or not overtime_check_out:
             return Decimal("0.00")
-
-        tz = overtime_check_in.tzinfo
+        if overtime_check_in.tzinfo is None:
+            overtime_check_in = overtime_check_in.replace(
+                tzinfo=VN_TIMEZONE
+            )
+        if overtime_check_out.tzinfo is None:
+            overtime_check_out = overtime_check_out.replace(
+                tzinfo=VN_TIMEZONE
+            )
         day = overtime_check_in.date()
-
         ot_start = datetime.combine(
             day,
-            OT_CHECKIN_OPEN
-        ).replace(tzinfo=tz)
-
+            OT_CHECKIN_OPEN,
+            tzinfo=VN_TIMEZONE
+        )
         ot_end = datetime.combine(
             day,
-            OT_END_LIMIT
-        ).replace(tzinfo=tz)
-
-        actual_start = max(
-            ot_start,
-            overtime_check_in
+            OT_END_LIMIT,
+            tzinfo=VN_TIMEZONE
         )
-
-        actual_end = min(
-            ot_end,
-            overtime_check_out
-        )
-
+        actual_start = max(ot_start, overtime_check_in)
+        actual_end = min(ot_end, overtime_check_out)
         if actual_end <= actual_start:
             return Decimal("0.00")
-
-        diff = actual_end - actual_start
-
-        hours = diff.total_seconds() / 3600
-
+        hours = (
+            actual_end - actual_start
+        ).total_seconds() / 3600
         return Decimal(str(round(hours, 4)))
 
     @staticmethod
@@ -611,34 +629,20 @@ class AttendanceService:
         record: Attendance,
         finalize_status: bool = True
     ) -> None:
-
-        # =====================================================
-        # 0. FREEZE SNAPSHOT (IMPORTANT FIX FOR DTO CONSISTENCY)
-        # =====================================================
         regular_hours = Decimal(str(record.regular_hours or 0))
-        overtime_hours = Decimal(str(record.overtime_hours or 0))
+        overtime_hours = Decimal(str(record.overtime_hours or 0)) 
 
         record.working_hours = (
             regular_hours + overtime_hours
         ).quantize(Decimal("0.01"))
-
-        # =====================================================
-        # 1. ATTENDANCE TYPE RESOLUTION (PURE BUSINESS LAYER)
-        # =====================================================
         base_type = AttendanceService._resolve_attendance_type(
             is_weekend=bool(record.is_weekend),
             is_holiday=bool(record.is_holiday),
         )
-
-        # half-day override (business rule, nhưng deterministic)
         if record.is_half_day and base_type == Attendance.Type.NORMAL:
             record.set_attendance_type(Attendance.Type.ABNORMAL)
         else:
             record.set_attendance_type(base_type)
-
-        # =====================================================
-        # 2. DTO CONSISTENCY FLAGS (CRITICAL FOR FRONTEND)
-        # =====================================================
         record.dto_snapshot = {
             "working_hours": str(record.working_hours),
             "regular_hours": str(regular_hours),
@@ -646,44 +650,24 @@ class AttendanceService:
             "attendance_type": record.attendance_type,
             "shift_status": record.shift_status,
         }
-
-        # =====================================================
-        # 3. STATE FINALIZATION (CONTROLLED TRANSITION ONLY)
-        # =====================================================
         if finalize_status:
 
             current_state = Attendance.ShiftStatus.normalize(
                 record.shift_status
             )
-
-            # =================================================
-            # STRICT FINALIZATION GATES (NO SIDE EFFECTS)
-            # =================================================
             FINALIZABLE_STATES = {
                 Attendance.ShiftStatus.REGULAR_DONE,
                 Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
                 Attendance.ShiftStatus.WORKING_OVERTIME,
                 Attendance.ShiftStatus.PRE_OT_REST,
             }
-
-            # =================================================
-            # DO NOT FORCE STATE IF INVALID
-            # =================================================
             if current_state in FINALIZABLE_STATES:
 
                 record.set_shift_status(
                     Attendance.ShiftStatus.COMPLETED
                 )
-
-                # =================================================
-                # FREEZE IMMUTABILITY FLAG (IMPORTANT FIX)
-                # =================================================
                 record.is_finalized = True
-                record.finalized_at = datetime.utcnow()
-
-        # =====================================================
-        # 4. SAFETY GUARANTEE (NO REVERSE MUTATION)
-        # =====================================================
+                record.finalized_at = get_current_time()
         if getattr(record, "is_finalized", False):
             record._mutation_locked = True
 
@@ -691,11 +675,8 @@ class AttendanceService:
     def auto_complete_stale_records(
         reference_date: date | None = None
     ) -> int:
-
-        from datetime import date as date_cls
-
-        today = reference_date or date_cls.today()
-
+        now_dt = get_current_time()
+        today = reference_date or now_dt.date()
         stale_statuses = [
             Attendance.ShiftStatus.WORKING_REGULAR,
             Attendance.ShiftStatus.REGULAR_DONE,
@@ -703,25 +684,17 @@ class AttendanceService:
             Attendance.ShiftStatus.PRE_OT_REST,
             Attendance.ShiftStatus.WORKING_OVERTIME,
         ]
-
         stale_records = Attendance.query.filter(
             Attendance.date < today,
             Attendance.shift_status.in_(stale_statuses),
         ).all()
-
         count = 0
-
         for record in stale_records:
-
-            # =====================================================
-            # 1. SAFETY GUARD: SKIP IF MANUALLY COMPLETED
-            # =====================================================
-            if record.shift_status == Attendance.ShiftStatus.COMPLETED:
+            if (
+                Attendance.ShiftStatus.normalize(record.shift_status)
+                == Attendance.ShiftStatus.COMPLETED
+            ):
                 continue
-
-            # =====================================================
-            # 2. ONLY FILL MISSING REGULAR CHECKOUT
-            # =====================================================
             if (
                 not record.check_out
                 and record.check_in
@@ -733,22 +706,19 @@ class AttendanceService:
             ):
                 record.check_out = datetime.combine(
                     record.date,
-                    REGULAR_END
+                    REGULAR_END,
+                    tzinfo=VN_TIMEZONE,
                 )
-
-                result = AttendanceService.calculate_regular_work_units(record)
-
-                record.regular_hours = result.worked_hours.quantize(
-                    Decimal("0.01")
+                result = AttendanceService.calculate_regular_work_units(
+                    record
                 )
-
+                record.regular_hours = (
+                    result.worked_hours.quantize(
+                        Decimal("0.01")
+                    )
+                )
                 record.is_half_day = result.is_half_day
-
                 record.late_minutes = record.late_minutes or 0
-
-            # =====================================================
-            # 3. ONLY FILL MISSING OT CHECKOUT (SAFE MODE)
-            # =====================================================
             if (
                 record.overtime_check_in
                 and not record.overtime_check_out
@@ -759,187 +729,190 @@ class AttendanceService:
             ):
                 record.overtime_check_out = datetime.combine(
                     record.date,
-                    OT_END_LIMIT
+                    OT_END_LIMIT,
+                    tzinfo=VN_TIMEZONE,
                 )
-
-                raw_ot = AttendanceService.calculate_overtime_hours_raw(
-                    record.overtime_check_in,
-                    record.overtime_check_out,
+                raw_ot = (
+                    AttendanceService.calculate_overtime_hours_raw(
+                        record.overtime_check_in,
+                        record.overtime_check_out,
+                    )
                 )
-
                 multiplier = AttendanceService._day_multiplier(
                     bool(record.is_holiday),
-                    bool(record.is_weekend)
+                    bool(record.is_weekend),
                 )
-
                 record.overtime_hours = (
                     raw_ot * multiplier
                 ).quantize(Decimal("0.01"))
-
-            # =====================================================
-            # 4. FINALIZE = PURE DERIVED ONLY (NO STATE CHANGE LOGIC)
-            # =====================================================
             AttendanceService.finalize_attendance(record)
-
             count += 1
-
         if count > 0:
             db.session.commit()
-
         return count
+
+    @staticmethod
+    def _to_iso(dt: datetime | None) -> str | None:
+        if not dt:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=VN_TIMEZONE)
+        return dt.astimezone(VN_TIMEZONE).isoformat()
 
     @staticmethod
     def build_attendance_payload(record: Attendance) -> dict | None:
         if not record:
             return None
-
-        # =====================================================
-        # 1. BASE NORMALIZATION (CONTRACT SAFE)
-        # =====================================================
-        shift_status = Attendance.ShiftStatus.normalize(record.shift_status)
-        attendance_type = Attendance.Type.normalize(record.attendance_type)
-
-        # =====================================================
-        # 2. RAW COMPUTATION (SAFE ISOLATED)
-        # =====================================================
+        shift_status = Attendance.ShiftStatus.normalize(
+            record.shift_status
+        )
+        attendance_type = Attendance.Type.normalize(
+            record.attendance_type
+        )
         regular_raw = AttendanceService.calculate_regular_hours(record)
-
         overtime_raw = AttendanceService.calculate_overtime_hours(
             record.overtime_check_in,
             record.overtime_check_out
         )
-
-        # =====================================================
-        # 3. DAY MULTIPLIER (PURE FUNCTION)
-        # =====================================================
         multiplier = AttendanceService._day_multiplier(
             bool(record.is_holiday),
             bool(record.is_weekend),
         )
-
-        # =====================================================
-        # 4. PAYLOAD (UI CONTRACT STABLE)
-        # =====================================================
         return {
-            "date": record.date.isoformat() if record.date else None,
-
-            # =========================
-            # TIME FIELDS
-            # =========================
-            "check_in": record.check_in.isoformat() if record.check_in else None,
-            "check_out": record.check_out.isoformat() if record.check_out else None,
-            "overtime_check_in": record.overtime_check_in.isoformat() if record.overtime_check_in else None,
-            "overtime_check_out": record.overtime_check_out.isoformat() if record.overtime_check_out else None,
-
-            # =========================
-            # HOURS (SCALED)
-            # =========================
+            "date": (
+                record.date.isoformat()
+                if record.date else None
+            ),
+            "check_in": AttendanceService._to_iso(record.check_in),
+            "check_out": AttendanceService._to_iso(record.check_out),
+            "overtime_check_in":
+                AttendanceService._to_iso(
+                    record.overtime_check_in
+                ),
+            "overtime_check_out":
+                AttendanceService._to_iso(
+                    record.overtime_check_out
+                ),
             "regular_hours": str(record.regular_hours or 0),
             "overtime_hours": str(record.overtime_hours or 0),
             "working_hours": str(record.working_hours or 0),
-
-            # =========================
-            # HOURS (RAW ENGINE OUTPUT)
-            # =========================
             "regular_hours_raw": str(regular_raw),
             "overtime_hours_raw": str(overtime_raw),
-
-            # =========================
-            # BUSINESS FACTORS
-            # =========================
             "day_multiplier": str(multiplier),
-
-            # =========================
-            # STATE CONTRACT (CRITICAL)
-            # =========================
             "shift_status": shift_status,
             "attendance_type": attendance_type,
-
-            # =========================
-            # UI FLAGS
-            # =========================
             "late_minutes": record.late_minutes or 0,
             "is_half_day": bool(record.is_half_day),
             "is_weekend": bool(record.is_weekend),
             "is_holiday": bool(record.is_holiday),
         }
-
+    
     @staticmethod
     def get_today(
         employee_id: int,
-        sim_time_str: str | None = None
+        now_dt: datetime | None = None
     ) -> Attendance | None:
-        now_dt = AttendanceService.parse_time(
-            sim_time_str or session.get("simulated_now")
-        )
+        if now_dt is None:
+            now_dt = get_current_time()
+            
+        target_date = now_dt.date()
+        
+        # 1. Thử tìm bản ghi đúng ngày hôm nay trước
         record = Attendance.query.filter_by(
             employee_id=employee_id,
-            date=now_dt.date()
+            date=target_date
         ).first()
+        
+        # 2. LOGIC CA ĐÊM: Nếu không thấy bản ghi hôm nay VÀ đang là sáng sớm (0h - 5h)
+        if not record and now_dt.hour < 5:
+            yesterday = target_date - timedelta(days=1)
+            # Tìm bản ghi ngày hôm qua
+            prev_record = Attendance.query.filter_by(
+                employee_id=employee_id,
+                date=yesterday
+            ).first()
+            
+            # Nếu ngày hôm qua đang dở dang (đang WORKING_OVERTIME hoặc chưa COMPLETED)
+            if prev_record:
+                status = Attendance.ShiftStatus.normalize(prev_record.shift_status)
+                if status in [Attendance.ShiftStatus.WORKING_REGULAR, 
+                            Attendance.ShiftStatus.WORKING_OVERTIME,
+                            Attendance.ShiftStatus.REGULAR_CHECKOUT_REQUIRED]:
+                    record = prev_record
+
         if record:
-            record._normalized_shift_status = Attendance.ShiftStatus.normalize(
-                record.shift_status
+            record._normalized_shift_status = (
+                Attendance.ShiftStatus.normalize(record.shift_status)
             )
         return record
 
     @staticmethod
     def get_history(
         employee_id: int,
-        sim_time_str: str | None = None,
         limit: int = 10,
         month: int | None = None,
         year: int | None = None,
+        now_dt: datetime | None = None,
     ):
-        from calendar import monthrange
-
-        sim_time_str = sim_time_str or session.get("simulated_now")
-        now_dt = AttendanceService.parse_time(sim_time_str)
+        if now_dt is None:
+            now_dt = get_current_time()
         today = now_dt.date()
-
-        # =====================================================
-        # 1. SIMPLE MODE (NO MONTH FILTER)
-        # =====================================================
         if not month or not year:
             return (
                 Attendance.query.filter(
                     Attendance.employee_id == employee_id,
                     Attendance.date <= today,
                 )
-                .order_by(Attendance.date.desc())
+                .order_by(
+                    Attendance.date.desc()
+                )
                 .limit(limit)
                 .all()
             )
-
         if month < 1 or month > 12:
-            raise ValidationError("Tháng không hợp lệ")
-
-        last_day = monthrange(year, month)[1]
-        month_start = date(year, month, 1)
-        month_end = date(year, month, last_day)
-
+            raise ValidationError(
+                "Tháng không hợp lệ"
+            )
+        from calendar import monthrange
+        last_day = monthrange(
+            year,
+            month,
+        )[1]
+        month_start = date(
+            year,
+            month,
+            1,
+        )
+        month_end = date(
+            year,
+            month,
+            last_day,
+        )
         effective_end = (
             month_end
-            if (year, month) < (today.year, today.month)
-            else min(month_end, today)
+            if (
+                year,
+                month,
+            ) < (
+                today.year,
+                today.month,
+            )
+            else min(
+                month_end,
+                today,
+            )
         )
-
         if effective_end < month_start:
             return []
-
-        # =====================================================
-        # 2. LOAD REAL ATTENDANCE
-        # =====================================================
         attendance_rows = Attendance.query.filter(
             Attendance.employee_id == employee_id,
             Attendance.date >= month_start,
             Attendance.date <= effective_end,
         ).all()
-
-        attendance_by_date = {r.date: r for r in attendance_rows}
-
-        # =====================================================
-        # 3. LEAVE SYNC (APPROVED ONLY)
-        # =====================================================
+        attendance_by_date = {
+            r.date: r
+            for r in attendance_rows
+        }
         leave_rows = LeaveRequest.query.filter(
             LeaveRequest.employee_id == employee_id,
             LeaveRequest.status == "approved",
@@ -947,76 +920,96 @@ class AttendanceService:
             LeaveRequest.from_date <= effective_end,
             LeaveRequest.to_date >= month_start,
         ).all()
-
         leave_dates = set()
         for leave in leave_rows:
-            start = max(leave.from_date, month_start)
-            end = min(leave.to_date, effective_end)
-
+            start = max(
+                leave.from_date,
+                month_start,
+            )
+            end = min(
+                leave.to_date,
+                effective_end,
+            )
             cur = start
             while cur <= end:
                 leave_dates.add(cur)
-                cur = cur.fromordinal(cur.toordinal() + 1)
-
-        # =====================================================
-        # 4. HOLIDAY SYNC
-        # =====================================================
+                cur = cur.fromordinal(
+                    cur.toordinal() + 1
+                )
         fixed_holidays = Holiday.query.filter(
             Holiday.is_recurring.is_(False),
+            Holiday.is_active.is_(True),
             Holiday.date >= month_start,
             Holiday.date <= effective_end,
         ).all()
-
-        recurring_holidays = Holiday.query.filter_by(
-            is_recurring=True
+        recurring_holidays = Holiday.query.filter(
+            Holiday.is_recurring.is_(True),
+            Holiday.is_active.is_(True),
         ).all()
-
-        holiday_dates = {h.date for h in fixed_holidays}
-
+        holiday_dates = {
+            h.date
+            for h in fixed_holidays
+        }
         for h in recurring_holidays:
             try:
-                hd = date(year, month, h.date.day)
-                if month_start <= hd <= effective_end:
+                hd = date(
+                    year,
+                    month,
+                    h.date.day,
+                )
+                if (
+                    month_start
+                    <= hd
+                    <= effective_end
+                ):
                     holiday_dates.add(hd)
             except ValueError:
                 continue
-
-        # =====================================================
-        # 5. BUILD HISTORY (BACKFILL SAFE DTO)
-        # =====================================================
         history = []
         current = effective_end
-
         while current >= month_start:
-
             if current in attendance_by_date:
-                history.append(attendance_by_date[current])
-
+                history.append(
+                    attendance_by_date[current]
+                )
             else:
-                is_weekend = current.weekday() >= 5
-                is_holiday = current in holiday_dates
-                is_leave = current in leave_dates
-
-                # =================================================
-                # PRIORITY RULE (MUST MATCH get_or_create_today)
-                # leave > holiday > weekend > absent
-                # =================================================
+                is_weekend = (
+                    current.weekday() >= 5
+                )
+                is_holiday = (
+                    current in holiday_dates
+                )
+                is_leave = (
+                    current in leave_dates
+                )
                 if is_leave:
-                    shift_status = Attendance.ShiftStatus.LEAVE
-                    attendance_type = Attendance.Type.LEAVE_APPROVED
-
+                    shift_status = (
+                        Attendance.ShiftStatus.LEAVE
+                    )
+                    attendance_type = (
+                        Attendance.Type.LEAVE_APPROVED
+                    )
                 elif is_holiday:
-                    shift_status = Attendance.ShiftStatus.HOLIDAY_OFF
-                    attendance_type = Attendance.Type.HOLIDAY
-
+                    shift_status = (
+                        Attendance.ShiftStatus.HOLIDAY_OFF
+                    )
+                    attendance_type = (
+                        Attendance.Type.HOLIDAY
+                    )
                 elif is_weekend:
-                    shift_status = Attendance.ShiftStatus.WEEKEND_OFF
-                    attendance_type = Attendance.Type.WEEKEND
-
+                    shift_status = (
+                        Attendance.ShiftStatus.WEEKEND_OFF
+                    )
+                    attendance_type = (
+                        Attendance.Type.WEEKEND
+                    )
                 else:
-                    shift_status = Attendance.ShiftStatus.ABSENT
-                    attendance_type = Attendance.Type.ABSENT
-
+                    shift_status = (
+                        Attendance.ShiftStatus.ABSENT
+                    )
+                    attendance_type = (
+                        Attendance.Type.ABSENT
+                    )
                 history.append(
                     SimpleNamespace(
                         id=None,
@@ -1025,86 +1018,80 @@ class AttendanceService:
                         check_out=None,
                         overtime_check_in=None,
                         overtime_check_out=None,
-                        regular_hours=Decimal("0.00"),
-                        overtime_hours=Decimal("0.00"),
-                        working_hours=Decimal("0.00"),
-
-                        shift_status=Attendance.ShiftStatus.normalize(
-                            shift_status
+                        regular_hours=Decimal(
+                            "0.00"
                         ),
-
-                        attendance_type=attendance_type,
-
+                        overtime_hours=Decimal(
+                            "0.00"
+                        ),
+                        working_hours=Decimal(
+                            "0.00"
+                        ),
+                        shift_status=(
+                            Attendance.ShiftStatus.normalize(
+                                shift_status
+                            )
+                        ),
+                        attendance_type=(
+                            attendance_type
+                        ),
                         late_minutes=0,
                         is_half_day=False,
                         is_weekend=is_weekend,
                         is_holiday=is_holiday,
                     )
                 )
-
-            # FIX: correct date decrement
-            current = current.fromordinal(current.toordinal() - 1)
-
+            current = current.fromordinal(
+                current.toordinal() - 1
+            )
         return history
-
+    
     @staticmethod
     def delete_attendance(
         employee_id: int,
         date_str: str
     ) -> date | None:
+        from app.utils.time import _normalize
         try:
-            target_date = datetime.fromisoformat(date_str).date()
+            parsed_dt = _normalize(date_str)
+            if not parsed_dt:
+                raise ValueError
+            target_date = parsed_dt.date()
         except (TypeError, ValueError):
-            raise ValidationError("Ngày không hợp lệ. Dùng YYYY-MM-DD")
-
+            raise ValidationError("Ngày không hợp lệ. Định dạng yêu cầu: YYYY-MM-DD")
         record = Attendance.query.filter_by(
             employee_id=employee_id,
-            date=target_date
+            date=target_date,
         ).first()
-
         if not record:
-            raise ValidationError("Không tìm thấy dữ liệu chấm công")
-
-        employee = Employee.query.get(employee_id)
-
-        overtime_requests = OvertimeRequest.query.filter(
+            raise ValidationError(f"Không tìm thấy dữ liệu chấm công ngày {target_date}")
+        OvertimeRequest.query.filter(
             OvertimeRequest.employee_id == employee_id,
             OvertimeRequest.overtime_date == target_date,
-        ).all()
-
-        for ot in overtime_requests:
-            db.session.delete(ot)
-
+        ).delete(synchronize_session=False) 
+        employee = Employee.query.get(employee_id)
         if employee and employee.user_id:
-            notifications = Notification.query.filter(
+            Notification.query.filter(
                 Notification.user_id == employee.user_id,
-                Notification.is_deleted.is_(False),
                 Notification.type.in_(["attendance", "overtime"]),
-                db.func.date(Notification.created_at) == target_date,
-            ).all()
-
-            for n in notifications:
-                n.is_deleted = True
-
+                db.func.date(Notification.created_at) >= target_date,
+                db.func.date(Notification.created_at) <= target_date + timedelta(days=1)
+            ).update({"is_deleted": True}, synchronize_session=False)
         db.session.delete(record)
-
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            raise
-
+        db.session.commit()
         last_record = (
             Attendance.query
             .filter_by(employee_id=employee_id)
             .order_by(Attendance.date.desc())
             .first()
         )
-
         return last_record.date if last_record else None
 
     @staticmethod
-    def delete_notification_cascade(notification_id: int, user_id: int) -> dict:
+    def delete_notification_cascade(
+        notification_id: int,
+        user_id: int,
+    ) -> dict:
         noti = Notification.query.filter_by(
             id=notification_id,
             user_id=user_id,
@@ -1123,16 +1110,17 @@ class AttendanceService:
                 employee = Employee.query.filter_by(
                     user_id=user_id
                 ).first()
+
                 if employee:
-                    ot_req = OvertimeRequest.query.filter(
+                    ot_requests = OvertimeRequest.query.filter(
                         OvertimeRequest.employee_id == employee.id,
                         OvertimeRequest.overtime_date == target_date,
                         OvertimeRequest.is_deleted.is_(False),
-                    ).first()
-                    if ot_req:
-                        ot_req.is_deleted = True
+                    ).all()
+                    for ot in ot_requests:
+                        ot.is_deleted = True
                         cascaded.append(
-                            f"OT request #{ot_req.id}"
+                            f"OT request #{ot.id}"
                         )
                     att = Attendance.query.filter_by(
                         employee_id=employee.id,
@@ -1158,15 +1146,25 @@ class AttendanceService:
                                 Attendance.ShiftStatus.WORKING_REGULAR
                             )
                         else:
-                            att.set_shift_status(
-                                Attendance.ShiftStatus.NOT_STARTED
-                            )
+                            if att.is_holiday:
+                                att.set_shift_status(
+                                    Attendance.ShiftStatus.HOLIDAY_OFF
+                                )
+                            elif att.is_weekend:
+                                att.set_shift_status(
+                                    Attendance.ShiftStatus.WEEKEND_OFF
+                                )
+                            else:
+                                att.set_shift_status(
+                                    Attendance.ShiftStatus.NOT_STARTED
+                                )
                         cascaded.append(
                             f"Attendance overtime reset ({target_date})"
                         )
         db.session.commit()
         return {
             "deleted": True,
+            "notification_id": notification_id,
             "cascaded": cascaded,
         }
 
@@ -1340,23 +1338,31 @@ class AttendanceService:
     ) -> dict:
 
         today = current_time.date()
+        end_of_day = datetime.combine(
+            today,
+            REGULAR_END,
+            tzinfo=VN_TIMEZONE,
+        )
 
-        # =====================================================
-        # 0. SYNC CONSTANTS (SINGLE SOURCE OF TRUTH)
-        # =====================================================
-        end_of_day = datetime.combine(today, REGULAR_END)
-        lunch_start = datetime.combine(today, LUNCH_START)
-        lunch_end = datetime.combine(today, LUNCH_END)
+        lunch_start = datetime.combine(
+            today,
+            LUNCH_START,
+            tzinfo=VN_TIMEZONE,
+        )
 
-        state = Attendance.ShiftStatus.normalize(attendance.shift_status)
+        lunch_end = datetime.combine(
+            today,
+            LUNCH_END,
+            tzinfo=VN_TIMEZONE,
+        )
+
+        state = Attendance.ShiftStatus.normalize(
+            attendance.shift_status
+        )
 
         early_checkout_confirmed = bool(
             payload.get("early_checkout_confirmed")
         )
-
-        # =====================================================
-        # 1. SAFETY GUARD: INVALID STATE ENTRY
-        # =====================================================
         if state not in {
             Attendance.ShiftStatus.WORKING_REGULAR,
             Attendance.ShiftStatus.REGULAR_CHECKOUT_REQUIRED,
@@ -1368,10 +1374,6 @@ class AttendanceService:
                 "message": f"Không hợp lệ để xử lý WORKING: {state}",
                 "attendance": AttendanceService.build_attendance_payload(attendance),
             }
-
-        # =====================================================
-        # 2. LUNCH BLOCK (PURE VIEW STATE)
-        # =====================================================
         if lunch_start <= current_time < lunch_end:
             return {
                 "type": "info",
@@ -1380,24 +1382,15 @@ class AttendanceService:
                 "message": "Đang trong giờ nghỉ trưa (12:00–13:00)",
                 "attendance": AttendanceService.build_attendance_payload(attendance),
             }
-
-        # =====================================================
-        # 3. AUTO CHECKOUT GATE (STATE-DRIVEN)
-        # =====================================================
         if current_time >= end_of_day:
             return AttendanceService.check_out_regular(
                 employee_id=employee_id,
                 current_time=current_time,
                 early_checkout=False,
             )
-
-        # =====================================================
-        # 4. EARLY CHECKOUT DECISION FLOW
-        # =====================================================
         early_minutes = int(
             (end_of_day - current_time).total_seconds() // 60
         )
-
         if not early_checkout_confirmed:
             return {
                 "type": "warning",
@@ -1413,10 +1406,6 @@ class AttendanceService:
                 },
                 "attendance": AttendanceService.build_attendance_payload(attendance),
             }
-
-        # =====================================================
-        # 5. CONFIRMED EARLY CHECKOUT
-        # =====================================================
         return AttendanceService.check_out_regular(
             employee_id=employee_id,
             current_time=current_time,
@@ -1431,16 +1420,28 @@ class AttendanceService:
         current_time: datetime,
     ) -> dict:
 
-        sim_time = current_time.isoformat()
-
-        state = Attendance.ShiftStatus.normalize(attendance.shift_status)
+        state = Attendance.ShiftStatus.normalize(
+            attendance.shift_status
+        )
 
         overtime_decision = str(
             payload.get("overtime_decision") or ""
         ).strip().lower()
 
         # =========================================================
-        # 0. OT CONTEXT (SINGLE SOURCE OF TRUTH)
+        # 0. NORMALIZE CURRENT TIME (TIMEZONE SAFE)
+        # =========================================================
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(
+                tzinfo=VN_TIMEZONE
+            )
+        else:
+            current_time = current_time.astimezone(
+                VN_TIMEZONE
+            )
+
+        # =========================================================
+        # 1. OT CONTEXT
         # =========================================================
         ot_request = AttendanceService._get_ot_request(
             employee_id,
@@ -1452,7 +1453,7 @@ class AttendanceService:
         )
 
         # =========================================================
-        # 1. REGULAR_DONE → OT ENTRY POINT
+        # 2. REGULAR DONE
         # =========================================================
         if state == Attendance.ShiftStatus.REGULAR_DONE:
 
@@ -1468,13 +1469,16 @@ class AttendanceService:
                 }
 
             if overtime_decision == "no":
+
                 attendance.set_shift_status(
                     Attendance.ShiftStatus.COMPLETED
                 )
+
                 AttendanceService.finalize_attendance(
                     attendance,
                     finalize_status=True,
                 )
+
                 db.session.commit()
 
                 return {
@@ -1493,14 +1497,16 @@ class AttendanceService:
             )
 
         # =========================================================
-        # 2. OT DECISION STATE
+        # 3. PENDING OT DECISION
         # =========================================================
         if state == Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION:
 
             if ot_status == "approved":
+
                 attendance.set_shift_status(
                     Attendance.ShiftStatus.PRE_OT_REST
                 )
+
                 db.session.commit()
 
                 return {
@@ -1512,7 +1518,11 @@ class AttendanceService:
                     "attendance": AttendanceService.build_attendance_payload(attendance),
                 }
 
-            if ot_status in {"pending", "pending_hr", "pending_admin"}:
+            if ot_status in {
+                "pending",
+                "pending_hr",
+                "pending_admin",
+            }:
                 return {
                     "type": "info",
                     "action": "ot_pending_approval",
@@ -1532,18 +1542,21 @@ class AttendanceService:
             }
 
         # =========================================================
-        # 3. PRE OT REST
+        # 4. PRE OT REST
         # =========================================================
         if state == Attendance.ShiftStatus.PRE_OT_REST:
 
             if ot_status != "approved":
+
                 attendance.set_shift_status(
                     Attendance.ShiftStatus.COMPLETED
                 )
+
                 AttendanceService.finalize_attendance(
                     attendance,
                     finalize_status=True,
                 )
+
                 db.session.commit()
 
                 return {
@@ -1556,9 +1569,11 @@ class AttendanceService:
                 }
 
             if attendance.overtime_check_in:
+
                 attendance.set_shift_status(
                     Attendance.ShiftStatus.WORKING_OVERTIME
                 )
+
                 db.session.commit()
 
                 return {
@@ -1570,7 +1585,13 @@ class AttendanceService:
                     "attendance": AttendanceService.build_attendance_payload(attendance),
                 }
 
-            if current_time.time() < AttendanceService.OT_CHECKIN_OPEN:
+            ot_open_dt = datetime.combine(
+                current_time.date(),
+                AttendanceService.OT_CHECKIN_OPEN,
+                tzinfo=VN_TIMEZONE,
+            )
+
+            if current_time < ot_open_dt:
                 return {
                     "type": "info",
                     "action": "pre_ot_rest",
@@ -1582,18 +1603,19 @@ class AttendanceService:
 
             return AttendanceService.check_in_overtime(
                 employee_id,
-                sim_time,
+                current_time,
             )
 
         # =========================================================
-        # 4. WORKING OT
+        # 5. WORKING OT
         # =========================================================
         if state == Attendance.ShiftStatus.WORKING_OVERTIME:
 
             if not attendance.overtime_check_out:
+
                 return AttendanceService.check_out_overtime(
                     employee_id,
-                    sim_time,
+                    current_time,
                 )
 
             attendance.set_shift_status(
@@ -1604,6 +1626,7 @@ class AttendanceService:
                 attendance,
                 finalize_status=True,
             )
+
             db.session.commit()
 
             return {
@@ -1616,7 +1639,7 @@ class AttendanceService:
             }
 
         # =========================================================
-        # 5. COMPLETED (SAFE GUARD ONLY)
+        # 6. SAFE FALLBACK
         # =========================================================
         return {
             "type": "success",
@@ -1626,13 +1649,14 @@ class AttendanceService:
             "message": "Ngày công đã hoàn tất",
             "attendance": AttendanceService.build_attendance_payload(attendance),
         }
-    
     @staticmethod
     def _create_ot_request_pending(
         attendance: Attendance,
         employee_id: int,
         current_time: datetime,
     ) -> dict:
+
+        current_time = current_time.astimezone(VN_TIMEZONE)
 
         today = current_time.date()
 
@@ -1666,9 +1690,6 @@ class AttendanceService:
                 employee_id=employee_id,
                 overtime_date=today,
 
-                # =================================================
-                # FIX: sync with model constant (avoid raw string)
-                # =================================================
                 status=OvertimeRequest.Status.PENDING,
 
                 requested_hours=Decimal("3.00"),
@@ -1691,44 +1712,53 @@ class AttendanceService:
         else:
             attendance.overtime_request_id = existing.id
 
-            # =====================================================
-            # FIX: keep DTO sync from DB source of truth
-            # =====================================================
             current_ot_status = existing.status
 
         # =====================================================
-        # 3. SHIFT STATE UPDATE (STATE MACHINE ALIGNMENT)
+        # 3. SHIFT STATE UPDATE
         # =====================================================
         attendance.set_shift_status(
             Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION
         )
 
         # =====================================================
-        # 4. OPTIONAL TYPE ALIGNMENT (SAFE BUSINESS RULE)
+        # 4. TYPE ALIGNMENT
         # =====================================================
         if attendance.is_holiday:
-            attendance.set_attendance_type(Attendance.Type.HOLIDAY)
+            attendance.set_attendance_type(
+                Attendance.Type.HOLIDAY
+            )
+
         elif attendance.is_weekend:
-            attendance.set_attendance_type(Attendance.Type.WEEKEND)
+            attendance.set_attendance_type(
+                Attendance.Type.WEEKEND
+            )
 
         db.session.commit()
 
         # =====================================================
-        # 5. RESPONSE DTO (CONSISTENT OT STATUS)
+        # 5. RESPONSE DTO
         # =====================================================
         return {
             "type": "success",
-            "action": AttendanceService.ACTION_OVERTIME_REQUEST_CREATED,
-            "attendance_state": Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
 
-            # FIX: align DTO with model status
+            "action":
+                AttendanceService.ACTION_OVERTIME_REQUEST_CREATED,
+
+            "attendance_state":
+                Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
+
             "overtime_status": current_ot_status,
 
-            "message": "Đã gửi yêu cầu tăng ca. Vui lòng chờ phê duyệt.",
+            "message":
+                "Đã gửi yêu cầu tăng ca. Vui lòng chờ phê duyệt.",
 
-            "attendance": AttendanceService.build_attendance_payload(attendance),
+            "attendance":
+                AttendanceService.build_attendance_payload(
+                    attendance
+                ),
         }
-   
+    
     @staticmethod
     def _get_approved_ot(employee_id: int, target_date: date) -> OvertimeRequest | None:
         valid_approved_statuses = {
@@ -1747,13 +1777,19 @@ class AttendanceService:
     def handle_ot_approved(
         ot_request: OvertimeRequest,
     ) -> None:
+        current_time = (
+            get_current_time()
+            .astimezone(VN_TIMEZONE)
+        )
         attendance = Attendance.query.filter_by(
             employee_id=ot_request.employee_id,
             date=ot_request.overtime_date,
         ).first()
         if attendance:
-            current_state = Attendance.ShiftStatus.normalize(
-                attendance.shift_status
+            current_state = (
+                Attendance.ShiftStatus.normalize(
+                    attendance.shift_status
+                )
             )
             allowed_states = {
                 Attendance.ShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
@@ -1763,12 +1799,13 @@ class AttendanceService:
                 attendance.set_shift_status(
                     Attendance.ShiftStatus.PRE_OT_REST
                 )
-        ot_request.status = OvertimeRequest.Status.APPROVED
+        ot_request.status = (
+            OvertimeRequest.Status.APPROVED
+        )
         employee = Employee.query.get(
             ot_request.employee_id
         )
         if employee and employee.user_id:
-
             db.session.add(
                 Notification(
                     user_id=employee.user_id,
@@ -1781,6 +1818,7 @@ class AttendanceService:
                         f"Bạn có thể xác thực để bắt đầu tăng ca."
                     ),
                     link="/employee/attendance",
+                    created_at=current_time,
                 )
             )
         db.session.commit()
@@ -1791,6 +1829,11 @@ class AttendanceService:
         reason: str = "",
     ) -> None:
 
+        current_time = (
+            get_current_time()
+            .astimezone(VN_TIMEZONE)
+        )
+
         # =====================================================
         # 1. LOAD ATTENDANCE (SOURCE OF TRUTH)
         # =====================================================
@@ -1800,12 +1843,14 @@ class AttendanceService:
         ).first()
 
         # =====================================================
-        # 2. SAFE RESET OT STATE (NO PAYROLL SIDE EFFECT)
+        # 2. SAFE RESET OT STATE
         # =====================================================
         if attendance:
 
-            current_state = Attendance.ShiftStatus.normalize(
-                attendance.shift_status
+            current_state = (
+                Attendance.ShiftStatus.normalize(
+                    attendance.shift_status
+                )
             )
 
             allowed_states = {
@@ -1817,36 +1862,56 @@ class AttendanceService:
 
             if current_state in allowed_states:
 
-                # reset OT-only fields
                 attendance.overtime_check_in = None
                 attendance.overtime_check_out = None
-                attendance.overtime_hours = Decimal("0.00")
+
+                attendance.overtime_hours = Decimal(
+                    "0.00"
+                )
+
                 attendance.overtime_request_id = None
 
-                # =================================================
-                # FIX: DO NOT TOUCH WORKING HOURS HERE
-                # (avoid payroll corruption)
-                # =================================================
+                # =============================================
+                # IMPORTANT:
+                # DO NOT MODIFY PAYROLL HOURS HERE
+                # =============================================
+
+                attendance.set_shift_status(
+                    Attendance.ShiftStatus.REGULAR_DONE
+                )
 
         # =====================================================
-        # 3. UPDATE OT REQUEST LIFECYCLE (IMPORTANT FIX)
+        # 3. UPDATE OT REQUEST STATUS
         # =====================================================
-        ot_request.status = OvertimeRequest.Status.REJECTED
+        ot_request.status = (
+            OvertimeRequest.Status.REJECTED
+        )
 
         # =====================================================
-        # 4. OPTIONAL ATTENDANCE TYPE SYNC (SAFE RULE)
+        # 4. ATTENDANCE TYPE SYNC
         # =====================================================
         if attendance:
 
             if attendance.is_holiday:
-                attendance.set_attendance_type(Attendance.Type.HOLIDAY)
+
+                attendance.set_attendance_type(
+                    Attendance.Type.HOLIDAY
+                )
+
             elif attendance.is_weekend:
-                attendance.set_attendance_type(Attendance.Type.WEEKEND)
+
+                attendance.set_attendance_type(
+                    Attendance.Type.WEEKEND
+                )
+
             else:
-                attendance.set_attendance_type(Attendance.Type.NORMAL)
+
+                attendance.set_attendance_type(
+                    Attendance.Type.NORMAL
+                )
 
         # =====================================================
-        # 5. NOTIFICATION (MODEL-CONSISTENT)
+        # 5. CREATE NOTIFICATION
         # =====================================================
         employee = Employee.query.get(
             ot_request.employee_id
@@ -1876,6 +1941,11 @@ class AttendanceService:
                     ),
 
                     link="/employee/attendance",
+
+                    # =========================================
+                    # TIME ENGINE SYNC FIX
+                    # =========================================
+                    created_at=current_time,
                 )
             )
         db.session.commit()
@@ -1887,52 +1957,79 @@ class AttendanceService:
         today: date,
     ) -> dict:
 
+        current_time = (
+            get_current_time()
+            .astimezone(VN_TIMEZONE)
+        )
+
         # =====================================================
         # 0. BASE CONTEXT
         # =====================================================
         is_holiday = AttendanceService._is_holiday(today)
+
         is_weekend = today.weekday() >= 5
 
         employee = Employee.query.get(employee_id)
 
         # =====================================================
-        # 1. ELIGIBILITY GATE (CRITICAL FIX)
+        # 1. ELIGIBILITY GATE
         # =====================================================
-        if employee and employee.is_attendance_required is False:
+        if (
+            employee
+            and employee.is_attendance_required is False
+        ):
             return {
                 "type": "info",
                 "action": "attendance_not_required",
                 "attendance_state": "EXEMPT",
-                "message": "Nhân sự này không bắt buộc chấm công.",
+                "message": (
+                    "Nhân sự này không bắt buộc chấm công."
+                ),
                 "pass_through": False,
             }
 
         # =====================================================
-        # 2. LEAVE OVERRIDE CHECK (NEW LAYER)
+        # 2. LEAVE OVERRIDE CHECK
         # =====================================================
         leave = LeaveRequest.query.filter(
             LeaveRequest.employee_id == employee_id,
-            LeaveRequest.date == today,
+
+            LeaveRequest.from_date <= today,
+            LeaveRequest.to_date >= today,
+
             LeaveRequest.status == "approved",
+
             LeaveRequest.is_deleted.is_(False),
         ).first()
 
         if leave:
+
             record = AttendanceService.get_or_create_today(
                 employee_id=employee_id,
-                now_dt=datetime.combine(today, time.min),
+                now_dt=current_time,
             )
 
-            record.set_attendance_type(Attendance.Type.LEAVE)
-            record.set_shift_status(Attendance.ShiftStatus.LEAVE)
+            record.set_attendance_type(
+                Attendance.Type.LEAVE
+            )
 
+            record.set_shift_status(
+                Attendance.ShiftStatus.LEAVE
+            )
+
+            # =================================================
+            # HARD RESET
+            # =================================================
             record.check_in = None
             record.check_out = None
+
             record.overtime_check_in = None
             record.overtime_check_out = None
 
             record.regular_hours = Decimal("0.00")
+
             record.overtime_hours = Decimal("0.00")
+
             record.working_hours = Decimal("0.00")
 
             AttendanceService.finalize_attendance(
@@ -1945,9 +2042,20 @@ class AttendanceService:
             return {
                 "type": "info",
                 "action": "leave_day",
-                "attendance_state": Attendance.ShiftStatus.LEAVE,
-                "message": "Hôm nay là ngày nghỉ phép đã được duyệt.",
-                "attendance": AttendanceService.build_attendance_payload(record),
+
+                "attendance_state": (
+                    Attendance.ShiftStatus.LEAVE
+                ),
+
+                "message": (
+                    "Hôm nay là ngày nghỉ phép đã được duyệt."
+                ),
+
+                "attendance": (
+                    AttendanceService
+                    .build_attendance_payload(record)
+                ),
+
                 "final": True,
                 "locked_state": True,
             }
@@ -1955,39 +2063,52 @@ class AttendanceService:
         # =====================================================
         # 3. OFFDAY DECLINE FLOW
         # =====================================================
-        if bool(payload.get("decline_offday_work")) and (is_holiday or is_weekend):
+        if (
+            bool(payload.get("decline_offday_work"))
+            and (is_holiday or is_weekend)
+        ):
 
             record = AttendanceService.get_or_create_today(
                 employee_id=employee_id,
-                now_dt=datetime.combine(today, time.min),
+                now_dt=current_time,
             )
 
-            # =================================================
-            # IMMUTABLE STATE SET
-            # =================================================
             record.is_holiday = is_holiday
             record.is_weekend = is_weekend
 
-            attendance_type = Attendance.Type.HOLIDAY if is_holiday else Attendance.Type.WEEKEND
+            attendance_type = (
+                Attendance.Type.HOLIDAY
+                if is_holiday
+                else Attendance.Type.WEEKEND
+            )
+
             shift_status = (
                 Attendance.ShiftStatus.HOLIDAY_OFF
                 if is_holiday
                 else Attendance.ShiftStatus.WEEKEND_OFF
             )
 
-            record.set_attendance_type(attendance_type)
-            record.set_shift_status(shift_status)
+            record.set_attendance_type(
+                attendance_type
+            )
+
+            record.set_shift_status(
+                shift_status
+            )
 
             # =================================================
-            # HARD LOCK STATE (NO OVERRIDE GUARANTEE)
+            # HARD LOCK
             # =================================================
             record.check_in = None
             record.check_out = None
+
             record.overtime_check_in = None
             record.overtime_check_out = None
 
             record.regular_hours = Decimal("0.00")
+
             record.overtime_hours = Decimal("0.00")
+
             record.working_hours = Decimal("0.00")
 
             AttendanceService.finalize_attendance(
@@ -1999,25 +2120,40 @@ class AttendanceService:
 
             return {
                 "type": "info",
+
                 "status_code": 200,
+
                 "action": (
-                    AttendanceService.ACTION_HOLIDAY_OFF
+                    AttendanceService
+                    .ACTION_HOLIDAY_OFF
                     if is_holiday
-                    else AttendanceService.ACTION_WEEKEND_OFF
+                    else AttendanceService
+                    .ACTION_WEEKEND_OFF
                 ),
-                "attendance_state": Attendance.ShiftStatus.normalize(record.shift_status),
+
+                "attendance_state": (
+                    Attendance.ShiftStatus.normalize(
+                        record.shift_status
+                    )
+                ),
+
                 "message": (
                     "Đã ghi nhận nghỉ lễ hôm nay."
                     if is_holiday
                     else "Đã ghi nhận nghỉ cuối tuần hôm nay."
                 ),
-                "attendance": AttendanceService.build_attendance_payload(record),
+
+                "attendance": (
+                    AttendanceService
+                    .build_attendance_payload(record)
+                ),
+
                 "final": True,
                 "locked_state": True,
             }
 
         # =====================================================
-        # 4. PASS THROUGH TO NORMAL FLOW
+        # 4. PASS THROUGH
         # =====================================================
         return {
             "pass_through": True
@@ -2026,18 +2162,26 @@ class AttendanceService:
     @staticmethod
     def check_in(
         employee_id: int,
-        sim_time_str: str | None,
-        confirm_work_on_offday: bool = False,
+        current_time: datetime,
+        confirm_work: bool = False,
     ) -> dict:
+
+        # =====================================================
+        # 0. NORMALIZE CURRENT TIME
+        # =====================================================
+        now_dt = current_time.astimezone(
+            VN_TIMEZONE
+        )
 
         employee = Employee.query.get(employee_id)
 
-        if employee and employee.is_attendance_required is False:
+        if (
+            employee
+            and employee.is_attendance_required is False
+        ):
             raise ValidationError(
                 "Nhân sự này không áp dụng chấm công bắt buộc."
             )
-
-        now_dt = AttendanceService.parse_time(sim_time_str)
 
         record = AttendanceService.get_or_create_today(
             employee_id,
@@ -2045,10 +2189,12 @@ class AttendanceService:
         )
 
         # =====================================================
-        # 1. SOURCE OF TRUTH: SHIFT STATE ONLY FROM DB
+        # 1. SOURCE OF TRUTH
         # =====================================================
-        normalized_shift = Attendance.ShiftStatus.normalize(
-            record.shift_status
+        normalized_shift = (
+            Attendance.ShiftStatus.normalize(
+                record.shift_status
+            )
         )
 
         OFFDAY_STATES = {
@@ -2057,34 +2203,60 @@ class AttendanceService:
         }
 
         # =====================================================
-        # 2. OFFDAY CONFIRM GATE (NO STATE MUTATION HERE)
+        # 2. OFFDAY CONFIRM GATE
         # =====================================================
-        if normalized_shift in OFFDAY_STATES and not confirm_work_on_offday:
+        if (
+            normalized_shift in OFFDAY_STATES
+            and not confirm_work
+        ):
             return {
                 "action": (
-                    AttendanceService.ACTION_HOLIDAY_WORK_PROMPT
-                    if normalized_shift == Attendance.ShiftStatus.HOLIDAY_OFF
-                    else AttendanceService.ACTION_WEEKEND_WORK_PROMPT
+                    AttendanceService
+                    .ACTION_HOLIDAY_WORK_PROMPT
+                    if (
+                        normalized_shift
+                        == Attendance.ShiftStatus.HOLIDAY_OFF
+                    )
+                    else AttendanceService
+                    .ACTION_WEEKEND_WORK_PROMPT
                 ),
+
                 "requires_confirmation": True,
+
                 "attendance_state": normalized_shift,
+
                 "message": (
-                    "Hôm nay là ngày nghỉ lễ. Bạn có muốn đi làm không?"
-                    if normalized_shift == Attendance.ShiftStatus.HOLIDAY_OFF
-                    else "Hôm nay là ngày nghỉ cuối tuần. Bạn có muốn đi làm không?"
+                    "Hôm nay là ngày nghỉ lễ. "
+                    "Bạn có muốn đi làm không?"
+                    if (
+                        normalized_shift
+                        == Attendance.ShiftStatus.HOLIDAY_OFF
+                    )
+                    else (
+                        "Hôm nay là ngày nghỉ cuối tuần. "
+                        "Bạn có muốn đi làm không?"
+                    )
                 ),
             }
 
         # =====================================================
-        # 3. OFFDAY OVERRIDE (ONLY RESET STATE FIELDS)
+        # 3. OFFDAY OVERRIDE
         # =====================================================
-        if normalized_shift in OFFDAY_STATES and confirm_work_on_offday:
+        if (
+            normalized_shift in OFFDAY_STATES
+            and confirm_work
+        ):
+
             record.check_in = None
             record.check_out = None
+
             record.overtime_check_in = None
             record.overtime_check_out = None
+
             record.regular_hours = Decimal("0.00")
+
             record.overtime_hours = Decimal("0.00")
+
             record.working_hours = Decimal("0.00")
 
             record.set_shift_status(
@@ -2092,16 +2264,19 @@ class AttendanceService:
             )
 
         # =====================================================
-        # 4. DUPLICATE CHECK-IN GUARD
+        # 4. DUPLICATE CHECK
         # =====================================================
         if record.check_in:
-            raise ValidationError("Bạn đã check-in hôm nay.")
+            raise ValidationError(
+                "Bạn đã check-in hôm nay."
+            )
 
         # =====================================================
-        # 5. USE STORED WORK CONTEXT (NO RECOMPUTE SOURCE OF TRUTH)
+        # 5. STORED CONTEXT
         # =====================================================
-        is_weekend = record.is_weekend
-        is_holiday = record.is_holiday
+        is_weekend = bool(record.is_weekend)
+
+        is_holiday = bool(record.is_holiday)
 
         # =====================================================
         # 6. CHECK-IN EXECUTION
@@ -2113,51 +2288,71 @@ class AttendanceService:
         )
 
         # =====================================================
-        # 7. LATE / HALF DAY CALCULATION
+        # 7. LATE / HALF DAY
         # =====================================================
         shift_start_dt = datetime.combine(
             now_dt.date(),
             REGULAR_START,
+            tzinfo=VN_TIMEZONE,
         )
 
         late_minutes = max(
             0,
-            int((now_dt - shift_start_dt).total_seconds() / 60)
+            int(
+                (
+                    now_dt - shift_start_dt
+                ).total_seconds() / 60
+            )
         )
 
         record.late_minutes = late_minutes
 
         half_day_minutes = (
             (
-                AttendanceService.HALF_DAY_THRESHOLD.hour * 60
-                + AttendanceService.HALF_DAY_THRESHOLD.minute
+                AttendanceService
+                .HALF_DAY_THRESHOLD.hour * 60
+                + AttendanceService
+                .HALF_DAY_THRESHOLD.minute
             )
             - (
-                AttendanceService.REGULAR_START.hour * 60
-                + AttendanceService.REGULAR_START.minute
+                AttendanceService
+                .REGULAR_START.hour * 60
+                + AttendanceService
+                .REGULAR_START.minute
             )
         )
 
-        record.is_half_day = late_minutes >= half_day_minutes
+        record.is_half_day = (
+            late_minutes >= half_day_minutes
+        )
 
         # =====================================================
-        # 8. STATUS CLASSIFICATION (SYNC DTO TABLE)
+        # 8. STATUS CLASSIFICATION
         # =====================================================
         if record.is_half_day:
             status_name = "HALF_DAY"
+
         elif late_minutes > 0:
             status_name = "LATE"
+
         else:
             status_name = "PRESENT"
 
-        db_status = AttendanceService.get_status(status_name)
+        db_status = AttendanceService.get_status(
+            status_name
+        )
+
         if db_status:
             record.status_id = db_status.id
 
         # =====================================================
-        # 9. ATTENDANCE TYPE (ONLY ABNORMAL RULE)
+        # 9. ATTENDANCE TYPE
         # =====================================================
-        if record.is_half_day and not is_weekend and not is_holiday:
+        if (
+            record.is_half_day
+            and not is_weekend
+            and not is_holiday
+        ):
             record.set_attendance_type(
                 Attendance.Type.ABNORMAL
             )
@@ -2168,46 +2363,87 @@ class AttendanceService:
         db.session.commit()
 
         # =====================================================
-        # 11. RESPONSE (DTO SYNCED)
+        # 11. RESPONSE
         # =====================================================
-        msg = f"Check-in thành công lúc {now_dt.strftime('%H:%M:%S')}"
+        msg = (
+            "Check-in thành công lúc "
+            f"{now_dt.strftime('%H:%M:%S')}"
+        )
+
         resp_type = "success"
 
-        multiplier = AttendanceService._day_multiplier(
-            is_holiday,
-            is_weekend,
+        multiplier = (
+            AttendanceService._day_multiplier(
+                is_holiday,
+                is_weekend,
+            )
         )
 
         if is_holiday:
-            msg += f" (Ngày lễ — công x{multiplier.normalize()})"
-        elif is_weekend and multiplier > 1:
-            msg += f" (Cuối tuần — công x{multiplier.normalize()})"
+
+            msg += (
+                f" (Ngày lễ — công x"
+                f"{multiplier.normalize()})"
+            )
+
+        elif (
+            is_weekend
+            and multiplier > 1
+        ):
+
+            msg += (
+                f" (Cuối tuần — công x"
+                f"{multiplier.normalize()})"
+            )
 
         if record.is_half_day:
-            msg += f". Đi muộn {late_minutes} phút — tính nửa ngày công."
+
+            msg += (
+                f". Đi muộn {late_minutes} phút "
+                f"— tính nửa ngày công."
+            )
+
             resp_type = "warning"
+
         elif late_minutes > 0:
-            msg += f". Đi muộn {late_minutes} phút."
+
+            msg += (
+                f". Đi muộn {late_minutes} phút."
+            )
+
             resp_type = "warning"
 
         return {
             "action": AttendanceService.ACTION_CHECK_IN,
+
             "type": resp_type,
+
             "message": msg,
-            "attendance_state": Attendance.ShiftStatus.normalize(record.shift_status),
-            "attendance": AttendanceService.build_attendance_payload(record),
+
+            "attendance_state": (
+                Attendance.ShiftStatus.normalize(
+                    record.shift_status
+                )
+            ),
+
+            "attendance": (
+                AttendanceService
+                .build_attendance_payload(record)
+            ),
         }
 
     @staticmethod
     def check_out_regular(
         employee_id: int,
-        sim_time_str: str | None,
+        current_time: datetime,
         early_checkout: bool = False,
-        current_time: datetime | None = None,
     ) -> dict:
 
-        now_dt = current_time or AttendanceService.parse_time(
-            sim_time_str
+        # =====================================================
+        # 0. NORMALIZE CURRENT TIME
+        # =====================================================
+        now_dt = current_time.astimezone(
+            VN_TIMEZONE
         )
 
         record = Attendance.query.filter_by(
@@ -2216,10 +2452,14 @@ class AttendanceService:
         ).first()
 
         if not record or not record.check_in:
-            raise ValidationError("Bạn chưa check-in.")
+            raise ValidationError(
+                "Bạn chưa check-in."
+            )
 
         if record.check_out:
-            raise ValidationError("Bạn đã check-out ca chính.")
+            raise ValidationError(
+                "Bạn đã check-out ca chính."
+            )
 
         # =====================================================
         # 1. SET CHECKOUT TIME
@@ -2227,48 +2467,60 @@ class AttendanceService:
         record.check_out = now_dt
 
         # =====================================================
-        # 2. CALCULATE RAW WORK (SOURCE OF TRUTH)
+        # 2. CALCULATE RAW WORK
         # =====================================================
-        work_result = AttendanceService.calculate_regular_work_units(
-            record
+        work_result = (
+            AttendanceService
+            .calculate_regular_work_units(record)
         )
 
-        raw_regular_hours = Decimal(str(work_result.worked_hours))
+        raw_regular_hours = Decimal(
+            str(work_result.worked_hours)
+        )
 
         # =====================================================
-        # 3. HALF DAY RULE (ALIGN WITH HALF_DAY_THRESHOLD)
+        # 3. HALF DAY RULE
         # =====================================================
         if work_result.is_half_day:
+
             raw_regular_hours = (
-                raw_regular_hours * Decimal("0.5")
-            ).quantize(Decimal("0.0001"))
+                raw_regular_hours
+                * Decimal("0.5")
+            ).quantize(
+                Decimal("0.0001")
+            )
 
         # =====================================================
-        # 4. APPLY DAY MULTIPLIER (HOLIDAY / WEEKEND)
+        # 4. APPLY MULTIPLIER
         # =====================================================
-        multiplier = AttendanceService._day_multiplier(
-            bool(record.is_holiday),
-            bool(record.is_weekend),
+        multiplier = (
+            AttendanceService._day_multiplier(
+                bool(record.is_holiday),
+                bool(record.is_weekend),
+            )
         )
 
         record.regular_hours = (
             raw_regular_hours * multiplier
-        ).quantize(Decimal("0.01"))
+        ).quantize(
+            Decimal("0.01")
+        )
 
         # =====================================================
-        # 5. ABNORMAL ATTENDANCE TYPE RULE
+        # 5. ABNORMAL TYPE
         # =====================================================
         if (
             work_result.is_half_day
             and not record.is_weekend
             and not record.is_holiday
         ):
+
             record.set_attendance_type(
                 Attendance.Type.ABNORMAL
             )
 
         # =====================================================
-        # 6. SHIFT STATE UPDATE (REGULAR DONE BASE STATE)
+        # 6. SHIFT STATE
         # =====================================================
         record.set_shift_status(
             Attendance.ShiftStatus.REGULAR_DONE
@@ -2293,11 +2545,16 @@ class AttendanceService:
             end_of_day = datetime.combine(
                 now_dt.date(),
                 REGULAR_END,
+                tzinfo=VN_TIMEZONE,
             )
 
             early_minutes = max(
                 0,
-                int((end_of_day - now_dt).total_seconds() // 60)
+                int(
+                    (
+                        end_of_day - now_dt
+                    ).total_seconds() // 60
+                )
             )
 
             record.set_shift_status(
@@ -2313,18 +2570,45 @@ class AttendanceService:
 
             return {
                 "type": "warning",
-                "action": AttendanceService.ACTION_CHECK_OUT,
+
+                "action": (
+                    AttendanceService
+                    .ACTION_CHECK_OUT
+                ),
+
                 "message": (
-                    f"Check-out lúc {now_dt.strftime('%H:%M:%S')}. "
+                    f"Check-out lúc "
+                    f"{now_dt.strftime('%H:%M:%S')}. "
                     f"Về sớm {early_minutes} phút."
                 ),
-                "attendance_state": Attendance.ShiftStatus.normalize(record.shift_status),
+
+                "attendance_state": (
+                    Attendance.ShiftStatus.normalize(
+                        record.shift_status
+                    )
+                ),
+
                 "status_key": "early_leave",
-                "regular_hours": str(record.regular_hours),
-                "overtime_hours": str(record.overtime_hours or 0),
-                "working_hours": str(record.working_hours),
-                "attendance": AttendanceService.build_attendance_payload(record),
+
+                "regular_hours": str(
+                    record.regular_hours
+                ),
+
+                "overtime_hours": str(
+                    record.overtime_hours or 0
+                ),
+
+                "working_hours": str(
+                    record.working_hours
+                ),
+
+                "attendance": (
+                    AttendanceService
+                    .build_attendance_payload(record)
+                ),
+
                 "next_event": None,
+
                 "requires_overtime_decision": False,
             }
 
@@ -2335,13 +2619,19 @@ class AttendanceService:
 
         return {
             "type": "success",
-            "action": AttendanceService.ACTION_CHECK_OUT,
+
+            "action": (
+                AttendanceService.ACTION_CHECK_OUT
+            ),
+
             "message": (
                 f"Check-out ca chính thành công. "
-                f"Công thường: {record.regular_hours}h"
+                f"Công thường: "
+                f"{record.regular_hours}h"
                 f"{multiplier_label}"
                 + (
-                    " (áp dụng nửa ngày công do đi muộn quá mức)"
+                    " (áp dụng nửa ngày công "
+                    "do đi muộn quá mức)"
                     if (
                         work_result.is_half_day
                         and not record.is_weekend
@@ -2350,12 +2640,32 @@ class AttendanceService:
                     else ""
                 )
             ),
-            "attendance_state": Attendance.ShiftStatus.normalize(record.shift_status),
-            "regular_hours": str(record.regular_hours),
-            "overtime_hours": str(record.overtime_hours or 0),
-            "working_hours": str(record.working_hours),
-            "attendance": AttendanceService.build_attendance_payload(record),
+
+            "attendance_state": (
+                Attendance.ShiftStatus.normalize(
+                    record.shift_status
+                )
+            ),
+
+            "regular_hours": str(
+                record.regular_hours
+            ),
+
+            "overtime_hours": str(
+                record.overtime_hours or 0
+            ),
+
+            "working_hours": str(
+                record.working_hours
+            ),
+
+            "attendance": (
+                AttendanceService
+                .build_attendance_payload(record)
+            ),
+
             "next_event": "offer_overtime",
+
             "requires_overtime_decision": True,
         }
 
@@ -2365,20 +2675,41 @@ class AttendanceService:
         sim_time_str: str | None,
     ) -> dict:
 
+        # =====================================================
+        # 0. TIME SOURCE (SIMULATION / REAL CLOCK)
+        # =====================================================
         now_dt = AttendanceService.parse_time(sim_time_str)
 
+        if not now_dt:
+            raise ValidationError(
+                "Không xác định được thời gian tăng ca."
+            )
+
+        # =====================================================
+        # 1. LOAD ATTENDANCE (SOURCE OF TRUTH)
+        # =====================================================
         record = Attendance.query.filter_by(
             employee_id=employee_id,
             date=now_dt.date(),
         ).first()
 
-        if not record or not record.check_out:
+        if not record:
+            raise ValidationError(
+                "Không tìm thấy dữ liệu chấm công hôm nay."
+            )
+
+        if not record.check_in:
+            raise ValidationError(
+                "Bạn chưa check-in ca chính."
+            )
+
+        if not record.check_out:
             raise ValidationError(
                 "Bạn phải hoàn tất ca chính trước khi OT."
             )
 
         # =====================================================
-        # 1. OT REQUEST VALIDATION (SOURCE OF TRUTH)
+        # 2. OT REQUEST VALIDATION
         # =====================================================
         approved_ot = AttendanceService._get_approved_ot(
             employee_id,
@@ -2387,17 +2718,22 @@ class AttendanceService:
 
         if not approved_ot:
             raise ValidationError(
-                "❌ Yêu cầu tăng ca chưa được phê duyệt."
+                "Yêu cầu tăng ca chưa được phê duyệt."
             )
 
-        # sync DTO state (IMPORTANT FIX)
-        if approved_ot.status != OvertimeRequest.Status.APPROVED:
+        valid_ot_statuses = {
+            OvertimeRequest.Status.APPROVED,
+            OvertimeRequest.Status.APPROVED_HR,
+            OvertimeRequest.Status.APPROVED_ADMIN,
+        }
+
+        if approved_ot.status not in valid_ot_statuses:
             raise ValidationError(
                 "Trạng thái OT không hợp lệ."
             )
 
         # =====================================================
-        # 2. DUPLICATE GUARD
+        # 3. DUPLICATE GUARD
         # =====================================================
         if record.overtime_check_in:
             raise ValidationError(
@@ -2405,7 +2741,7 @@ class AttendanceService:
             )
 
         # =====================================================
-        # 3. STATE VALIDATION (STRICT MACHINE)
+        # 4. STATE MACHINE VALIDATION
         # =====================================================
         normalized_shift = Attendance.ShiftStatus.normalize(
             record.shift_status
@@ -2422,23 +2758,39 @@ class AttendanceService:
             )
 
         # =====================================================
-        # 4. OT CHECK-IN EXECUTION
+        # 5. TIME WINDOW VALIDATION
+        # =====================================================
+        ot_open_dt = datetime.combine(
+            now_dt.date(),
+            OT_CHECKIN_OPEN,
+            tzinfo=now_dt.tzinfo,
+        )
+
+        if now_dt < record.check_out:
+            raise ValidationError(
+                "Thời gian OT không hợp lệ."
+            )
+
+        # =====================================================
+        # 6. OT CHECK-IN EXECUTION
         # =====================================================
         record.overtime_check_in = now_dt
         record.overtime_request_id = approved_ot.id
 
         # =====================================================
-        # 5. TIME GATE LOGIC (SYNC WITH CONFIG)
+        # 7. SHIFT TRANSITION
         # =====================================================
-        if now_dt.time() < OT_CHECKIN_OPEN:
+        if now_dt < ot_open_dt:
 
             record.set_shift_status(
                 Attendance.ShiftStatus.PRE_OT_REST
             )
 
             msg = (
-                f"Đã xác thực tăng ca lúc {now_dt.strftime('%H:%M:%S')}. "
-                f"Công OT sẽ bắt đầu từ {OT_CHECKIN_OPEN.strftime('%H:%M:%S')}."
+                f"Đã xác thực tăng ca lúc "
+                f"{now_dt.strftime('%H:%M:%S')}. "
+                f"Công OT sẽ bắt đầu từ "
+                f"{OT_CHECKIN_OPEN.strftime('%H:%M:%S')}."
             )
 
         else:
@@ -2453,22 +2805,33 @@ class AttendanceService:
             )
 
         # =====================================================
-        # 6. SYNC OT STATUS (FIX DTO CONSISTENCY BUG)
+        # 8. DTO / STATE SYNC
         # =====================================================
         record.overtime_status = approved_ot.status
 
         db.session.commit()
 
         # =====================================================
-        # 7. RESPONSE
+        # 9. RESPONSE
         # =====================================================
         return {
             "type": "success",
             "action": AttendanceService.ACTION_CHECK_IN_OT,
             "message": msg,
-            "attendance_state": record.shift_status,
+
+            "attendance_state": (
+                Attendance.ShiftStatus.normalize(
+                    record.shift_status
+                )
+            ),
+
             "overtime_status": approved_ot.status,
-            "attendance": AttendanceService.build_attendance_payload(record),
+
+            "attendance": (
+                AttendanceService.build_attendance_payload(
+                    record
+                )
+            ),
         }
 
     @staticmethod
@@ -2477,34 +2840,59 @@ class AttendanceService:
         sim_time_str: str | None,
     ) -> dict:
 
+        # =====================================================
+        # 0. TIME SOURCE (SIMULATION / REAL CLOCK)
+        # =====================================================
         now_dt = AttendanceService.parse_time(sim_time_str)
 
+        if not now_dt:
+            raise ValidationError(
+                "Không xác định được thời gian OT."
+            )
+
+        # =====================================================
+        # 1. LOAD ATTENDANCE
+        # =====================================================
         record = Attendance.query.filter_by(
             employee_id=employee_id,
             date=now_dt.date(),
         ).first()
 
+        if not record:
+            raise ValidationError(
+                "Không tìm thấy dữ liệu chấm công."
+            )
+
         # =====================================================
-        # 1. VALIDATION GATE
+        # 2. VALIDATION GATE
         # =====================================================
-        if not record or not record.overtime_check_in:
-            raise ValidationError("Bạn chưa check-in tăng ca.")
+        if not record.overtime_check_in:
+            raise ValidationError(
+                "Bạn chưa check-in tăng ca."
+            )
 
         if record.overtime_check_out:
-            raise ValidationError("Bạn đã check-out OT rồi.")
+            raise ValidationError(
+                "Bạn đã check-out OT rồi."
+            )
 
         normalized_shift = Attendance.ShiftStatus.normalize(
             record.shift_status
         )
 
-        if normalized_shift not in {
+        allowed_states = {
             Attendance.ShiftStatus.WORKING_OVERTIME,
             Attendance.ShiftStatus.PRE_OT_REST,
-        }:
+        }
+
+        if normalized_shift not in allowed_states:
             raise ValidationError(
                 "Không thể kết thúc OT ở trạng thái hiện tại."
             )
 
+        # =====================================================
+        # 3. APPROVED OT VALIDATION
+        # =====================================================
         approved_ot = AttendanceService._get_approved_ot(
             employee_id,
             now_dt.date(),
@@ -2515,20 +2903,43 @@ class AttendanceService:
                 "Yêu cầu tăng ca không tồn tại hoặc chưa được duyệt."
             )
 
+        valid_ot_statuses = {
+            OvertimeRequest.Status.APPROVED,
+            OvertimeRequest.Status.APPROVED_HR,
+            OvertimeRequest.Status.APPROVED_ADMIN,
+        }
+
+        if approved_ot.status not in valid_ot_statuses:
+            raise ValidationError(
+                "Trạng thái OT không hợp lệ."
+            )
+
         # =====================================================
-        # 2. TIME BOUNDARY (STRICT OT END LIMIT)
+        # 4. TIME PARADOX PROTECTION
+        # =====================================================
+        if now_dt < record.overtime_check_in:
+            raise ValidationError(
+                "Thời gian OT không hợp lệ."
+            )
+
+        # =====================================================
+        # 5. STRICT OT END LIMIT (TIMEZONE SAFE)
         # =====================================================
         ot_end_dt = datetime.combine(
             now_dt.date(),
             OT_END_LIMIT,
+            tzinfo=now_dt.tzinfo,
         )
 
-        final_ot_time = min(now_dt, ot_end_dt)
+        final_ot_time = min(
+            now_dt,
+            ot_end_dt,
+        )
 
         record.overtime_check_out = final_ot_time
 
         # =====================================================
-        # 3. RAW CALCULATION (PURE DOMAIN LOGIC)
+        # 6. RAW OT CALCULATION
         # =====================================================
         raw_ot = AttendanceService.calculate_overtime_hours_raw(
             record.overtime_check_in,
@@ -2539,7 +2950,7 @@ class AttendanceService:
             raw_ot = Decimal("0.00")
 
         # =====================================================
-        # 4. MULTIPLIER (SOURCE OF TRUTH = OT REQUEST)
+        # 7. OT MULTIPLIER
         # =====================================================
         multiplier = Decimal(
             str(
@@ -2556,22 +2967,33 @@ class AttendanceService:
         ).quantize(Decimal("0.01"))
 
         # =====================================================
-        # 5. TYPE SYNC (IMPORTANT FIX FOR PAYROLL)
+        # 8. FINALIZE ATTENDANCE
         # =====================================================
         AttendanceService.finalize_attendance(
             record,
             finalize_status=True,
         )
 
-        # ensure type consistency AFTER finalize
+        # =====================================================
+        # 9. TYPE CONSISTENCY
+        # =====================================================
         if record.is_holiday:
-            record.set_attendance_type(Attendance.Type.HOLIDAY)
+            record.set_attendance_type(
+                Attendance.Type.HOLIDAY
+            )
+
         elif record.is_weekend:
-            record.set_attendance_type(Attendance.Type.WEEKEND)
+            record.set_attendance_type(
+                Attendance.Type.WEEKEND
+            )
 
         # =====================================================
-        # 6. SYNC OT REQUEST STATE (DTO CONSISTENCY FIX)
+        # 10. STATE + DTO SYNC
         # =====================================================
+        record.set_shift_status(
+            Attendance.ShiftStatus.COMPLETED
+        )
+
         record.overtime_status = approved_ot.status
 
         db.session.commit()
@@ -2583,29 +3005,84 @@ class AttendanceService:
         )
 
         # =====================================================
-        # 7. RESPONSE
+        # 11. RESPONSE
         # =====================================================
         return {
             "type": "success",
+
             "action": AttendanceService.ACTION_CHECK_OUT_OT,
+
             "message": (
                 "Đã hoàn thành tăng ca. "
                 f"OT: {record.overtime_hours}h"
                 f"{multiplier_label}"
             ),
-            "attendance_state": record.shift_status,
-            "regular_hours": str(record.regular_hours),
-            "overtime_hours": str(record.overtime_hours),
-            "working_hours": str(record.working_hours),
+
+            "attendance_state": (
+                Attendance.ShiftStatus.normalize(
+                    record.shift_status
+                )
+            ),
+
+            "overtime_status": approved_ot.status,
+
+            "regular_hours": str(
+                record.regular_hours
+            ),
+
+            "overtime_hours": str(
+                record.overtime_hours
+            ),
+
+            "working_hours": str(
+                record.working_hours
+            ),
+
             "overtime_check_in": (
                 record.overtime_check_in.isoformat()
                 if record.overtime_check_in
                 else None
             ),
+
             "overtime_check_out": (
                 record.overtime_check_out.isoformat()
                 if record.overtime_check_out
                 else None
             ),
-            "attendance": AttendanceService.build_attendance_payload(record),
+
+            "attendance": (
+                AttendanceService.build_attendance_payload(
+                    record
+                )
+            ),
         }
+    
+    @staticmethod
+    def process_overtime_reset_from_notification(user_id: int, employee_id: int, noti_id: int) -> dict:
+        noti = Notification.query.filter_by(id=noti_id, user_id=user_id, is_deleted=False).first()
+        if not noti:
+            raise ValueError("Không tìm thấy dữ liệu thông báo hợp lệ")
+        anchor_time = noti.created_at or noti.updated_at
+        row = (
+            OvertimeRequest.query.filter_by(employee_id=employee_id)
+            .filter(OvertimeRequest.created_at <= anchor_time)
+            .order_by(OvertimeRequest.created_at.desc())
+            .first()
+        )
+        if not row:
+            if not noti.is_deleted:
+                noti.is_deleted = True
+                db.session.commit()
+            return {
+                "success": True,  
+                "already_deleted": True,
+                "message": "Đơn yêu cầu tăng ca liên quan đã được xóa từ trước."
+            }
+        from app.modules import reset_overtime_request_flow 
+        result = reset_overtime_request_flow(
+            overtime_request=row,
+            actor_user_id=user_id,
+            source="employee",
+            anchor_notification_id=noti.id
+        )
+        return result

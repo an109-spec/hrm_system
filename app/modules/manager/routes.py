@@ -14,7 +14,10 @@ from . import manager_bp
 from .service import ManagerService
 from app.modules.employee.routes import _get_holiday_for_date
 from app.utils.time import parse_simulated_time
-from app.modules.employee.ess_service import EmployeeESSService
+from app.modules.employee.overtime_service import EmployeeOvertimeService
+from app.modules.employee.notification_service import EmployeeNotificationService
+from app.modules.employee.complaint_service import EmployeeComplaintService
+from app.modules.employee.dependent_service import EmployeeDependentService
 from app.modules.resignation_service import ResignationService
 def _current_manager() -> Employee | None:
     user_id = session.get("user_id")
@@ -612,7 +615,7 @@ def self_payroll_detail_api(salary_id: int):
     if not row:
         return jsonify({"error": "Not found"}), 404
     insurance, tax = ManagerService._tax_and_insurance(row)
-    dependents = EmployeeESSService.list_dependents(session.get("user_id"))
+    dependents = EmployeeDependentService.list_dependents(session.get("user_id"))
     return jsonify({
         "id": row.id,
         "month": row.month,
@@ -711,19 +714,19 @@ def self_payroll_complaint_api(salary_id: int):
 
 @manager_bp.route("/self/dependents", methods=["GET"])
 def manager_dependents_list_api():
-    return jsonify(EmployeeESSService.list_dependents(session.get("user_id")))
+    return jsonify(EmployeeDependentService.list_dependents(session.get("user_id")))
 
 
 @manager_bp.route("/self/dependents", methods=["POST"])
 def manager_dependents_create_api():
-    return jsonify(EmployeeESSService.create_dependent(session.get("user_id"), request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
+    return jsonify(EmployeeDependentService.create_dependent(session.get("user_id"), request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
 
 
 @manager_bp.route("/self/dependents/<int:dependent_id>", methods=["PUT"])
 def manager_dependents_update_api(dependent_id: int):
-    return jsonify(EmployeeESSService.update_dependent(session.get("user_id"), dependent_id, request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
+    return jsonify(EmployeeDependentService.update_dependent(session.get("user_id"), dependent_id, request.get_json(silent=True) or {}, actor_user_id=session.get("user_id")))
 
 
 @manager_bp.route("/self/dependents/<int:dependent_id>", methods=["DELETE"])
 def manager_dependents_delete_api(dependent_id: int):
-    return jsonify(EmployeeESSService.delete_dependent(session.get("user_id"), dependent_id, actor_user_id=session.get("user_id")))
+    return jsonify(EmployeeDependentService.delete_dependent(session.get("user_id"), dependent_id, actor_user_id=session.get("user_id")))
