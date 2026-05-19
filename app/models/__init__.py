@@ -27,10 +27,20 @@ from app.models.allowance import EmployeeAllowance
 from app.models.salary import Salary
 from app.models.notification import Notification
 from app.models.dependent import Dependent
-from app.models.complaint import Complaint
 from app.models.history import HistoryLog
-from app.models.overtime_request import OvertimeRequest
 from app.models.resignation import ResignationRequest
+
+# --- SỬA HOẶC BỔ SUNG KHU VỰC NÀY ---
+# 1. Kiểm tra lại tên file là overtime_request hay overtime để import chính xác
+from app.models.overtime_request import OvertimeRequest 
+
+# 2. Bổ sung Complaint và ComplaintMessage (nếu chung file)
+from app.models.complaint import Complaint, ComplaintMessage 
+
+# 3. CHÍNH LÀ DÒNG CỨU TINH NÀY: Import FileUpload vào hệ thống
+# (Sửa lại tên file file_upload nếu bạn đặt tên file khác nhé, ví dụ: file.py)
+from app.models.file_upload import FileUpload  
+
 # Danh sách Export để dễ dàng quản lý
 __all__ = [
     'db',
@@ -55,6 +65,8 @@ __all__ = [
     'Dependent',
     'SystemSetting',
     'Complaint',
+    'ComplaintMessage', # Đã bổ sung
+    'FileUpload',       # Đã bổ sung thành công để hết lỗi KeyError
     'HistoryLog',
     'OvertimeRequest',
     'ResignationRequest',

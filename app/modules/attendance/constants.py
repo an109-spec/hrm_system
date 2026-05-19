@@ -1,54 +1,17 @@
-from datetime import time
-from decimal import Decimal
+class AttendanceAction:
+    ACTION_CHECK_IN = "check_in"                          # Điểm danh vào ca chính
+    ACTION_CHECK_OUT = "check_out"                        # Điểm danh ra ca chính
+    ACTION_CHECK_IN_OT = "check_in_overtime"              # Điểm danh vào ca tăng ca (OT)
+    ACTION_CHECK_OUT_OT = "check_out_overtime"            # Điểm danh ra ca tăng ca (OT)
 
-REGULAR_START = time(8, 0, 0)
-REGULAR_END = time(17, 0, 0)
+    ACTION_HOLIDAY_WORK_PROMPT = "holiday_work_prompt"    # Gợi ý/Hỏi xác nhận đi làm vào ngày lễ
+    ACTION_WEEKEND_WORK_PROMPT = "weekend_work_prompt"    # Gợi ý/Hỏi xác nhận đi làm vào ngày cuối tuần
+    ACTION_EARLY_CHECKOUT_PROMPT = "early_checkout_prompt" # Gợi ý/Cảnh báo khi nhân viên check-out sớm hơn giờ quy định
+    ACTION_OFFER_OVERTIME = "offer_overtime"              # Gợi ý/Hỏi nhân viên có muốn đăng ký tăng ca không (khi hết ca chính)
 
-LUNCH_START = time(12, 0, 0)
-LUNCH_END = time(13, 0, 0)
-
-GRACE_PERIOD_MINUTES = 15
-
-# sau 09:00 tính half-day
-HALF_DAY_THRESHOLD = time(9, 0, 0)
-
-# nhân viên được xác thực OT từ 19h
-OT_CHECKIN_OPEN = time(19, 0, 0)
-
-# OT tối đa tới 22h
-OT_END_LIMIT = time(22, 0, 0)
-
-# dưới 30 phút không tính OT
-MIN_OT_HOURS = Decimal("0.5")
-
-REGULAR_DAY_RATE = Decimal("1.0")
-
-# cuối tuần
-WEEKEND_RATE = Decimal("1.5")
-
-# lễ
-HOLIDAY_RATE = Decimal("3.0")
-
-OT_NORMAL_DAY_RATE = Decimal("1.5")
-OT_WEEKEND_RATE = Decimal("2.0")
-OT_HOLIDAY_RATE = Decimal("3.0")
-
-SYSTEM_TIMEZONE = "Asia/Ho_Chi_Minh"
-
-OT_APPROVED_REQUIRED_STATES = {
-    "PRE_OT_REST",
-    "OT_CHECKIN_REQUIRED",
-    "WORKING_OVERTIME",
-}
-
-IMMUTABLE_OFFDAY_STATES = {
-    "HOLIDAY_OFF",
-    "WEEKEND_OFF",
-}
-
-FINAL_SHIFT_STATES = {
-    "COMPLETED",
-    "HOLIDAY_OFF",
-    "WEEKEND_OFF",
-    "LEAVE",
-}
+    ACTION_ALREADY_RECORDED = "already_recorded"          # Dữ liệu điểm danh ngày hôm nay đã được ghi nhận trước đó (trùng lặp)
+    ACTION_OVERTIME_REQUEST_CREATED = "overtime_request_created" # Đã tạo yêu cầu/đơn đăng ký tăng ca thành công
+    ACTION_COMPLETE_WITHOUT_OT = "complete_without_overtime"     # Hoàn thành ngày làm việc bình thường, không đăng ký tăng ca
+    ACTION_HOLIDAY_OFF = "holiday_off"                    # Ghi nhận nghỉ ngày lễ (hưởng nguyên lương, không cần điểm danh)
+    ACTION_WEEKEND_OFF = "weekend_off"                    # Ghi nhận nghỉ cuối tuần (không tính công, không cần điểm danh)
+    ACTION_OVERTIME_DECISION_RECORDED = "overtime_decision_recorded" # Đã ghi nhận quyết định xử lý tăng ca (Đồng ý/Từ chối từ Quản lý)

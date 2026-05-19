@@ -12,18 +12,18 @@ class Department(BaseModel):
     description = db.Column(db.Text)
     
     # Manager_id liên kết đến bảng Employees
-    # Lưu ý: 'employees.id' là tên bảng trong DB, 'Employee' là tên class Model
     manager_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
     
     # Trạng thái hoạt động
     status = db.Column(db.Boolean, default=True)
 
-    # Relationships
-    # Liên kết với trưởng phòng (người quản lý phòng ban)
-    manager = relationship('Employee', foreign_keys=[manager_id], backref='managed_department')
+    # ==================== RELATIONSHIPS CHUẨN HÓA ====================
     
-    # Liên kết với danh sách nhân viên thuộc phòng ban này
-    employees = relationship('Employee', foreign_keys='Employee.department_id', backref='department')
+    # 1. Liên kết với trưởng phòng (Dùng back_populates thay vì backref ngầm)
+    manager = relationship('Employee', foreign_keys=[manager_id], back_populates='managed_department')
+    
+    # 2. Liên kết với danh sách nhân viên thuộc phòng ban này (Giữ nguyên)
+    employees = relationship('Employee', foreign_keys='Employee.department_id', back_populates='department')
 
     def __repr__(self):
         return f"<Department {self.name}>"

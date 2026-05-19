@@ -7,16 +7,15 @@ class LeaveType(db.Model):
     Ví dụ: Nghỉ phép năm, Nghỉ ốm, Nghỉ chế độ, Nghỉ không lương.
     """
     __tablename__ = 'leave_types'
-
     id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), nullable=False, unique=True, index=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
-    is_paid = db.Column(db.Boolean, default=True) # Nghỉ có được hưởng lương không?
-
-    # Quan hệ ngược lại với các đơn xin nghỉ
+    is_paid = db.Column(db.Boolean, default=True) 
+    default_days = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     requests = relationship('LeaveRequest', backref='leave_type', lazy='dynamic')
 
     def __repr__(self):
-        return f"<LeaveType {self.name}>"
+        return f"<LeaveType {self.code} - {self.name}>"
 
 class LeaveRequest(BaseModel):
     """

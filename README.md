@@ -7,7 +7,6 @@ HRM_TOTNGHIEP
 ├─ app
 │  ├─ cli.py
 │  ├─ common
-│  │  ├─ constants.py
 │  │  ├─ exceptions.py
 │  │  ├─ security
 │  │  │  ├─ decorators.py
@@ -18,6 +17,16 @@ HRM_TOTNGHIEP
 │  │  └─ __init__.py
 │  ├─ config
 │  │  ├─ config.py
+│  │  └─ __init__.py
+│  ├─ constants
+│  │  ├─ attendance.py
+│  │  ├─ common.py
+│  │  ├─ contract.py
+│  │  ├─ employee.py
+│  │  ├─ holidays.py
+│  │  ├─ leave.py
+│  │  ├─ overtime.py
+│  │  ├─ payroll.py
 │  │  └─ __init__.py
 │  ├─ extensions
 │  │  ├─ db.py
@@ -55,10 +64,13 @@ HRM_TOTNGHIEP
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
 │  │  ├─ attendance
+│  │  │  ├─ attendance_state_service.py
 │  │  │  ├─ constants.py
 │  │  │  ├─ dto.py
 │  │  │  ├─ overtime_service.py
+│  │  │  ├─ overtime_state_service.py
 │  │  │  ├─ qr_service.py
+│  │  │  ├─ regular_state_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
@@ -112,6 +124,7 @@ HRM_TOTNGHIEP
 │  │  │  └─ __init__.py
 │  │  ├─ leave
 │  │  │  ├─ dto.py
+│  │  │  ├─ holiday_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  ├─ validators.py
@@ -277,7 +290,6 @@ HRM_TOTNGHIEP
 │  │  ├─ employee
 │  │  │  ├─ attendance.html
 │  │  │  ├─ complaint_modal.html
-│  │  │  ├─ dashboard.html
 │  │  │  ├─ leave.html
 │  │  │  ├─ notifications.html
 │  │  │  ├─ payslip.html

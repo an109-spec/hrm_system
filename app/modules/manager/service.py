@@ -22,50 +22,6 @@ from app.models.role import Role
 from app.models.user import User
 from app.utils.time import parse_simulated_time
 class ManagerService:
-
-    PAYROLL_REVIEWABLE_STATUSES = {"pending_manager", "manager_review"}
-    PAYROLL_STATUS_LABELS = {
-        "pending_hr": "Chờ HR xử lý",
-        "pending_manager": "Chờ Manager xác nhận",
-        "manager_review": "Chờ Manager xác nhận",
-        "manager_confirmed": "Đã xác nhận",
-        "pending_admin": "Chờ Admin duyệt",
-        "approved": "Đã duyệt",
-        "paid": "Đã chốt",
-        "finalized": "Đã chốt",
-        "complaint": "Khiếu nại",
-        "pending": "Chờ HR xử lý",
-    }
-    CONTRACT_STATUS_LABELS = {
-        "active": "Đang hiệu lực",
-        "expiring": "Sắp hết hạn",
-        "expired": "Hết hạn",
-        "pending_renewal": "Chờ gia hạn",
-        "pending_probation_conversion": "Chờ chuyển chính thức",
-        "proposed_termination": "Đề xuất chấm dứt",
-        "ended": "Đã kết thúc",
-    }
-    LEAVE_STATUS_LABELS = {
-        "pending": "Chờ Manager duyệt",
-        "pending_hr": "Chờ HR duyệt",
-        "pending_admin": "Chờ Admin duyệt",
-        "approved": "Đã duyệt",
-        "rejected": "Từ chối",
-        "supplement_requested": "Yêu cầu bổ sung",
-        "cancelled": "Hủy đơn",
-        "complaint": "Khiếu nại",
-    }
-    EMPLOYMENT_LABELS = {
-        "probation": "Thử việc",
-        "permanent": "Chính thức",
-        "intern": "Thực tập",
-        "contract": "Hợp đồng",
-    }
-    WORKING_STATUS_LABELS = {
-        "active": "Đang làm việc",
-        "on_leave": "Nghỉ phép",
-        "resigned": "Nghỉ việc",
-    }
     @staticmethod
     def get_overtime_requests(manager_id: int) -> list[dict]:
         sub_ids = [e.id for e in ManagerService._get_subordinates(manager_id)]

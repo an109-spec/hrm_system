@@ -130,9 +130,9 @@ class Employee(BaseModel):
         server_default='true'
     )
 
-    # =========================
-    # RELATIONSHIPS
-    # =========================
+# ========================================================
+    # RELATIONSHIPS (Cập nhật đoạn này)
+    # ========================================================
 
     # User
     user = relationship(
@@ -140,26 +140,42 @@ class Employee(BaseModel):
         back_populates='employee_profile'
     )
 
-    # Department
+    # 1. Đồng bộ với quan hệ Nhân viên thuộc Phòng ban bên bảng Department
     department = relationship(
         'Department',
-        backref='employees'
+        foreign_keys=[department_id],
+        back_populates='employees'
     )
 
-    # Position
-    position = relationship(
-        'Position',
-        backref='employees'
+    # 2. Đồng bộ với Trưởng phòng (Phòng ban được quản lý bởi nhân viên này)
+    managed_department = relationship(
+        'Department',
+        foreign_keys='Department.manager_id',
+        back_populates='manager'
     )
 
-    # Manager / Subordinates
+    # Position (Giữ nguyên cấu trúc đã sửa trước đó)
+    position = db.relationship('Position', back_populates='employees')
+
+    # 3. Mối quan hệ Cấp trên - Cấp dưới (Self-Referential) chuẩn hóa qua back_populates
+    # Tìm cấp trên của nhân viên hiện tại: employee.manager
+    manager = relationship(
+        'Employee',
+        remote_side='Employee.id',
+        foreign_keys=[manager_id],
+        back_populates='subordinates'
+    )
+    
+    # Tìm các cấp dưới trực thuộc nhân viên này: employee.subordinates
     subordinates = relationship(
         'Employee',
-        backref=db.backref(
-            'manager',
-            remote_side='Employee.id'
-        )
+        foreign_keys=[manager_id],
+        back_populates='manager'
     )
+
+    # ========================================================
+    # CÁC QUAN HỆ KHÁC PHÍA DƯỚI GIỮ NGUYÊN HOÀN TOÀN
+    # ========================================================
     complaints = relationship(
         'Complaint',
         foreign_keys='Complaint.employee_id',
@@ -172,21 +188,18 @@ class Employee(BaseModel):
         lazy='dynamic'
     )
 
-    # Salary
     salary_records = relationship(
         'Salary',
         back_populates='employee',
         lazy='dynamic'
     )
 
-    # Contracts
     contracts = relationship(
         'Contract',
         back_populates='employee',
         lazy='dynamic'
     )
 
-    # Leave Requests
     leave_requests = relationship(
         'LeaveRequest',
         foreign_keys='LeaveRequest.employee_id',
@@ -194,13 +207,20 @@ class Employee(BaseModel):
         lazy='dynamic'
     )
 
-    # Overtime Requests
     overtime_requests = relationship(
         'OvertimeRequest',
+        foreign_keys='OvertimeRequest.employee_id',
         back_populates='employee',
         lazy='dynamic'
     )
 
+    approved_overtimes = relationship(
+        'OvertimeRequest',
+        foreign_keys='OvertimeRequest.approved_by',
+        back_populates='approver',
+        lazy='dynamic'
+    )
+    
     history_logs = relationship(
         'HistoryLog',
         back_populates='employee',
@@ -212,6 +232,7 @@ class Employee(BaseModel):
         back_populates='employee',
         lazy='dynamic'
     )
+
     def __repr__(self):
         return f"<Employee {self.full_name} - {self.phone}>"
 

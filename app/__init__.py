@@ -23,6 +23,7 @@ def ensure_leave_types():
     from app.common.constants import LEAVE_TYPE_CONFIGS
     from app.extensions import db
     changed = False
+    
     for code, info in LEAVE_TYPE_CONFIGS.items():
         existed = LeaveType.query.filter_by(code=code).first()
         if existed:
@@ -33,8 +34,9 @@ def ensure_leave_types():
             if existed.is_paid != info["is_paid"]:
                 existed.is_paid = info["is_paid"]
                 is_updated = True
-            if hasattr(existed, 'default_days') and existed.default_days != info.get("default_days"):
-                existed.default_days = info.get("default_days")
+            # Không cần dùng hasattr nữa vì model đã chuẩn hóa bổ sung cột này
+            if existed.default_days != info.get("default_days", 0):
+                existed.default_days = info.get("default_days", 0)
                 is_updated = True
             if is_updated:
                 changed = True
@@ -47,12 +49,14 @@ def ensure_leave_types():
             )
             db.session.add(new_type)
             changed = True
+            
     if changed:
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             print(f"Lỗi khi đồng bộ LeaveType: {e}")
+            
     return LeaveType.query.order_by(LeaveType.id.asc()).all()
 
 def create_app():
@@ -77,7 +81,7 @@ def create_app():
     with app.app_context():
         from app import models
         db.create_all()
-        ensure_leave_types()
+        #ensure_leave_types()
     # Register blueprints & CLI
     register_blueprints(app)
     register_cli(app)

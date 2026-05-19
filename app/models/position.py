@@ -21,9 +21,7 @@ class Position(BaseModel):
     # Mô tả/Yêu cầu công việc
     requirements = db.Column(db.Text, nullable=True)
 
-    # Relationship
-    # Liên kết với danh sách nhân viên đang giữ chức danh này
-    employees = relationship('Employee', backref='position', lazy='dynamic')
+    employees = relationship('Employee', back_populates='position', lazy='dynamic')
 
     def __repr__(self):
         return f"<Position {self.job_title}>"

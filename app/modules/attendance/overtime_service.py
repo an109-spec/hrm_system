@@ -16,13 +16,9 @@ from app.utils.time import (
     get_current_time,
 )
 from app.utils.time import VN_TIMEZONE
-from app.modules.attendance.constants import (
-    OT_CHECKIN_OPEN,
-    OT_END_LIMIT,
-)
+from app.constants.attendance import WorkConfig
+
 class OvertimeService:
-    OT_START = AttendanceService.OT_CHECKIN_OPEN
-    OT_END = AttendanceService.OT_END_LIMIT
 
     @staticmethod
     def create_overtime_request(
@@ -366,12 +362,12 @@ class OvertimeService:
             )
         ot_start_dt = datetime.combine(
             overtime_check_in.date(),
-            OT_CHECKIN_OPEN,
+            WorkConfig.OT_START,
             tzinfo=VN_TIMEZONE,
         )
         ot_end_dt = datetime.combine(
             overtime_check_in.date(),
-            OT_END_LIMIT,
+            WorkConfig.OT_END,
             tzinfo=VN_TIMEZONE,
         )
         effective_start = max(
