@@ -18,7 +18,7 @@ from app.models import (
 from app.utils.time import get_current_time
 from app.common.exceptions import ValidationError
 from app.modules.attendance.dto import AttendanceStateDTO, WorkUnitDTO
-
+from app.constants import WorkingStatus
 from app.constants import AttendanceConstants, VN_TIMEZONE, OvertimeConfig, WorkConfig
 
 class AttendanceService:
@@ -57,8 +57,6 @@ class AttendanceService:
             raise ValidationError(
                 "Nhân viên không thuộc đối tượng chấm công"
             )
-
-        from app.constants import WorkingStatus
 
         if (employee.working_status or "").strip().lower() == WorkingStatus.RESIGNED:
             raise ValidationError("Nhân viên không còn hoạt động")
@@ -179,27 +177,6 @@ class AttendanceService:
         ).first()
 
     @staticmethod
-    def _get_day_rate(attendance_type: str | None) -> Decimal:
-        normalized_status = Attendance.ShiftStatus.normalize(attendance_type)
-        RATE_MAP = {
-            "working_regular": OvertimeConfig.MULTIPLIERS.get("after_shift", Decimal("1.50")),
-            "completed":       OvertimeConfig.MULTIPLIERS.get("after_shift", Decimal("1.50")),
-            "weekend_off":     OvertimeConfig.MULTIPLIERS.get("weekend", Decimal("2.00")),
-            "holiday_off":     OvertimeConfig.MULTIPLIERS.get("holiday", Decimal("3.00")),
-            "leave":           OvertimeConfig.MULTIPLIERS.get("after_shift", Decimal("1.50")),
-        }
-        ABSENT_TYPES = {
-            "absent",
-            "not_started",
-        }
-        if normalized_status in ABSENT_TYPES:
-            return Decimal("0.00")
-        return RATE_MAP.get(
-            normalized_status, 
-            OvertimeConfig.MULTIPLIERS.get("normal", Decimal("1.00"))
-        )
-    
-    @staticmethod
     def resolve_attendance_type(
         *,
         is_holiday: bool = False,
@@ -222,63 +199,7 @@ class AttendanceService:
                 return attendance_type
 
         return "normal"
-
-    @staticmethod
-    def calculate_regular_hours(
-        attendance: Attendance
-    ) -> Decimal:
-
-        result = AttendanceService.calculate_regular_work_units(
-            attendance
-        )
-
-        return result.worked_hours
-    @staticmethod
-    def recalculate_hours(attendance: Attendance) -> Decimal:
-        result = AttendanceService.calculate_regular_work_units(attendance)
-        return result.worked_hours
-
-    @staticmethod
-    def calculate_overtime_hours_raw(
-        overtime_check_in: datetime,
-        overtime_check_out: datetime
-    ) -> Decimal:
-        if not overtime_check_in or not overtime_check_out:
-            return Decimal("0.00")
-        if overtime_check_in.tzinfo is None:
-            overtime_check_in = overtime_check_in.replace(
-                tzinfo=VN_TIMEZONE
-            )
-        if overtime_check_out.tzinfo is None:
-            overtime_check_out = overtime_check_out.replace(
-                tzinfo=VN_TIMEZONE
-            )
-        day = overtime_check_in.date()
-        ot_start = datetime.combine(
-            day,
-            WorkConfig.OT_START,
-            tzinfo=VN_TIMEZONE
-        )
-        ot_end = datetime.combine(
-            day,
-            WorkConfig.OT_END,
-            tzinfo=VN_TIMEZONE
-        )
-        actual_start = max(ot_start, overtime_check_in)
-        actual_end = min(ot_end, overtime_check_out)
-        if actual_end <= actual_start:
-            return Decimal("0.00")
-        hours = (
-            actual_end - actual_start
-        ).total_seconds() / 3600
-        return Decimal(str(round(hours, 4)))
-
-    @staticmethod
-    def calculate_overtime_hours(
-        overtime_check_in: datetime, overtime_check_out: datetime
-    ) -> Decimal:
-        return AttendanceService.calculate_overtime_hours_raw(overtime_check_in, overtime_check_out)
-
+    
     @staticmethod
     def finalize_attendance(
         record: Attendance,
@@ -290,7 +211,7 @@ class AttendanceService:
         record.working_hours = (
             regular_hours + overtime_hours
         ).quantize(Decimal("0.01"))
-        base_type = AttendanceService._resolve_attendance_type(
+        base_type = AttendanceService.resolve_attendance_type(
             is_weekend=bool(record.is_weekend),
             is_holiday=bool(record.is_holiday),
         )
