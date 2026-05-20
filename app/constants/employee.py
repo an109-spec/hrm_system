@@ -18,7 +18,7 @@ class WorkingStatus:
         cleaned_value = (value or "").strip().lower()
         return cls.LABELS.get(cleaned_value, "Không rõ")
 
-
+ 
 class EmploymentType:
     PROBATION = "probation"
     PERMANENT = "permanent"

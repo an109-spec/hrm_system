@@ -12,13 +12,24 @@ class AttendanceStatus:
         ABSENT: "Vắng mặt",
         LEAVE: "Nghỉ phép",
     }
+    VALID_STATUSES = {PRESENT, LATE, ABSENT, LEAVE}
     @classmethod
     def choices(cls):
         return [(key, value) for key, value in cls.LABELS.items()]
+
     @classmethod
     def get_label(cls, value: str) -> str:
         cleaned_value = (value or "").strip().lower()
         return cls.LABELS.get(cleaned_value, "Không rõ")
+
+    @classmethod
+    def validate_and_normalize(cls, status_name: str | None) -> str | None:
+        if not status_name:
+            return None
+        normalized = status_name.strip().lower()
+        if normalized not in cls.VALID_STATUSES:
+            return None
+        return normalized
 
 class AttendanceConstants:
     STATUS_NOT_STARTED = "not_started"
