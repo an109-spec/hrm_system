@@ -644,30 +644,33 @@ class Attendance_workflow_service:
         ).first()
         
         if attendance:
-            current_state = AttendanceShiftStatus.normalize(attendance.shift_status)
+            # Tối ưu: Dùng property normalized_shift_status có sẵn của Model Attendance
+            current_state = attendance.normalized_shift_status
             allowed_states = {
                 AttendanceShiftStatus.REGULAR_DONE_PENDING_OT_DECISION,
                 AttendanceShiftStatus.REGULAR_DONE,
             }
             if current_state in allowed_states:
                 attendance.set_shift_status(AttendanceShiftStatus.PRE_OT_REST)
+                
         ot_request.status = "approved"
+        
         employee = Employee.query.get(ot_request.employee_id)
         if employee and employee.user_id:
             formatted_date = ot_request.overtime_date.strftime('%d/%m/%Y')
             new_notification = Notification(
                 user_id=employee.user_id,
-                type="overtime",  # ĐÃ SỬA: Chuyển hằng số lỗi thành chuỗi text thông thường
+                type="overtime",
                 title="Yêu cầu tăng ca đã được duyệt",
                 content=(
                     f"Yêu cầu tăng ca ngày {formatted_date} đã được phê duyệt. "
                     f"Bạn có thể xác thực để bắt đầu tăng ca."
                 ),
                 link="/employee/attendance",
-                is_read=False      # Đảm bảo gán rõ ràng trạng thái chưa đọc cho giao diện
+                is_read=False
             )
             db.session.add(new_notification)
-        db.session.commit()
+        
 
     @staticmethod
     def handle_ot_rejected(
@@ -748,7 +751,6 @@ class Attendance_workflow_service:
                     created_at=current_time,
                 )
             )
-        db.session.commit()
 
     @staticmethod
     def _handle_offday_logic(

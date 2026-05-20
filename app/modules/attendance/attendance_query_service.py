@@ -19,8 +19,6 @@ from app.models import (
     LeaveRequest,
     Notification,
 )
-from .service import AttendanceService
-
 from app.constants.holidays import VN_FIXED_PUBLIC_HOLIDAYS, HolidayConfig
 from app.constants.payroll import (
     REGULAR_DAY_RATE,
@@ -34,7 +32,7 @@ class AttendanceCommandService:
     
     @staticmethod
     def get_status(status_name: str | None) -> AttendanceStatus | None:
-        normalized = AttendanceService.normalize_status(status_name)
+        normalized = AttendanceStatus.validate_and_normalize(status_name)
         if not normalized:
             return None
         return AttendanceStatus.query.filter_by(
