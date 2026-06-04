@@ -1,13 +1,9 @@
 from __future__ import annotations
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date
 from decimal import Decimal
-from calendar import monthrange
 from operator import and_
-from sqlalchemy.exc import IntegrityError
-from flask import session
-from types import SimpleNamespace
 from app.extensions import db
-from app.utils.time import get_current_time
+from app.utils.time import get_current_time, set_simulated_time, _normalize, VN_TIMEZONE
 from app.common.exceptions import ValidationError
 
 from app.models.employee import Employee
@@ -16,28 +12,9 @@ from app.models.leave import LeaveRequest
 from app.models.notification import Notification
 from app.models.attendance import AttendanceType, Attendance, AttendanceStatus, AttendanceShiftStatus
 
-
-from .dto import AttendanceStateDTO, WorkUnitDTO
 from app.modules.attendance.constants import AttendanceAction
 
-from .constants import VN_TIMEZONE
-from app.constants.attendance import WorkConfig
-from app.constants.attendance import (
-    LUNCH_START,
-    LUNCH_END,
-    REGULAR_START,
-    REGULAR_END,
-    OT_CHECKIN_OPEN,
-    OT_END_LIMIT,
-    REGULAR_DAY_RATE,
-    WEEKEND_RATE,
-    HOLIDAY_RATE,
-    AttendanceConstants,
-
-)
-from app.constants.holidays import VN_FIXED_PUBLIC_HOLIDAYS, HolidayConfig
-from app.constants.employee import WorkingStatus
-from app.constants.leave import LeaveStatus
+from app.constants.attendance import WorkConfig, AttendanceConstants
 
 from .attendance_calculation_service import attendance_calculation_service
 from .service import AttendanceService
@@ -309,7 +286,7 @@ class Attendance_workflow_service:
             else:
                 ot_open_dt = datetime.combine(
                     current_time.date(),
-                    OT_CHECKIN_OPEN,
+                    WorkConfig.OT_CHECKIN_OPEN,  # Giờ mở check-in OT (18:00)
                     tzinfo=VN_TIMEZONE,
                 )
 
@@ -390,14 +367,12 @@ class Attendance_workflow_service:
     
     @staticmethod
     def check_out_overtime(employee_id: int, sim_time_str: str | None = None) -> dict:
-        # 1. Xử lý thời gian hiện tại từ chuỗi giả lập hoặc thời gian thực tế hệ thống
+        # 1. Xử lý thời gian thông minh qua bộ công cụ sim_clock
         if sim_time_str:
-            try:
-                now_dt = datetime.fromisoformat(sim_time_str)
-                if now_dt.tzinfo is None:
-                    now_dt = now_dt.replace(tzinfo=VN_TIMEZONE)
-            except ValueError:
+            now_dt = _normalize(sim_time_str)
+            if not now_dt:
                 raise ValidationError("Định dạng chuỗi thời gian giả lập không hợp lệ.")
+            set_simulated_time(now_dt)  # Khóa trục thời gian test cho các request sau ăn theo
         else:
             now_dt = get_current_time()
 
@@ -416,6 +391,7 @@ class Attendance_workflow_service:
             raise ValidationError("Bạn chưa check-in tăng ca.")
         if record.overtime_check_out:
             raise ValidationError("Bạn đã check-out OT rồi.")
+            
         normalized_shift = AttendanceConstants.normalize(record.normalized_shift_status)
         allowed_states = {
             AttendanceConstants.STATUS_WORKING_OVERTIME,
@@ -431,6 +407,8 @@ class Attendance_workflow_service:
 
         if now_dt < record.overtime_check_in:
             raise ValidationError("Thời gian OT không hợp lệ.")
+            
+        # Đoạn này dùng now_dt.date() là chuẩn rồi vì đã được ép timezone từ đầu hàm
         ot_end_dt = datetime.combine(
             now_dt.date(),
             WorkConfig.OT_END,
@@ -438,6 +416,7 @@ class Attendance_workflow_service:
         )
         final_ot_time = min(now_dt, ot_end_dt)
         record.overtime_check_out = final_ot_time
+        
         raw_ot = attendance_calculation_service.calculate_overtime_hours_raw(
             record.overtime_check_in,
             record.overtime_check_out,
@@ -448,6 +427,7 @@ class Attendance_workflow_service:
             raw_ot = Decimal("0.00")
         if raw_ot < Decimal("0.00"):
             raw_ot = Decimal("0.00")
+            
         if hasattr(approved_ot, 'holiday_multiplier') and approved_ot.holiday_multiplier is not None:
             multiplier = Decimal(str(approved_ot.holiday_multiplier))
         else:
@@ -475,7 +455,7 @@ class Attendance_workflow_service:
         )
         return {
             "type": "success",
-            "action": "check_out_ot",  # Thay thế hằng số hành động trực tiếp bằng chuỗi nếu cần
+            "action": "check_out_ot",
             "message": (
                 "Đã hoàn thành tăng ca. "
                 f"OT: {record.overtime_hours}h"
@@ -490,7 +470,6 @@ class Attendance_workflow_service:
             "overtime_check_out": record.overtime_check_out.isoformat(),
             "attendance": AttendanceService.build_attendance_payload(record),
         }
-
     @staticmethod
     def check_in(
         employee_id: int,
@@ -762,7 +741,7 @@ class Attendance_workflow_service:
             get_current_time()
             .astimezone(VN_TIMEZONE)
         )
-        is_holiday = AttendanceService._is_holiday(today)
+        is_holiday = AttendanceCommandService._get_holiday(today)
         is_weekend = today.weekday() >= 5
         employee = Employee.query.get(employee_id)
         if employee and employee.is_attendance_required is False:
@@ -928,7 +907,7 @@ class Attendance_workflow_service:
         if early_checkout:
             end_of_day = datetime.combine(
                 now_dt.date(),
-                REGULAR_END,
+                WorkConfig.WORKDAY_END,
                 tzinfo=VN_TIMEZONE,
             )
 

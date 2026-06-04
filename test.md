@@ -1,54 +1,19 @@
-@attendance_bp.route("/")
-def attendance_page():
-    user_id = session.get("user_id")
-    if not user_id:
-        return redirect(url_for("auth.login"))
-    from app.models import Employee
-    employee = Employee.query.filter_by(user_id=user_id).first()
-    simulated_now = request.args.get("simulated_now") \
-        or session.get("simulated_now")
-    if simulated_now:
-        now = datetime.fromisoformat(
-            simulated_now.replace("Z", "+00:00")
+def _get_holiday_lookup() -> dict[str, str]:
+    now = get_current_time()
+    current_year = now.year
+    lookup = {}
+    db_holidays = Holiday.query.filter(
+        db.or_(
+            Holiday.is_recurring.is_(True),
+            db.extract('year', Holiday.date) == current_year
         )
-        if now.tzinfo is not None:
-            now = now.replace(tzinfo=None)
-        session["simulated_now"] = simulated_now
-    else:
-        now = datetime.now()
-    selected_month = (
-        request.args.get("month", type=int)
-        or now.month
-    )
-    selected_year = (
-        request.args.get("year", type=int)
-        or now.year
-    )
-    today = AttendanceService.get_today(
-        employee.id,
-        simulated_now
-    )
-    history = AttendanceService.get_history(
-        employee.id,
-        simulated_now,
-        month=selected_month,
-        year=selected_year,
-    )
-    for a in history:
-        if a.check_in and a.check_out:
-            a.calculated_hours = (
-                AttendanceService.recalculate_hours(a)
-            )
-        else:
-            a.calculated_hours = Decimal("0.00")
-
-    return render_template(
-        "employee/attendance.html",
-        employee=employee,
-        today=today,
-        history=history,
-        now=now,
-        selected_month=selected_month,
-        selected_year=selected_year,
-    )
-
+    ).all()
+    for holiday in db_holidays:
+        key = holiday.date.strftime("%m-%d")
+        lookup[key] = holiday.name
+    for holiday_key, holiday_name in VN_FIXED_PUBLIC_HOLIDAYS.items():
+        lookup.setdefault(holiday_key, holiday_name)
+    lunar_holidays = OvertimeConfig.get_lunar_holidays(current_year)
+    for holiday_key, holiday_name in lunar_holidays.items():
+        lookup.setdefault(holiday_key, holiday_name)
+    return lookup

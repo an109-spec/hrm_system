@@ -1,14 +1,10 @@
 
 from datetime import datetime
-from decimal import Decimal
-from typing import Optional
-from app.constants.attendance import WorkConfig, VN_TIMEZONE
-from app.modules.attendance.dto import AttendanceDTO, AttendanceResponseDTO
+from app.constants.attendance import WorkConfig
 from app.models.attendance import Attendance, AttendanceShiftStatus
 from app.models.overtime_request import OvertimeRequest
 from app.modules.attendance.dto import AttendanceStateDTO
-from app.utils.time import get_current_time
-
+from app.utils.time import get_current_time, VN_TIMEZONE
 
 class AttendanceStateService:
     @staticmethod
@@ -23,7 +19,6 @@ class AttendanceStateService:
         # =====================================================
         if now is None:
             now = get_current_time()
-
         # Normalize timezone
         if now.tzinfo is not None:
             now = now.astimezone(VN_TIMEZONE)

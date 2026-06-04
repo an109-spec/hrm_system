@@ -4,6 +4,7 @@ from flask import g
 from app.common.exceptions import ForbiddenError
 from app.models.salary import Salary
 from app.models.complaint import Complaint
+from app.constants.common import RoleName  # 🎯 Import class hằng số để đồng bộ hệ thống
 
 
 # =========================
@@ -12,7 +13,8 @@ from app.models.complaint import Complaint
 def is_self_or_hr(employee_id):
     user = g.user
 
-    if user.role.name in ['Admin', 'HR']:
+    # Sử dụng thuộc tính của RoleName thay vì chuỗi 'Admin', 'HR'
+    if user.role.name in [RoleName.ADMIN, RoleName.HR]:
         return True
 
     if g.employee and g.employee.id == int(employee_id):
@@ -30,7 +32,7 @@ def is_manager_of(employee_id):
     if not current_employee:
         return False
 
-    # lấy danh sách nhân viên dưới quyền
+    # Lấy danh sách nhân viên dưới quyền
     sub_ids = [e.id for e in current_employee.subordinates]
 
     return int(employee_id) in sub_ids
@@ -43,7 +45,7 @@ def manager_or_hr_required(employee_id_key='employee_id'):
             user = g.user
             target_employee_id = kwargs.get(employee_id_key)
 
-            if user.role.name in ['Admin', 'HR']:
+            if user.role.name in [RoleName.ADMIN, RoleName.HR]:
                 return func(*args, **kwargs)
 
             if is_manager_of(target_employee_id):
@@ -69,7 +71,7 @@ def salary_owner_or_hr_required(salary_id_key='salary_id'):
             if not salary:
                 raise ForbiddenError("Không tìm thấy phiếu lương")
 
-            if user.role.name in ['Admin', 'HR']:
+            if user.role.name in [RoleName.ADMIN, RoleName.HR]:
                 return func(*args, **kwargs)
 
             if g.employee and salary.employee_id == g.employee.id:
@@ -95,7 +97,7 @@ def complaint_owner_or_hr_required(complaint_id_key='complaint_id'):
             if not complaint:
                 raise ForbiddenError("Không tìm thấy khiếu nại")
 
-            if user.role.name in ['Admin', 'HR']:
+            if user.role.name in [RoleName.ADMIN, RoleName.HR]:
                 return func(*args, **kwargs)
 
             if g.employee and complaint.employee_id == g.employee.id:
@@ -117,10 +119,11 @@ def permission_required(permission_name):
             user = g.user
             role = user.role.name
 
+            # Đổi Key của Dictionary thành các thuộc tính class rõ ràng
             role_permissions = {
-                "Admin": ["*"],
+                RoleName.ADMIN: ["*"],
 
-                "HR": [
+                RoleName.HR: [
                     "employee:view",
                     "employee:update",
                     "salary:view",
@@ -129,12 +132,12 @@ def permission_required(permission_name):
                     "leave:approve"
                 ],
 
-                "Manager": [
+                RoleName.MANAGER: [
                     "employee:view_team",
                     "leave:approve"
                 ],
 
-                "Employee": [
+                RoleName.EMPLOYEE: [
                     "profile:view",
                     "salary:view_self",
                     "complaint:create"

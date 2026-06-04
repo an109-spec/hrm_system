@@ -29,9 +29,9 @@ from .dto import (
     UpdateContractDTO,
     UpdateEmployeeDTO,
 )
-from .service import HRService
-from app.modules.resignation_service import ResignationService
-from app.modules.overtime_reset_service import reset_overtime_request_flow
+from .employee_service import HRService
+from app.modules.leave_type.resignation_service import ResignationService
+#from app.modules.overtime_reset_service import reset_overtime_request_flow
 from app.models.overtime_request import OvertimeRequest
 
 def _current_user() -> User | None:
@@ -444,6 +444,7 @@ def overtime_review_api(attendance_id: int):
         return jsonify(HRService.review_overtime(dto, actor_user_id=session.get("user_id")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+'''
 @hr_bp.route("/api/attendance/overtime/<int:overtime_id>/reset", methods=["POST"])
 def overtime_reset_api(overtime_id: int):
     guard = _guard_hr_access()
@@ -451,7 +452,7 @@ def overtime_reset_api(overtime_id: int):
         return jsonify({"error": "forbidden"}), 403
     row = OvertimeRequest.query.get_or_404(overtime_id)
     return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=session.get("user_id"), source="hr"))
-
+'''
 
 
 @hr_bp.route("/api/attendance/abnormal", methods=["GET"])

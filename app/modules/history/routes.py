@@ -1,50 +1,50 @@
-from flask import jsonify, request, session
+from flask import jsonify, request, g
 from . import history_bp
-from .service import HistoryService
+from app.modules.history.service import HistoryService
+from app.common.security.decorators import auth_required, role_required
+from app.constants.common import RoleName
+from app.common.exceptions import NotFoundError, PermissionError
 
+# 1. Route cho cá nhân
+@history_bp.route("/my-timeline", methods=["GET"])
+@auth_required
+def get_my_timeline():
+    try:
+        # Lấy dữ liệu của chính người đang đăng nhập từ g.user.id
+        data = HistoryService.get_personal_timeline(g.user.id)
+        return jsonify({"status": "success", "data": data}), 200
+    except Exception as e:
+        # Frontend sẽ nhận được message này và hiển thị Swal.fire({icon: 'error', text: e})
+        return jsonify({"status": "error", "message": str(e)}), 400
 
-def get_user():
-    return session.get("user_id")
+# 2. Route cho Manager
+@history_bp.route("/manager/team", methods=["GET"])
+@auth_required
+@role_required(RoleName.MANAGER, RoleName.HR, RoleName.ADMIN)
+def get_team_timeline():
+    try:
+        page = request.args.get('page', 1, type=int)
+        data = HistoryService.get_manager_subordinates_timeline(g.employee, page=page)
+        return jsonify({"status": "success", "data": data}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
-
-# =========================
-# GET EMPLOYEE TIMELINE
-# =========================
-@history_bp.route("/employee/<int:employee_id>", methods=["GET"])
-def get_employee_history(employee_id):
-    data = HistoryService.get_employee_timeline(employee_id)
-    return jsonify(data)
-
-
-# =========================
-# GET MY HISTORY
-# =========================
-@history_bp.route("/me", methods=["GET"])
-def get_my_history():
-    user_id = get_user()
-
-    # giả sử employee_id = user_id mapping (tuỳ hệ thống mày)
-    data = HistoryService.get_employee_timeline(user_id)
-    return jsonify(data)
-
-
-# =========================
-# CREATE MANUAL LOG (ADMIN/DEBUG)
-# =========================
-@history_bp.route("/log", methods=["POST"])
-def create_log():
-    body = request.json
-
-    log = HistoryService.log_event(
-        action=body.get("action"),
-        employee_id=body.get("employee_id"),
-        entity_type=body.get("entity_type"),
-        entity_id=body.get("entity_id"),
-        description=body.get("description"),
-        performed_by=get_user()
-    )
-
-    return jsonify({
-        "message": "log created",
-        "id": log.id
-    })
+# 3. Route cho Admin/HR
+@history_bp.route("/admin/logs", methods=["GET"])
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_audit_logs():
+    try:
+        page = request.args.get('page', 1, type=int)
+        emp_name = request.args.get('employee_name')
+        action = request.args.get('action')
+        
+        data = HistoryService.get_system_logs(
+            current_user=g.user, 
+            page=page, 
+            employee_name=emp_name, 
+            action_type=action
+        )
+        return jsonify({"status": "success", "data": data}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400

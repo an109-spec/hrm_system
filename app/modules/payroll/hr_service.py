@@ -1,0 +1,1014 @@
+import csv
+from datetime import datetime, time
+from decimal import Decimal, ROUND_HALF_UP
+import io
+from operator import or_
+
+from sqlalchemy import and_, asc, desc, or_
+from sqlalchemy.orm import joinedload
+from app.constants.attendance import AttendanceConstants, WorkConfig, AttendanceStatus
+from app.constants.payroll import ConfigLockStatus, SalaryComplaintStatus, SalarySettings, SalaryStatus
+from app.extensions.db import db
+from app.constants.common import RoleName
+from app.models.allowance import EmployeeAllowance
+from app.models.complaint import Complaint
+from app.models.attendance import Attendance
+from app.models.employee import Employee
+from app.models.notification import Notification
+from app.models.role import Role
+from app.models.salary import Salary
+from app.models.contract import Contract
+from app.models.history import HistoryLog
+from app.constants.contract import ContractStatus
+from app.models.user import User
+from app.models.user import User
+from app.modules.payroll.admin_service import PayrollPolicyService
+from app.utils.date_utils import get_month_range
+from app.utils.time import _normalize, get_current_time
+from .base_service import PersonalPayrollService
+
+class TaxRules:
+    DEFAULT_MEAL_LIMIT = 730_000
+    DEFAULT_FUEL_LIMIT = 500_000
+class HR_payroll_service(PersonalPayrollService):
+    ################################################################################
+    #TTính toán số tiền thực nhận, thuế, phụ cấp, và cập nhật lương theo tháng.
+    ################################################################################
+    @staticmethod
+    def tax_by_bracket(taxable_income: Decimal, brackets: list[dict]) -> Decimal:
+        """
+        Tính thuế TNCN theo phương pháp lũy tiến từng phần.
+        Công thức: Thuế = Thu nhập tính thuế * Thuế suất - Khấu trừ nhanh
+        """
+        if taxable_income <= 0:
+            return Decimal("0")
+        selected = None
+        for b in brackets:
+            from_val = Decimal(str(b["from"]))
+            to_val = Decimal(str(b["to"]))
+            if taxable_income > from_val and taxable_income <= to_val:
+                selected = b
+                break
+        if not selected:
+            selected = brackets[-1]
+        rate = Decimal(str(selected["rate_percent"])) / Decimal("100")
+        quick_deduction = Decimal(str(selected["quick_deduction"]))
+        tax = (taxable_income * rate) - quick_deduction
+        return max(Decimal("0"), tax).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+ 
+    @staticmethod
+    def sum_allowance(employee_id: int) -> dict:
+        rows = EmployeeAllowance.query.filter_by(employee_id=employee_id, status=True, is_deleted=False).all()
+        policy = PayrollPolicyService.get_policy().get("tax_free_allowances", {})
+        LIMIT_CONFIG = {
+            "meal": ("meal_allowance", TaxRules.DEFAULT_MEAL_LIMIT),
+            "fuel": ("fuel_allowance", TaxRules.DEFAULT_FUEL_LIMIT)
+        }
+        totals = {"total": Decimal("0"), "taxable": Decimal("0"), "tax_free": Decimal("0")}
+        for row in rows:
+            amount = Decimal(str(row.final_amount or 0))
+            totals["total"] += amount
+            if row.allowance_type.is_taxable:
+                totals["taxable"] += amount
+                continue
+            limit = Decimal("0")
+            name_lower = row.allowance_type.name.lower()
+            for key, (config_key, default_val) in LIMIT_CONFIG.items():
+                if key in name_lower:
+                    limit = Decimal(str(policy.get(config_key) or default_val))
+                    break
+            if limit > 0 and amount > limit:
+                totals["taxable"] += (amount - limit)
+                totals["tax_free"] += limit
+            else:
+                totals["tax_free"] += amount
+        return totals
+
+    @staticmethod
+    def calculate_insurance(base_salary_for_ins: Decimal, policy: dict = None) -> dict:
+        """
+        Tính toán bảo hiểm. Nếu không truyền policy
+        """
+        if policy is None:
+            policy = PayrollConfig.get_default()
+        ins_config = policy.get("insurance", {})
+        salary_base = base_salary_for_ins 
+        social_percent = Decimal(str(ins_config.get("social_percent", 0)))
+        health_percent = Decimal(str(ins_config.get("health_percent", 0)))
+        unemp_percent = Decimal(str(ins_config.get("unemployment_percent", 0)))
+        social_ins = salary_base * (social_percent / Decimal("100"))
+        health_ins = salary_base * (health_percent / Decimal("100"))
+        unemp_ins = salary_base * (unemp_percent / Decimal("100"))
+        return {
+            "social": social_ins.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            "health": health_ins.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            "unemployment": unemp_ins.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            "total": (social_ins + health_ins + unemp_ins).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        }
+
+    @staticmethod
+    def calculate_attendance_penalty(employee_id: int, month: int, year: int, base_salary: Decimal, standard_days: int) -> dict:
+        """
+        Tính tổng tiền phạt đi muộn/về sớm của nhân viên trong tháng.
+        Trả về: {"total": Decimal, "details": list}
+        """
+        start_date, end_date = get_month_range(month, year)
+        attendances = Attendance.query.filter(
+            Attendance.employee_id == employee_id,
+            Attendance.date >= start_date,
+            Attendance.date <= end_date,
+            Attendance.late_minutes > 0,
+            Attendance.is_deleted.is_(False)
+        ).all()
+        total_penalty = Decimal("0")
+        details = []
+        for att in attendances:
+            rule = AttendanceConstants.get_late_penalty(att.late_minutes)
+            penalty_amount = Decimal("0")
+            if rule["is_half_day"]:
+                penalty_amount = (base_salary / Decimal(str(standard_days))) * Decimal("0.5")
+            else:
+                penalty_amount = Decimal(str(rule["penalty_amount"]))
+            total_penalty += penalty_amount
+            if penalty_amount > 0:
+                details.append({
+                    "date": str(att.date),
+                    "late_minutes": att.late_minutes,
+                    "amount": float(penalty_amount),
+                    "reason": rule["message"]
+                })
+        return {"total": total_penalty, "details": details}
+    
+    @staticmethod
+    def get_total_dependent_deduction(employee_id: int) -> Decimal:
+        """
+        Tính tổng số tiền giảm trừ cho người phụ thuộc của một nhân viên.
+        """
+        policy = PayrollPolicyService.get_policy()
+        deduction_per_person = Decimal(str(policy.get("deduction", {}).get("dependent_per_person", 4400000)))
+        count = PayrollPolicyService._dependent_count(employee_id)
+        return deduction_per_person * Decimal(str(count))
+
+    @staticmethod
+    def _compute_salary_employee(employee: Employee, month: int, year: int) -> tuple[Salary, dict]:
+        """
+        Tính lương theo giờ cho nhân viên (role = EMPLOYEE).
+
+        Công thức gross:
+            regular_hours = số ngày công × 8  (từ calculate_regular_work_units)
+            ot_hours      = tổng giờ OT đã nhân hệ số (1.5/2.0/3.0) theo từng loại ngày
+            gross         = (regular_hours + ot_hours) × FIXED_HOURLY_RATE (50.000đ)
+
+        Thực nhận = gross + tổng phụ cấp - bảo hiểm NLĐ - thuế TNCN - phạt đi muộn
+        """
+        policy   = PayrollPolicyService.get_policy()
+        brackets = policy.get("tax_brackets", [])
+        contract = (
+            Contract.query.filter(
+                Contract.employee_id == employee.id,
+                Contract.status == ContractStatus.ACTIVE
+            )
+            .order_by(Contract.start_date.desc(), Contract.id.desc())
+            .first()
+        )
+        if not contract:
+            raise ValueError(f"{employee.full_name} không có hợp đồng đang hiệu lực (active)")
+
+        # ------------------------------------------------------------------ #
+        # 2. Số giờ làm việc trong tháng                                      #
+        #    _attendance_metrics trả về:                                      #
+        #      regular_hours = work_days × 8  (chưa nhân hệ số gì)           #
+        #      ot_hours      = giờ OT đã nhân hệ số (after_shift/weekend/holiday) #
+        # ------------------------------------------------------------------ #
+        metrics     = HR_payroll_service._attendance_metrics([employee.id], month, year)
+        emp_metrics = metrics.get(employee.id, {"regular_hours": 0.0, "ot_hours": 0.0})
+
+        regular_hours = Decimal(str(emp_metrics["regular_hours"]))  # vd: 22 ngày × 8 = 176h
+        ot_hours      = Decimal(str(emp_metrics["ot_hours"]))       # vd: 4h × 1.5 = 6h quy đổi
+
+        hourly_rate   = SalarySettings.FIXED_HOURLY_RATE            # 50.000đ/h
+
+        # Gross = (giờ thường + giờ OT quy đổi) × đơn giá giờ
+        gross_regular = regular_hours * hourly_rate
+        gross_ot      = ot_hours      * hourly_rate   # ot_hours đã × hệ số, chỉ × đơn giá
+        gross_salary  = gross_regular + gross_ot
+
+        # ------------------------------------------------------------------ #
+        # 3. Phụ cấp                                                          #
+        # ------------------------------------------------------------------ #
+        allowance_info   = HR_payroll_service.sum_allowance(employee.id)
+        total_allowance  = allowance_info["total"]
+        taxable_allowance  = allowance_info["taxable"]
+        tax_free_allowance = allowance_info["tax_free"]
+
+        # ------------------------------------------------------------------ #
+        # 4. Bảo hiểm — tính trên lương hợp đồng (base_salary trong contract) #
+        #    Fallback về gross nếu contract không có base_salary              #
+        # ------------------------------------------------------------------ #
+        base_salary_for_ins = HR_payroll_service._decimal(contract.base_salary) or gross_salary
+        insurance           = HR_payroll_service.calculate_insurance(base_salary_for_ins, policy)
+        total_insurance     = insurance["total"]
+
+        # ------------------------------------------------------------------ #
+        # 5. Phạt đi muộn / về sớm                                           #
+        #    standard_days lấy từ WorkConfig để nhất quán với hệ thống       #
+        # ------------------------------------------------------------------ #
+        standard_days = policy.get("standard_work_days", WorkConfig.STANDARD_WORKING_DAYS)
+        penalty_info  = HR_payroll_service.calculate_attendance_penalty(
+            employee.id, month, year, gross_salary, standard_days
+        )
+        total_penalty = penalty_info["total"]
+
+        # ------------------------------------------------------------------ #
+        # 6. Giảm trừ thuế TNCN                                              #
+        # ------------------------------------------------------------------ #
+        personal_deduction  = Decimal(str(
+            policy.get("deduction", {}).get("personal", 11_000_000)
+        ))
+        dependent_deduction = HR_payroll_service.get_total_dependent_deduction(employee.id)
+
+        # Thu nhập tính thuế = gross + phụ cấp chịu thuế - BH - giảm trừ cá nhân - giảm trừ phụ thuộc
+        taxable_income = (
+            gross_salary
+            + taxable_allowance
+            - total_insurance
+            - personal_deduction
+            - dependent_deduction
+        )
+        taxable_income = max(Decimal("0"), taxable_income)
+
+        # ------------------------------------------------------------------ #
+        # 7. Thuế TNCN (lũy tiến từng phần)                                  #
+        # ------------------------------------------------------------------ #
+        pit_tax = HR_payroll_service.tax_by_bracket(taxable_income, brackets)
+
+        # ------------------------------------------------------------------ #
+        # 8. Thực nhận                                                        #
+        # ------------------------------------------------------------------ #
+        net_salary = gross_salary + total_allowance - total_insurance - pit_tax - total_penalty
+        salary_record = Salary(
+            employee_id          = employee.id,
+            month                = month,
+            year                 = year,
+            gross_salary         = gross_salary.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            total_allowance      = total_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            taxable_allowance    = taxable_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            tax_free_allowance   = tax_free_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            insurance_employee   = total_insurance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            personal_deduction   = personal_deduction.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            dependent_deduction  = dependent_deduction.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            taxable_income       = taxable_income.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            pit_tax              = pit_tax,
+            attendance_penalty   = total_penalty.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            net_salary           = net_salary.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+        )
+
+        # ------------------------------------------------------------------ #
+        # 10. Breakdown chi tiết (log / hiển thị phiếu lương)                #
+        # ------------------------------------------------------------------ #
+        breakdown = {
+            "employee_id":   employee.id,
+            "full_name":     employee.full_name,
+            "month":         month,
+            "year":          year,
+            # --- Giờ công ---
+            "hourly_rate":   float(hourly_rate),
+            "regular_hours": float(regular_hours),   # giờ hành chính thực tế
+            "ot_hours_weighted": float(ot_hours),    # giờ OT đã quy đổi hệ số
+            # --- Lương gộp ---
+            "gross_regular": float(gross_regular),
+            "gross_ot":      float(gross_ot),
+            "gross_salary":  float(gross_salary),
+            # --- Phụ cấp ---
+            "allowance": {
+                "total":     float(total_allowance),
+                "taxable":   float(taxable_allowance),
+                "tax_free":  float(tax_free_allowance),
+            },
+            # --- Bảo hiểm ---
+            "insurance": {
+                "base":         float(base_salary_for_ins),
+                "social":       float(insurance["social"]),
+                "health":       float(insurance["health"]),
+                "unemployment": float(insurance["unemployment"]),
+                "total":        float(total_insurance),
+            },
+            # --- Giảm trừ thuế ---
+            "deductions": {
+                "personal":  float(personal_deduction),
+                "dependent": float(dependent_deduction),
+            },
+            "taxable_income": float(taxable_income),
+            "pit_tax":        float(pit_tax),
+            # --- Phạt ---
+            "attendance_penalty": {
+                "total":   float(total_penalty),
+                "details": penalty_info["details"],
+            },
+            # --- Thực nhận ---
+            "net_salary": float(net_salary),
+        }
+
+        return salary_record, breakdown
+    
+    @staticmethod
+    def _compute_salary(employee: Employee, month: int, year: int) -> tuple[Salary, dict]:
+        """
+        Tính lương cố định cho HR, Admin, Manager.
+        Lương cơ bản lấy từ SalarySettings.BASE_SALARY_BY_ROLE theo role.
+        Không bắt chấm công, không phạt đi muộn.
+        """
+        policy = PayrollPolicyService.get_policy()
+        brackets = policy.get("tax_brackets", [])
+
+        # Xác định role và lương cơ bản
+        role_name = employee.user.role.name if (employee.user and employee.user.role) else None
+        base_salary = SalarySettings.BASE_SALARY_BY_ROLE.get(role_name)
+        if base_salary is None:
+            raise ValueError(
+                f"{employee.full_name} có role '{role_name}' không có mức lương cố định được cấu hình"
+            )
+
+        # Phụ cấp
+        allowance_info = HR_payroll_service.sum_allowance(employee.id)
+        total_allowance = allowance_info["total"]
+        taxable_allowance = allowance_info["taxable"]
+        tax_free_allowance = allowance_info["tax_free"]
+
+        # Bảo hiểm (tính trên lương cơ bản)
+        insurance = HR_payroll_service.calculate_insurance(base_salary, policy)
+        total_insurance = insurance["total"]
+
+        # Giảm trừ
+        personal_deduction = Decimal(str(policy.get("deduction", {}).get("personal", 11000000)))
+        dependent_deduction = HR_payroll_service.get_total_dependent_deduction(employee.id)
+
+        # Thu nhập tính thuế
+        taxable_income = (
+            base_salary + taxable_allowance
+            - total_insurance
+            - personal_deduction
+            - dependent_deduction
+        )
+        taxable_income = max(Decimal("0"), taxable_income)
+        # Thuế TNCN
+        pit_tax = HR_payroll_service.tax_by_bracket(taxable_income, brackets)
+        # Thực nhận (không trừ phạt vì không chấm công)
+        net_salary = base_salary + total_allowance - total_insurance - pit_tax
+        # Ghi nhận bản ghi Salary
+        salary_record = Salary(
+            employee_id=employee.id,
+            month=month,
+            year=year,
+            gross_salary=base_salary.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            total_allowance=total_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            taxable_allowance=taxable_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            tax_free_allowance=tax_free_allowance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            insurance_employee=total_insurance.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            personal_deduction=personal_deduction.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            dependent_deduction=dependent_deduction.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            taxable_income=taxable_income.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            pit_tax=pit_tax,
+            attendance_penalty=Decimal("0"),
+            net_salary=net_salary.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+        )
+        breakdown = {
+            "employee_id": employee.id,
+            "full_name": employee.full_name,
+            "role": role_name,
+            "month": month,
+            "year": year,
+            "base_salary": float(base_salary),
+            "allowance": {
+                "total": float(total_allowance),
+                "taxable": float(taxable_allowance),
+                "tax_free": float(tax_free_allowance),
+            },
+            "insurance": {
+                "social": float(insurance["social"]),
+                "health": float(insurance["health"]),
+                "unemployment": float(insurance["unemployment"]),
+                "total": float(total_insurance),
+            },
+            "deductions": {
+                "personal": float(personal_deduction),
+                "dependent": float(dependent_deduction),
+            },
+            "taxable_income": float(taxable_income),
+            "pit_tax": float(pit_tax),
+            "attendance_penalty": None,  # Không áp dụng
+            "net_salary": float(net_salary),
+        }
+        return salary_record, breakdown
+
+    ''''
+    tính lương hàng loạt
+    '''
+    @staticmethod
+    def calculate_monthly_payroll(
+        month: int,
+        year: int,
+        department_id: int | None = None,
+        actor_user_id: int | None = None
+    ) -> dict:
+        """
+        Tính lương hàng loạt cho toàn bộ nhân viên (hoặc theo phòng ban).
+        Các bản ghi mới sẽ ở trạng thái DRAFT.
+        """
+        # Giả sử bạn có hàm kiểm tra trạng thái khóa từ PayrollPolicyService
+        # Nếu đang khóa, không cho phép tính lương mới
+        current_lock_status = PayrollPolicyService.get_setting("config_edit_locked") # Hàm này tùy thuộc vào cách bạn get setting
+        if current_lock_status == ConfigLockStatus.LOCKED:
+            raise ValueError("Hệ thống đang khóa cấu hình lương, không thể tính lương mới.")
+        query = Employee.query.filter_by(is_deleted=False)
+        if department_id:
+            query = query.filter(Employee.department_id == department_id)
+        employees = query.order_by(Employee.full_name.asc()).all()
+        computed = []
+        errors = []
+        for employee in employees:
+            try:
+                role_name = (
+                    employee.user.role.name
+                    if (employee.user and employee.user.role)
+                    else None
+                )
+                # Kiểm tra đã tính lương tháng này chưa
+                existing = Salary.query.filter_by(
+                    employee_id=employee.id,
+                    month=month,
+                    year=year,
+                    is_deleted=False
+                ).first()
+                
+                if existing:
+                    errors.append({
+                        "employee_id": employee.id,
+                        "full_name": employee.full_name,
+                        "reason": f"Đã tồn tại bản ghi lương tháng {month}/{year}",
+                    })
+                    continue
+                # Tính lương
+                if role_name == RoleName.EMPLOYEE:
+                    salary, detail = HR_payroll_service._compute_salary_employee(
+                        employee, month, year
+                    )
+                elif role_name in (RoleName.HR, RoleName.ADMIN, RoleName.MANAGER):
+                    salary, detail = HR_payroll_service._compute_salary(
+                        employee, month, year
+                    )
+                else:
+                    errors.append({
+                        "employee_id": employee.id,
+                        "full_name": employee.full_name,
+                        "reason": f"Role '{role_name}' không được hỗ trợ tính lương",
+                    })
+                    continue
+                # 2. GÁN TRẠNG THÁI MẶC ĐỊNH LÀ DRAFT
+                salary.status = SalaryStatus.DRAFT
+                db.session.add(salary)
+                db.session.flush()
+                HR_payroll_service._append_audit_log(
+                    salary=salary,
+                    action="CALCULATE_PAYROLL",
+                    description=f"Tính lương tháng {month}/{year} cho {employee.full_name} (Status: {SalaryStatus.DRAFT})",
+                    user_id=actor_user_id,
+                )
+                computed.append({"employee_id": employee.id, **detail})
+            except ValueError as e:
+                errors.append({
+                    "employee_id": employee.id,
+                    "full_name": employee.full_name,
+                    "reason": str(e),
+                })
+                continue
+
+        db.session.commit()
+
+        return {
+            "processed": len(computed),
+            "failed": len(errors),
+            "items": computed,
+            "errors": errors,
+        }
+    ################################################################################
+    #Tính giờ, trạng thái chấm công, điều chỉnh check-in/out và lưu vết thay đổi.
+    ################################################################################
+    @staticmethod
+    def _attendance_metrics(employee_ids: list, month: int, year: int) -> dict:
+        """
+        Tổng hợp số giờ làm việc (regular_hours, ot_hours) của danh sách nhân viên trong 1 tháng.
+        """
+        HOURS_PER_DAY = 8
+
+        regular_work_days = HR_payroll_service.get_department_regular_work_days(
+            employee_ids, month, year
+        )
+        ot_stats = HR_payroll_service.get_department_overtime_stats(
+            employee_ids, month, year
+        )
+        result = {}
+        for emp_id in set(employee_ids):
+            work_days = regular_work_days.get(emp_id, 0.0)
+            result[emp_id] = {
+                "regular_hours": work_days * HOURS_PER_DAY,  
+                "ot_hours": ot_stats.get(emp_id, 0.0),
+            }
+        return result
+
+    @staticmethod
+    def _attendance_status_from_record(record: Attendance | None, has_leave: bool) -> str:
+        """
+        Trạng thái chấm công dựa trên cấu hình hệ thống (WorkConfig) và hằng số (AttendanceConstants).
+        """
+        # 1. Trạng thái nghỉ phép
+        if has_leave:
+            return AttendanceStatus.LEAVE
+
+        # 2. Trạng thái vắng mặt
+        if not record:
+            return AttendanceStatus.ABSENT
+        # 3. Xử lý các trạng thái chờ hoàn tất ca
+        shift_status = record.normalized_shift_status
+        pending_statuses = {
+            AttendanceConstants.STATUS_REGULAR_DONE,
+            AttendanceConstants.STATUS_PENDING_OT,
+            AttendanceConstants.STATUS_PRE_OT_REST,
+            AttendanceConstants.STATUS_OT_CHECKIN_REQ,
+        }
+        if shift_status in pending_statuses:
+            return "ca_chinh_cho_hoan_tat" 
+        # 4. Kiểm tra dữ liệu bất thường
+        if not record.check_in or not record.check_out:
+            return "abnormal" # Có thể cân nhắc thêm vào AttendanceStatus nếu cần
+
+        # 5. Logic thời gian sử dụng WorkConfig
+        # Lấy time object từ datetime để so sánh
+        check_in_time = record.check_in.time()
+        check_out_time = record.check_out.time()
+
+        is_late = check_in_time > WorkConfig.WORKDAY_START
+        is_early = check_out_time < WorkConfig.WORKDAY_END
+
+        # 6. Xác định trạng thái cuối cùng
+        # Kiểm tra OT
+        if HR_payroll_service._decimal(record.overtime_hours) > 0:
+            return "overtime"
+
+        # Sử dụng AttendanceStatus.LATE nếu đi muộn hoặc về sớm
+        if is_late or is_early:
+            return AttendanceStatus.LATE
+
+        # Mặc định là Có mặt (Present)
+        return AttendanceStatus.PRESENT
+    
+    @staticmethod
+    def _is_attendance_required(employee: Employee) -> bool:
+        """
+        Chỉ nhân viên (Employee) mới bị bắt chấm công.
+        Manager, HR, Admin không cần chấm công.
+        """
+        if not employee.user or not employee.user.role:
+            return False
+        return employee.user.role.name == RoleName.EMPLOYEE
+    
+
+    '''
+    Bước 3: Sửa lỗi dữ liệu
+    '''
+    @staticmethod
+    def resolve_attendance_complaint(
+        attendance_id: int,
+        check_in: str | None = None,
+        check_out: str | None = None,
+        attendance_type: str | None = None,
+        shift_status: str | None = None,
+        note: str = "",
+        actor_user_id: int | None = None
+    ) -> dict:
+        record = Attendance.query.get(attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+        before_snapshot = {
+            "check_in": str(record.check_in),
+            "check_out": str(record.check_out),
+            "type": record.attendance_type,
+            "status": record.shift_status
+        }
+        if check_in:
+            record.check_in = _normalize(check_in)
+        if check_out:
+            record.check_out = _normalize(check_out)
+        if record.check_in and record.check_out:
+            if record.check_out < record.check_in:
+                raise ValueError("Giờ check-out không được nhỏ hơn check-in")
+            
+            delta = record.check_out - record.check_in
+            record.working_hours = Decimal(str(delta.total_seconds() / 3600)).quantize(Decimal("0.01"))
+        if attendance_type:
+            record.set_attendance_type(attendance_type)
+        if shift_status:
+            record.set_shift_status(shift_status)
+        description = (
+            f"HR điều chỉnh từ khiếu nại. "
+            f"Trước: {before_snapshot}. "
+            f"Sau: check_in={record.check_in}, check_out={record.check_out}, "
+            f"type={record.attendance_type}, status={record.shift_status}. "
+            f"Note: {note}"
+        )
+        HistoryLog.append(
+            employee_id=record.employee_id,
+            action="COMPLAINT_ADJUSTMENT",
+            entity_type="attendance",
+            entity_id=record.id,
+            description=description,
+            performed_by=actor_user_id
+        )
+        db.session.commit()
+        return {"success": True, "attendance_id": record.id}
+    
+    '''
+    Bước 1: HR truy cập danh sách để xem tổng quan các khiếu nại đang tồn tại
+    '''
+    @staticmethod
+    def get_payroll_complaints(
+        month: int | None = None, 
+        year: int | None = None, 
+        status: str | None = None
+    ) -> list[dict]:
+        """
+        HR truy cập danh sách khiếu nại.
+        - Có thể lọc theo tháng/năm.
+        - Có thể lọc theo trạng thái (vd: IN_PROGRESS để lấy danh sách cần HR xử lý).
+        """
+        query = Complaint.query.join(Employee, Complaint.employee_id == Employee.id).filter(
+            or_(Complaint.salary_id.isnot(None), Complaint.type.ilike("%salary%"))
+        )
+        # 1. Lọc theo trạng thái (HR thường quan tâm đến IN_PROGRESS)
+        if status:
+            query = query.filter(Complaint.status == status)
+        # 2. Lọc theo tháng/năm (nếu có)
+        if month and year:
+            query = query.join(Salary, Complaint.salary_id == Salary.id, isouter=True).filter(
+                or_(Salary.id.is_(None), and_(Salary.month == month, Salary.year == year))
+            )
+        # 3. Lấy dữ liệu
+        complaints = query.order_by(Complaint.created_at.desc()).limit(100).all()
+        # 4. Trả về thông tin chi tiết cho HR
+        return [
+            {
+                "id": item.id,
+                "employee": item.employee.full_name if item.employee else "--",
+                "title": item.title,
+                "status": item.status,
+                "admin_reply": item.admin_reply,  # Quan trọng: Lời nhắn của Manager
+                "handled_by": item.handled_by,    # Quan trọng: Manager nào đã duyệt
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "resolved_at": item.resolved_at.isoformat() if item.resolved_at else None,
+            }
+            for item in complaints
+        ]
+    '''
+Bước 4: Giải quyết và Chốt sổ 
+chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (pending) sang các trạng thái kết thúc
+    '''
+    @staticmethod
+    def handle_complaint(
+        complaint_id: int,
+        action: str, 
+        handler_employee_id: int | None = None,
+        actor_user_id: int | None = None,
+        message: str = "",
+        payroll_status: str | None = None
+    ) -> dict:
+        complaint = Complaint.query.get(complaint_id)
+        if not complaint:
+            raise ValueError("Không tìm thấy khiếu nại")
+        valid_actions = {SalaryComplaintStatus.IN_PROGRESS, SalaryComplaintStatus.RESOLVED, SalaryComplaintStatus.REJECTED}
+        if action not in valid_actions:
+            raise ValueError(f"Trạng thái không hợp lệ: {action}")
+        complaint.status = action
+        complaint.handled_by = handler_employee_id
+        
+        if action == SalaryComplaintStatus.RESOLVED:
+            complaint.resolved_at = get_current_time()
+        if action in {SalaryComplaintStatus.RESOLVED, SalaryComplaintStatus.REJECTED}:
+            notification = HR_payroll_service.create_complaint_notification(
+                employee_id=complaint.employee_id, 
+                complaint_id=complaint.id, 
+                status=action,
+                message=message
+            )
+            db.session.flush() 
+            complaint.notification_id = notification.id
+        if complaint.salary_id:
+            salary = Salary.query.get(complaint.salary_id)
+            if salary:
+                if payroll_status:
+                    salary.status = payroll_status
+                
+                HR_payroll_service._append_audit_log(
+                    salary=salary,
+                    action="HANDLE_PAYROLL_COMPLAINT",
+                    description=f"Xử lý khiếu nại #{complaint.id}: {action}. Ghi chú: {message}".strip(),
+                    user_id=actor_user_id,
+                )
+        db.session.commit()
+        return {"id": complaint.id, "status": complaint.status}
+
+    @staticmethod
+    def create_complaint_notification(employee_id: int, complaint_id: int, status: str, message: str = ""):
+        """
+        Tạo thông báo gửi tới nhân viên về kết quả khiếu nại.
+        """
+        status_label = "đã được giải quyết" if status == SalaryComplaintStatus.RESOLVED else "đã bị từ chối"
+        content = f"Khiếu nại #{complaint_id} của bạn {status_label}. {message}".strip()
+        notification = Notification(
+            user_id=employee_id,
+            title=f"Kết quả khiếu nại #{complaint_id}",
+            message=content,
+            entity_type="complaint",
+            entity_id=complaint_id
+        )
+        db.session.add(notification)
+        return notification
+
+    '''Bước 2: Điều tra và Ghi chú
+    Khi HR bắt đầu kiểm tra một khiếu nại (ví dụ: nhân viên khiếu nại thiếu giờ làm), 
+    họ sẽ thực hiện kiểm tra dữ liệu thực tế. 
+    Hàm này cho phép HR lưu lại các ghi chú điều tra
+    '''
+    @staticmethod
+    def save_investigation_note(
+        attendance_id: int, 
+        note: str, 
+        actor_user_id: int,
+        complaint_id: int | None = None
+    ) -> dict:
+        record = Attendance.query.get(attendance_id)
+        if not record:
+            raise ValueError("Không tìm thấy bản ghi chấm công")
+        context_prefix = f"[Complaint ID: {complaint_id}] " if complaint_id else "[Direct Investigation] "
+        full_description = f"{context_prefix}{note.strip()}"
+        db.session.add(
+            HistoryLog(
+                employee_id=record.employee_id,
+                action="INVESTIGATION_NOTE",
+                entity_type="attendance",
+                entity_id=record.id,
+                description=full_description,
+                performed_by=actor_user_id,
+            )
+        )
+        db.session.commit()
+        return {"attendance_id": record.id, "success": True}
+
+    @staticmethod
+    def hr_complaint_detail(complaint_id: int) -> dict:
+        """Xem chi tiết khiếu nại (Dành cho HR - Xem mọi đơn)"""
+        complaint = Complaint.query.filter_by(
+            id=complaint_id, 
+            is_deleted=False
+        ).first()
+        
+        if not complaint:
+            raise ValueError("Không tìm thấy khiếu nại")
+            
+        file_list = []
+        for file in complaint.attachments.all():
+            file_list.append({
+                "file_name": file.file_name,
+                "file_url": f"/static/uploads/{file.file_url}",
+                "file_type": file.file_type
+            })
+
+        return {
+            "id": complaint.id,
+            "title": complaint.title,
+            "description": complaint.description,
+            "type": complaint.type,
+            "status": complaint.status,
+            "status_label": SalaryComplaintStatus.LABELS.get(complaint.status),
+            "priority": complaint.priority,
+            "created_at": complaint.created_at.strftime("%d/%m/%Y %H:%M") if complaint.created_at else None,
+            "admin_reply": complaint.admin_reply,
+            "resolved_at": complaint.resolved_at.strftime("%d/%m/%Y %H:%M") if complaint.resolved_at else None,
+            "handler_name": complaint.handler.full_name if complaint.handler else "Đang chờ phân công",
+            "attachments": file_list,
+            "salary_period": f"Tháng {complaint.salary.month:02d}/{complaint.salary.year}" if complaint.salary else "N/A"
+        }
+
+    ################################################################################
+    #Quản lý vòng đời phiếu lương (duyệt, khiếu nại, xem danh sách, trạng thái).
+    ################################################################################
+
+    @staticmethod
+    def get_payroll_list(
+        month: int = None,
+        year: int = None,
+        department_id: int = None,
+        position_id: int = None,
+        role_name: str = None,
+        status: str = None,
+        search: str = None,
+        sort_by: str = "employee_name",
+        sort_order: str = "asc"
+    ) -> dict:
+        current_time = get_current_time()
+        month = month or current_time.month
+        year = year or current_time.year
+        query = Salary.query.join(Employee, Salary.employee_id == Employee.id)
+        if role_name:
+            query = query.join(Employee.user).join(User.role)
+        query = query.filter(
+            Salary.month == month,
+            Salary.year == year,
+            Employee.is_deleted.is_(False)
+        )
+        if department_id:
+            query = query.filter(Employee.department_id == department_id)
+        if position_id:
+            query = query.filter(Employee.position_id == position_id)
+        if role_name:
+            query = query.filter(Role.name == role_name)
+        if status and status != "all":
+            query = query.filter(Salary.status == status)
+        sort_map = {
+            "employee_name": Employee.full_name,
+            "net_salary": Salary.net_salary,
+            "status": Salary.status,
+            "basic_salary": Salary.basic_salary,
+            "department": Employee.department_id,
+        }
+        sort_column = sort_map.get(sort_by, Employee.full_name)
+        if sort_order.lower() == "desc":
+            query = query.order_by(desc(sort_column))
+        else:
+            query = query.order_by(asc(sort_column))
+        salaries = query.all()
+        rows = [HR_payroll_service._serialize_payroll(item) for item in salaries]
+        if search:
+            keyword = search.lower().strip()
+            rows = [
+                row for row in rows
+                if keyword in (row["employee_name"] or "").lower()
+                or keyword in (row["employee_code"] or "").lower()
+                or keyword in (row["department"] or "").lower()
+            ]
+        complaint_count = Complaint.query.filter(
+            or_(
+                Complaint.salary_id.in_([r["id"] for r in rows] or [0]), 
+                Complaint.type.ilike("%salary%")
+            ),
+            Complaint.status.in_(["pending", "in_progress"]),
+        ).count()
+        summary = {
+            "payroll_fund": sum(row["net_salary"] for row in rows),
+            "pending_approval": sum(1 for row in rows if row["status"] == "pending_approval"),
+            "complaint_count": complaint_count,
+            "missing_payroll": max(Employee.query.filter_by(is_deleted=False).count() - len(rows), 0),
+        }
+        return {"items": rows, "summary": summary}
+
+    @staticmethod
+    def get_payroll_detail(salary_id: int) -> dict:
+        """
+        Lấy chi tiết bảng lương bao gồm thông tin nhân viên, 
+        chi tiết tài chính, các điều chỉnh thủ công và lịch sử thao tác.
+        """
+        salary = Salary.query.options(
+            joinedload(Salary.employee).joinedload(Employee.department),
+            joinedload(Salary.employee).joinedload(Employee.position)
+        ).get(salary_id)
+        if not salary:
+            raise ValueError("Không tìm thấy bảng lương")
+        data = HR_payroll_service._serialize_payroll(salary)
+        note_data = salary.note_data
+        data["manual_adjustments"] = {
+            "allowances": note_data.get("manual_allowances", []),
+            "deductions": note_data.get("manual_deductions", []),
+            "note": salary.note 
+        }
+        data["audit_history"] = HR_payroll_service.payroll_audit_history(salary_id)
+        return data
+
+   
+    '''
+    Khi đã bấm "Gửi duyệt", dữ liệu phải được "đóng băng"
+    '''
+    @staticmethod
+    def submit_payroll_approval(salary_id: int, actor_user_id: int | None = None) -> dict:
+        # 1. Lấy thông tin bảng lương
+        salary = Salary.query.get(salary_id)
+        if not salary:
+            raise ValueError("Không tìm thấy bảng lương")
+        # Chỉ những trạng thái thuộc DRAFT, REJECTED, hoặc COMPLAINT mới được phép gửi duyệt
+        if not SalaryStatus.is_editable(salary.status):
+            raise ValueError(
+                f"Bảng lương đang ở trạng thái '{SalaryStatus.get_label(salary.status)}', "
+                "không thể gửi duyệt. Chỉ có thể gửi khi ở trạng thái Nháp, Bị từ chối hoặc Khiếu nại."
+            )
+        # 3. Kiểm tra tính mới nhất: Không cho phép gửi tháng cũ nếu đã có tháng mới hơn
+        latest_salary = Salary.query.filter_by(employee_id=salary.employee_id)\
+                                    .order_by(Salary.year.desc(), Salary.month.desc())\
+                                    .first()
+        if latest_salary and (salary.year < latest_salary.year or 
+                             (salary.year == latest_salary.year and salary.month < latest_salary.month)):
+            raise ValueError(
+                f"Không thể gửi duyệt bảng lương tháng {salary.month}/{salary.year} "
+                f"vì đã có dữ liệu tháng {latest_salary.month}/{latest_salary.year} mới hơn."
+            )
+        # 4. Cập nhật trạng thái sang PENDING
+        salary.status = SalaryStatus.PENDING 
+        # 5. Gửi thông báo cho TẤT CẢ ADMIN
+        admin_role = Role.query.filter_by(name=RoleName.ADMIN).first()
+        if admin_role:
+            admins = User.query.filter_by(role_id=admin_role.id).all()
+            for admin in admins:
+                new_note = Notification(
+                    user_id=admin.id,
+                    message=f"Nhân viên {salary.employee.full_name} cần duyệt bảng lương tháng {salary.month}/{salary.year}.",
+                )
+                db.session.add(new_note)
+        # 6. Audit Log
+        HR_payroll_service._append_audit_log(
+            salary=salary,
+            action="SUBMIT_PAYROLL_APPROVAL",
+            description=f"Gửi duyệt payroll tháng {salary.month}/{salary.year}",
+            user_id=actor_user_id,
+        )
+        db.session.commit()
+        return {"id": salary.id, "status": salary.status}
+
+    ################################################################################
+    #Tiện ích
+    ################################################################################
+    @staticmethod
+    def _serialize_payroll(salary: Salary) -> dict:
+        """
+        Chuyển đổi object Salary sang dict để trả về API.
+        Sử dụng trực tiếp các thuộc tính của model và thuộc tính note_data.
+        """
+        note_data = salary.note_data 
+        metrics = note_data.get("metrics", {})
+        breakdown = note_data.get("breakdown", {})
+        employee = salary.employee
+        return {
+            "id": salary.id,
+            "employee_id": employee.id if employee else None,
+            "employee_code": f"EMP{employee.id:05d}" if employee else "--",
+            "employee_name": employee.full_name if employee else "--",
+            "department": employee.department.name if (employee and employee.department) else "--",
+            "position": employee.position.job_title if (employee and employee.position) else "--",
+            "basic_salary": float(salary.basic_salary or 0),
+            "total_work_days": float(salary.total_work_days or 0),
+            "leave_days": metrics.get("leave_days", 0),
+            "overtime_hours": metrics.get("overtime_hours", 0),
+            "allowance": float(salary.total_allowance or 0),
+            "penalty": float(salary.penalty or 0),
+            "net_salary": float(salary.net_salary or 0),
+            "status": salary.status,
+            "status_label": SalaryStatus.get_label(salary.status),
+            "breakdown": breakdown,
+        }
+    
+    @staticmethod
+    def _decimal(value: object | None) -> Decimal:
+        if value in (None, ""):
+            return Decimal("0")
+        return Decimal(str(value))
+
+    @staticmethod
+    def _append_audit_log(*, salary: Salary, action: str, description: str, user_id: int | None) -> None:
+        HistoryLog.append(
+            employee_id=salary.employee_id,
+            action=action,
+            entity_type="salary",
+            entity_id=salary.id,
+            description=description,
+            performed_by=user_id
+        )
+        
+    @staticmethod
+    def payroll_audit_history(salary_id: int) -> list[dict]:
+        """
+        Lấy lịch sử thay đổi của phiếu lương.
+        """
+        logs = (
+            HistoryLog.query
+            .options(joinedload(HistoryLog.employee)) 
+            .filter_by(entity_type="salary", entity_id=salary_id)
+            .order_by(HistoryLog.created_at.desc())
+            .all()
+        )
+        return [
+            {
+                "id": log.id,
+                "action": log.action,
+                "description": log.description,
+                "performed_by_id": log.performed_by,
+                "performed_by_name": log.employee.full_name if log.employee else "System",
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]

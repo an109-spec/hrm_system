@@ -32,10 +32,10 @@ from app.models import (
     User,
 )
 from app.models.notification import Notification
-from app.modules.resignation_service import ResignationService
-from app.modules.payroll_policy import PayrollPolicyService
-from app.modules.overtime_reset_service import reset_overtime_request_flow
-from app.modules.hr.service import OvertimeApprovalService
+from app.modules.leave_type.resignation_service import ResignationService
+#from app.modules.payroll.service import PayrollPolicyService
+#from app.modules.attendance.overtime_service import reset_overtime_request_flow
+from app.modules.hr.employee_service import OvertimeApprovalService
 from app.models.complaint import ComplaintMessage
 from . import admin_bp
 from . import service as admin_service
@@ -1653,7 +1653,7 @@ def attendance_overtime_final_review(overtime_id: int):
         if message == "Không tìm thấy dữ liệu tăng ca":
             return jsonify({"error": message}), 404
         return jsonify({"error": message}), 400
-
+'''
 @admin_bp.post("/api/admin/attendance/overtime/<int:overtime_id>/reset")
 def attendance_overtime_reset(overtime_id: int):
     actor = _current_user()
@@ -1661,7 +1661,7 @@ def attendance_overtime_reset(overtime_id: int):
         return jsonify({"error": "only admin can reset overtime"}), 403
     row = OvertimeRequest.query.get_or_404(overtime_id)
     return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=actor.id if actor else None, source="admin"))
-
+'''
 
 @admin_bp.get("/api/admin/attendance/export")
 def attendance_export_csv():
@@ -1721,7 +1721,7 @@ PAYROLL_STATUS_LABELS = {
     "complaint": "Khiếu nại",
 }
 
-
+'''
 def _progressive_tax(taxable_income: Decimal) -> Decimal:
     policy = PayrollPolicyService.get_policy()
     return PayrollPolicyService.tax_by_bracket(taxable_income, policy["tax"]["brackets"])
@@ -2118,7 +2118,7 @@ def admin_salary_policy_restore():
         return jsonify({"success": True, "policy": data})
     except Exception:
         return jsonify({"error": "Dữ liệu history không thể restore"}), 400
-
+'''
 @admin_bp.put("/api/admin/system-settings/salary")
 def salary_setting_put():
     actor = _current_user()

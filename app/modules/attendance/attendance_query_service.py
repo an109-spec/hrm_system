@@ -2,12 +2,13 @@ from datetime import datetime, date, time, timedelta
 from calendar import monthrange
 from decimal import Decimal
 from types import SimpleNamespace
+from app.constants.leave import LeaveStatus
 from app.utils.time import get_current_time
 from app import db
 from app.common.exceptions import ValidationError
 
 from app.models.attendance import AttendanceType, Attendance, AttendanceStatus, AttendanceShiftStatus
-from app.models.leave import LeaveRequest, LeaveStatus
+from app.models.leave import LeaveRequest
 from app.models.leave import Holiday
 from app.models.employee import Employee
 from app.models.notification import Notification
@@ -20,11 +21,6 @@ from app.models import (
     Notification,
 )
 from app.constants.holidays import VN_FIXED_PUBLIC_HOLIDAYS, HolidayConfig
-from app.constants.payroll import (
-    REGULAR_DAY_RATE,
-    WEEKEND_RATE,
-    HOLIDAY_RATE,
-)
 class AttendanceCommandService:
     @staticmethod
     def normalize_status(status_name: str | None) -> str | None:

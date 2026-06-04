@@ -24,3 +24,15 @@ class HistoryLog(BaseModel):
     )
     def __repr__(self):
         return f"<HistoryLog {self.action} - Entity:{self.entity_type}:{self.entity_id}>"
+    @staticmethod
+    def append(employee_id, action, entity_type=None, entity_id=None, description=None, performed_by=None):
+        log = HistoryLog(
+            employee_id=employee_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            description=description,
+            performed_by=performed_by
+        )
+        db.session.add(log)
+        return log

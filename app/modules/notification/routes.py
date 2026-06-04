@@ -1,188 +1,186 @@
-from flask import request, jsonify
-from flask_login import login_required, current_user
+from flask import Blueprint, g, request, jsonify
 
-from . import notification_bp
-from .service import NotificationService
-from .dto import NotificationDTO
-from app.models.user import User
+from app.common.security.decorators import auth_required
 from app.models.notification import Notification
-from app.models.overtime_request import OvertimeRequest
-from app.models.attendance import Attendance
-from app.models.history import HistoryLog
+from app.modules.notification.notification_service import NotificationService
+from app.common.exceptions import NotFoundError
+from . import notification_bp
+
+def swal_success(title: str, message: str = "", data=None, status_code: int = 200):
+    payload = {
+        "icon": "success",
+        "title": title,
+        "text": message,
+    }
+    if data is not None:
+        payload["data"] = data
+    return jsonify(payload), status_code
+
+def swal_error(title: str, message: str = "", status_code: int = 400):
+    return jsonify({
+        "icon": "error",
+        "title": title,
+        "text": message,
+    }), status_code
+
+def swal_info(title: str, message: str = "", data=None, status_code: int = 200):
+    payload = {
+        "icon": "info",
+        "title": title,
+        "text": message,
+    }
+    if data is not None:
+        payload["data"] = data
+    return jsonify(payload), status_code
 
 
-# =========================
-# GET MY NOTIFICATIONS
-# =========================
-@notification_bp.route("/", methods=["GET"])
-@login_required
-def get_my_notifications():
-    limit = int(request.args.get("limit", 20))
-    only_unread = request.args.get("unread", "false").lower() == "true"
+# ─────────────────────────────────────────────
+# 1. GET /notifications
+#    Lấy danh sách thông báo (phân trang / limit)
+# ─────────────────────────────────────────────
+@notification_bp.route("", methods=["GET"])
+@auth_required
+def get_notifications():
+    """
+    Query params:
+        limit (int, default=50): Số lượng thông báo tối đa trả về
+    """
+    try:
+        limit = int(request.args.get("limit", 50))
+        if limit <= 0 or limit > 200:
+            return swal_error(
+                title="Tham số không hợp lệ",
+                message="limit phải nằm trong khoảng 1 – 200",
+                status_code=400
+            )
+    except (ValueError, TypeError):
+        return swal_error(
+            title="Tham số không hợp lệ",
+            message="limit phải là số nguyên dương",
+            status_code=400
+        )
 
-    notifications = NotificationService.get_by_user(
-        user_id=current_user.id,
-        limit=limit,
-        only_unread=only_unread
+    notifications = NotificationService.get_notifications(
+        user_id=g.user.id,
+        limit=limit
     )
 
-    return jsonify([
-        {
-            "id": n.id,
-            "title": n.title,
-            "content": n.content,
-            "type": n.type,
-            "link": n.link,
-            "is_read": n.is_read,
-            "created_at": n.created_at.isoformat()
+    return swal_success(
+        title="Danh sách thông báo",
+        data={
+            "notifications": notifications,
+            "total": len(notifications),
         }
-        for n in notifications
-    ])
-
-
-# =========================
-# COUNT UNREAD (badge UI)
-# =========================
-@notification_bp.route("/unread-count", methods=["GET"])
-@login_required
-def unread_count():
-    count = NotificationService.count_unread(current_user.id)
-
-    return jsonify({
-        "unread_count": count
-    })
-
-
-# =========================
-# MARK AS READ
-# =========================
-@notification_bp.route("/<int:noti_id>/read", methods=["POST"])
-@login_required
-def mark_read(noti_id):
-    try:
-        noti = NotificationService.mark_as_read(
-            notification_id=noti_id,
-            user_id=current_user.id
-        )
-
-        return jsonify({
-            "id": noti.id,
-            "is_read": noti.is_read
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-# =========================
-# MARK ALL AS READ
-# =========================
-@notification_bp.route("/read-all", methods=["POST"])
-@login_required
-def mark_all_read():
-    NotificationService.mark_all_as_read(current_user.id)
-
-    return jsonify({
-        "message": "All notifications marked as read"
-    })
-
-
-# =========================
-# DELETE NOTIFICATION
-# =========================
-@notification_bp.route("/<int:noti_id>", methods=["DELETE"])
-@login_required
-def delete(noti_id):
-    try:
-        before_noti = Notification.query.filter_by(id=noti_id, user_id=current_user.id).first()
-        overtime_request_id = getattr(before_noti, "overtime_request_id", None) if before_noti else None
-        attendance_id = getattr(before_noti, "attendance_id", None) if before_noti else None
-        before_ot_deleted = None
-        before_attendance_ot = None
-        before_logs = None
-        if overtime_request_id:
-            ot_row = OvertimeRequest.query.filter_by(id=overtime_request_id).first()
-            before_ot_deleted = bool(ot_row.is_deleted) if ot_row else None
-        if attendance_id:
-            att_row = Attendance.query.filter_by(id=attendance_id).first()
-            before_attendance_ot = float(att_row.overtime_hours or 0) if att_row else None
-        if before_noti:
-            before_logs = HistoryLog.query.filter_by(entity_type="notification", entity_id=before_noti.id).count()
-
-        NotificationService.delete(
-            notification_id=noti_id,
-            user_id=current_user.id
-        )
-        after_noti = Notification.query.filter_by(id=noti_id, user_id=current_user.id).first()
-        deleted_notification = after_noti is None
-
-        deleted_overtime_request = False
-        if overtime_request_id:
-            ot_after = OvertimeRequest.query.filter_by(id=overtime_request_id).first()
-            deleted_overtime_request = ot_after is None
-
-        updated_attendance = False
-        if attendance_id:
-            att_after = Attendance.query.filter_by(id=attendance_id).first()
-            if att_after:
-                current_ot = float(att_after.overtime_hours or 0)
-                if before_attendance_ot is None:
-                    updated_attendance = current_ot == 0
-                else:
-                    updated_attendance = current_ot != before_attendance_ot
-
-        deleted_logs = False
-        if before_noti:
-            after_logs = HistoryLog.query.filter_by(entity_type="notification", entity_id=before_noti.id).count()
-            deleted_logs = bool(after_logs > (before_logs or 0))
-
-        related_checks = []
-        if overtime_request_id is not None:
-            related_checks.append(deleted_overtime_request)
-        if attendance_id is not None:
-            related_checks.append(updated_attendance)
-        related_checks.append(deleted_logs)
-
-        if deleted_notification and all(related_checks):
-            status = "success"
-        elif deleted_notification:
-            status = "partial"
-        else:
-            status = "failed"
-        return jsonify({
-            "deleted_notification": deleted_notification,
-            "deleted_overtime_request": deleted_overtime_request,
-            "updated_attendance": updated_attendance,
-            "deleted_logs": deleted_logs,
-            "notification_id": noti_id,
-            "overtime_request_id": overtime_request_id,
-            "attendance_id": attendance_id,
-            "status": status,
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-# =========================
-# CREATE (ADMIN/TEST ONLY)
-# =========================
-@notification_bp.route("/", methods=["POST"])
-@login_required
-def create():
-    data = request.json
-
-    dto = NotificationDTO(
-        user_id=data["user_id"],
-        title=data["title"],
-        content=data.get("content"),
-        type=data.get("type"),
-        link=data.get("link")
     )
 
-    noti = NotificationService.create(dto)
 
-    return jsonify({
-        "id": noti.id,
-        "message": "Created"
-    })
+# ─────────────────────────────────────────────
+# 2. GET /notifications/<id>
+#    Xem chi tiết & tự động đánh dấu "đã đọc"
+# ─────────────────────────────────────────────
+@notification_bp.route("/<int:notification_id>", methods=["GET"])
+@auth_required
+def get_notification_detail(notification_id: int):
+    try:
+        detail = NotificationService.notification_detail(
+            user_id=g.user.id,
+            noti_id=notification_id
+        )
+        return swal_success(
+            title="Chi tiết thông báo",
+            data=detail
+        )
+    except NotFoundError as e:
+        return swal_error(
+            title="Không tìm thấy",
+            message=str(e),
+            status_code=404
+        )
+    except Exception as e:
+        return swal_error(
+            title="Lỗi hệ thống",
+            message=str(e),
+            status_code=500
+        )
+
+
+# ─────────────────────────────────────────────
+# 3. POST /notifications/mark-all-read
+#    Đánh dấu tất cả thông báo là đã đọc
+# ─────────────────────────────────────────────
+@notification_bp.route("/mark-all-read", methods=["POST"])
+@auth_required
+def mark_all_as_read():
+    try:
+        updated_count = NotificationService.mark_all_as_read(user_id=g.user.id)
+
+        if updated_count == 0:
+            return swal_info(
+                title="Không có gì thay đổi",
+                message="Tất cả thông báo đã được đọc trước đó.",
+                data={"updated_count": 0}
+            )
+
+        return swal_success(
+            title="Đã đánh dấu tất cả là đã đọc",
+            message=f"Đã cập nhật {updated_count} thông báo.",
+            data={"updated_count": updated_count}
+        )
+    except Exception as e:
+        return swal_error(
+            title="Lỗi hệ thống",
+            message=str(e),
+            status_code=500
+        )
+
+
+# ─────────────────────────────────────────────
+# 4. GET /notifications/unread-count
+#    Lấy số lượng thông báo chưa đọc (Badge)
+# ─────────────────────────────────────────────
+@notification_bp.route("/unread-count", methods=["GET"])
+@auth_required
+def get_unread_count():
+    try:
+        count = Notification.get_unread_count(user_id=g.user.id)
+        return swal_success(
+            title="Số thông báo chưa đọc",
+            data={"unread_count": count}
+        )
+    except Exception as e:
+        return swal_error(
+            title="Lỗi hệ thống",
+            message=str(e),
+            status_code=500
+        )
+
+
+# ─────────────────────────────────────────────
+# 5. DELETE /notifications/<id>
+#    Xoá thông báo (Soft delete)
+# ─────────────────────────────────────────────
+@notification_bp.route("/<int:notification_id>", methods=["DELETE"])
+@auth_required
+def delete_notification(notification_id: int):
+    try:
+        Notification.remove(
+            notification_id=notification_id,
+            user_id=g.user.id
+        )
+        return swal_success(
+            title="Đã xoá thông báo",
+            message="Thông báo đã được xoá thành công.",
+            data={"deleted_id": notification_id}
+        )
+    except ValueError as e:
+        return swal_error(
+            title="Không tìm thấy",
+            message=str(e),
+            status_code=404
+        )
+    except Exception as e:
+        return swal_error(
+            title="Lỗi hệ thống",
+            message=str(e),
+            status_code=500
+        )

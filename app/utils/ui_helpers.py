@@ -1,5 +1,13 @@
-from app.common.constants import STATUS_BADGE_CONFIG
-from app.modules.employee.constants import ENUM_LABELS
+from app.constants import STATUS_BADGE_CONFIG
+# ✅ Thay vì import ENUM_LABELS, ta import các class đang có sẵn trong file constants của ông
+from app.constants.employee import WorkingStatus, EmploymentType, GenderType
+
+# ✅ Tự định nghĩa ENUM_LABELS cục bộ ngay tại đây để phục vụ hàm labelize_enum
+ENUM_LABELS = {
+    "working_status": WorkingStatus.LABELS,
+    "employment_type": EmploymentType.LABELS,
+    "gender": GenderType.LABELS
+}
 
 def get_status_badge(status: str) -> dict:
     """Trả về dictionary chứa class CSS và Icon cho Badge"""
@@ -33,7 +41,6 @@ def labelize_enum(value: str | None, category: str = None) -> str:
     if not value:
         return "Chưa cập nhật"
     
-    # Ép kiểu về string và xóa khoảng trắng thừa cho chắc chắn
     val_str = str(value).strip()
 
     # 1. Nếu có chỉ định rõ category (Ví dụ: category='working_status')

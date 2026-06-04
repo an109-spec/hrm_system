@@ -1,46 +1,26 @@
 from __future__ import annotations
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date
 from decimal import Decimal
-from calendar import monthrange
 from sqlalchemy.exc import IntegrityError
-from flask import session
-from types import SimpleNamespace
 from app.extensions import db
-from app.utils.time import get_current_time
+from app.utils.time import get_current_time, VN_TIMEZONE
 from app.common.exceptions import ValidationError
 
 from app.models.employee import Employee
 from app.models.overtime_request import OvertimeRequest
 from app.models.leave import LeaveRequest
 from app.models.notification import Notification
-from app.models.attendance import AttendanceType, Attendance, AttendanceStatus
+from app.models.attendance import AttendanceType, Attendance
 
-
-from .dto import AttendanceStateDTO, WorkUnitDTO
 from app.modules.attendance.constants import AttendanceAction
-
-from .constants import VN_TIMEZONE
 from app.constants.attendance import WorkConfig
-from app.constants.attendance import (
-    LUNCH_START,
-    LUNCH_END,
-    REGULAR_START,
-    REGULAR_END,
-    OT_CHECKIN_OPEN,
-    OT_END_LIMIT,
-    REGULAR_DAY_RATE,
-    WEEKEND_RATE,
-    HOLIDAY_RATE,
-    AttendanceConstants,
-
-)
-from app.constants.holidays import VN_FIXED_PUBLIC_HOLIDAYS, HolidayConfig
 from app.constants.employee import WorkingStatus
-from app.constants.leave import LeaveStatus
 
 from .attendance_calculation_service import attendance_calculation_service
-
+from .attendance_query_service import AttendanceCommandService
 class AttendanceService:
+
+
     @staticmethod
     def get_or_create_today(
         employee_id: int,
@@ -74,7 +54,7 @@ class AttendanceService:
                 "Nhân viên không còn hoạt động"
             )
         is_weekend = today.weekday() >= 5
-        holiday = AttendanceService._get_holiday(today)
+        holiday = AttendanceCommandService._get_holiday(today)
         is_holiday = holiday is not None
         leave_request = LeaveRequest.query.filter(
             LeaveRequest.employee_id == employee_id,

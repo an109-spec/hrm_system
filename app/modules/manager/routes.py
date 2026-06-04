@@ -11,14 +11,14 @@ from app.models.file_upload import FileUpload
 from app.models.resignation import ResignationRequest
 from app.extensions.db import db
 from . import manager_bp
-from .service import ManagerService
-from app.modules.employee.routes import _get_holiday_for_date
-from app.utils.time import parse_simulated_time
-from app.modules.employee.overtime_service import EmployeeOvertimeService
-from app.modules.employee.notification_service import EmployeeNotificationService
-from app.modules.employee.complaint_service import EmployeeComplaintService
+from ..contract.service import ManagerService
+from app.modules.employee.routes import _get_holiday_lookup
+from app.utils.time import get_current_time
+from app.modules.attendance.overtime_service import OvertimeService
+#from app.modules.employee.notification_service import EmployeeNotificationService
+#from app.modules.employee.complaint_service import EmployeeComplaintService
 from app.modules.employee.dependent_service import EmployeeDependentService
-from app.modules.resignation_service import ResignationService
+from app.modules.leave_type.resignation_service import ResignationService
 def _current_manager() -> Employee | None:
     user_id = session.get("user_id")
     if not user_id:
@@ -53,8 +53,8 @@ def attendance_page():
     if guard:
         return guard
     manager = _current_manager()
-    now = parse_simulated_time({})
-    today_holiday = _get_holiday_for_date(now.date())
+    now = get_current_time()
+    today_holiday = _get_holiday_lookup().get(now.date())
     return render_template(
         "manager/department_attendance.html",
         employee=manager,

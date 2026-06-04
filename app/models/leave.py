@@ -8,7 +8,7 @@ class LeaveType(db.Model):
     """
     __tablename__ = 'leave_types'
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    code = db.Column(db.String(20), nullable=True, unique=True, index=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
     is_paid = db.Column(db.Boolean, default=True) 
     default_days = db.Column(db.Integer, nullable=False, default=0, server_default="0")

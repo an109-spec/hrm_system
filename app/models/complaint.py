@@ -1,7 +1,6 @@
 from app.models.base import BaseModel, db
 from sqlalchemy.orm import relationship
 
-
 class Complaint(BaseModel):
     """
     Model quản lý khiếu nại của nhân viên.
@@ -58,12 +57,13 @@ class Complaint(BaseModel):
         cascade="all, delete-orphan"
     )
 
-    # ✅ FIX CHUẨN (KHÔNG LỖI)
     attachments = relationship(
-        'FileUpload',
-        backref='complaint',
+        'FileUpload', 
+        primaryjoin="and_(Complaint.id==FileUpload.entity_id, FileUpload.entity_type=='complaint')",
+        foreign_keys="[FileUpload.entity_id]", 
+        overlaps="complaint", 
         lazy='dynamic',
-        cascade="all, delete-orphan"
+        viewonly=True
     )
 
     def __repr__(self):

@@ -22,11 +22,13 @@ HRM_TOTNGHIEP
 │  │  ├─ attendance.py
 │  │  ├─ common.py
 │  │  ├─ contract.py
+│  │  ├─ dependent.py
 │  │  ├─ employee.py
 │  │  ├─ holidays.py
 │  │  ├─ leave.py
 │  │  ├─ overtime.py
 │  │  ├─ payroll.py
+│  │  ├─ resignation.py
 │  │  └─ __init__.py
 │  ├─ extensions
 │  │  ├─ db.py
@@ -84,28 +86,10 @@ HRM_TOTNGHIEP
 │  │  │  ├─ sms_service.py
 │  │  │  ├─ validators.py
 │  │  │  └─ __init__.py
-│  │  ├─ complaint
-│  │  │  ├─ dto.py
-│  │  │  ├─ routes.py
-│  │  │  ├─ service.py
-│  │  │  └─ __init__.py
 │  │  ├─ dashboard
 │  │  │  ├─ dto.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
-│  │  │  └─ __init__.py
-│  │  ├─ employee
-│  │  │  ├─ complaint_service.py
-│  │  │  ├─ constants.py
-│  │  │  ├─ dependent_service.py
-│  │  │  ├─ dto.py
-│  │  │  ├─ notification_service.py
-│  │  │  ├─ overtime_service.py
-│  │  │  ├─ payroll_service.py
-│  │  │  ├─ profile_service.py
-│  │  │  ├─ routes.py
-│  │  │  ├─ service.py
-│  │  │  ├─ validators.py
 │  │  │  └─ __init__.py
 │  │  ├─ history
 │  │  │  ├─ routes.py
@@ -115,9 +99,10 @@ HRM_TOTNGHIEP
 │  │  │  ├─ routes.py
 │  │  │  └─ __init__.py
 │  │  ├─ hr
+│  │  │  ├─ contract_service.py
 │  │  │  ├─ dto.py
+│  │  │  ├─ employee_service.py
 │  │  │  ├─ routes.py
-│  │  │  ├─ service.py
 │  │  │  └─ __init__.py
 │  │  ├─ jobs
 │  │  │  ├─ attendance_job.py
@@ -130,34 +115,41 @@ HRM_TOTNGHIEP
 │  │  │  ├─ service.py
 │  │  │  ├─ validators.py
 │  │  │  └─ __init__.py
-│  │  ├─ leave_type
-│  │  │  ├─ routes.py
-│  │  │  ├─ service.py
-│  │  │  └─ __init__.py
 │  │  ├─ manager
+│  │  │  ├─ attendance_service.py
 │  │  │  ├─ dto.py
+│  │  │  ├─ employee_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
 │  │  ├─ notification
 │  │  │  ├─ dto.py
+│  │  │  ├─ notification_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
-│  │  ├─ overtime_reset_service.py
-│  │  ├─ payroll_policy
-│  │  │  ├─ service.py
+│  │  ├─ payroll
+│  │  │  ├─ admin_routes.py
+│  │  │  ├─ admin_service.py
+│  │  │  ├─ base_service.py
+│  │  │  ├─ employee_routes.py
+│  │  │  ├─ employee_service.py
+│  │  │  ├─ hr_routes.py
+│  │  │  ├─ hr_service.py
+│  │  │  ├─ manager_routes.py
+│  │  │  ├─ manager_service.py
+│  │  │  ├─ routes.py
 │  │  │  └─ __init__.py
-│  │  ├─ resignation_service.py
-│  │  ├─ salary
-│  │  │  ├─ complaint_service.py
+│  │  ├─ personnel
+│  │  │  ├─ dependent_service.py
 │  │  │  ├─ dto.py
+│  │  │  ├─ profile_service.py
 │  │  │  ├─ routes.py
-│  │  │  ├─ service.py
+│  │  │  ├─ validators.py
 │  │  │  └─ __init__.py
-│  │  └─ upload
+│  │  └─ resignation
+│  │     ├─ resignation_service.py
 │  │     ├─ routes.py
-│  │     ├─ service.py
 │  │     └─ __init__.py
 │  ├─ static
 │  │  ├─ css
@@ -319,9 +311,11 @@ HRM_TOTNGHIEP
 │  │     ├─ payroll.html
 │  │     └─ self_payroll.html
 │  ├─ utils
+│  │  ├─ date_utils.py
 │  │  ├─ holiday.py
 │  │  ├─ time.py
-│  │  └─ ui_helpers.py
+│  │  ├─ ui_helpers.py
+│  │  └─ upload_service.py
 │  └─ __init__.py
 ├─ create_db.py
 ├─ docker-compose.yml
@@ -340,6 +334,7 @@ HRM_TOTNGHIEP
 │     ├─ 779ee223a0da_merge_multiple_heads.py
 │     ├─ 7c3b2a1f9d10_add_holiday_ot_fields_to_overtime_request.py
 │     ├─ 847dd96147c7_sync_employee_relationships.py
+│     ├─ 8ef0316da466_update_file_upload_model_and_enum.py
 │     ├─ 9b2d7f7b4c10_add_leave_extended_fields_and_holidays.py
 │     ├─ a1b2c3d4e5f6_expand_leave_status_workflow.py
 │     ├─ aa11bb22cc33_extend_overtime_request_audit_fields.py
@@ -352,6 +347,7 @@ HRM_TOTNGHIEP
 │     ├─ def57f8ad206_add_employee_relationships.py
 │     ├─ e6f7a8b9c0d1_fix_postgres_leave_status_enum_values.py
 │     ├─ eb82bff93566_sync_employee_relationships.py
+│     ├─ ed4b229451af_upgrade_salary_model_to_store_static_.py
 │     ├─ f1a2b3c4d5e6_add_ess_overtime_and_complaint_columns.py
 │     └─ xxxx_add_enterprise_attendance_flow.py
 ├─ postman
