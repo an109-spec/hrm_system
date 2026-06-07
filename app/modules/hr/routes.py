@@ -1,866 +1,200 @@
-from __future__ import annotations
+from flask import jsonify, request, g
 
-from flask import jsonify, redirect, render_template, request, send_file, session, url_for
-
-from app.models import Employee, ResignationRequest, User
+from app.constants.common import RoleName
+from app.common.security.decorators import auth_required, role_required
+from app.modules.hr.service import HRService
 from . import hr_bp
-from .dto import (
-    AccountStatusDTO,
-    ContractFilterDTO,
-    CreateContractDTO,
-    CreateEmployeeDTO,
-    EmployeeFilterDTO,
-    ExtendContractDTO,
-    HRPasswordChangeDTO,
-    HRProfileUpdateDTO,
-    DependentDTO,
-    PayrollAdjustmentDTO,
-    PayrollApprovalDTO,
-    PayrollCalculationDTO,
-    PayrollComplaintHandleDTO,
-    PayrollExportDTO,
-    PayrollFilterDTO,
-    AttendanceAdjustmentDTO,
-    AttendanceExportDTO,
-    AttendanceFilterDTO,
-    OvertimeApprovalDTO,    
-    AbnormalAttendanceResolveDTO,
-    TerminateContractDTO,
-    UpdateContractDTO,
-    UpdateEmployeeDTO,
-)
-from .employee_service import HRService
-from app.modules.leave_type.resignation_service import ResignationService
-#from app.modules.overtime_reset_service import reset_overtime_request_flow
-from app.models.overtime_request import OvertimeRequest
-
-def _current_user() -> User | None:
-    user_id = session.get("user_id")
-    return User.query.get(user_id) if user_id else None
 
 
-def _current_employee() -> Employee | None:
-    user = _current_user()
-    if not user:
-        return None
-    return Employee.query.filter_by(user_id=user.id).first()
+# ------------------------------------------------------------------
+# Helpers SweetAlert2
+# ------------------------------------------------------------------
+
+def swal_success(title: str, message: str, data=None, status_code: int = 200):
+    """Response thành công theo chuẩn SweetAlert2."""
+    body = {
+        "swal": {
+            "icon": "success",
+            "title": title,
+            "text": message,
+        },
+        "success": True,
+    }
+    if data is not None:
+        body["data"] = data
+    return jsonify(body), status_code
 
 
-def _guard_hr_access():
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login", next=request.url))
+def swal_error(title: str, message: str, status_code: int = 400):
+    """Response lỗi theo chuẩn SweetAlert2."""
+    return jsonify({
+        "swal": {
+            "icon": "error",
+            "title": title,
+            "text": message,
+        },
+        "success": False,
+    }), status_code
 
-    user = _current_user()
-    role_name = (user.role.name.lower() if user and user.role else "")
-    if role_name != "hr":
-        return redirect(url_for("employee.dashboard"))
 
-    return None
+def swal_warning(title: str, message: str, status_code: int = 400):
+    """Response cảnh báo theo chuẩn SweetAlert2."""
+    return jsonify({
+        "swal": {
+            "icon": "warning",
+            "title": title,
+            "text": message,
+        },
+        "success": False,
+    }), status_code
 
 
+# ------------------------------------------------------------------
+# GET /hr/summary
+# Dashboard tổng quan: tổng số NV, đang làm, thử việc, HĐ hết hạn
+# ------------------------------------------------------------------
+@hr_bp.route("/summary", methods=["GET"])
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_all_employee_summary():
+    """
+    Lấy số liệu tổng quan toàn bộ nhân viên:
+      - total_employees      : Tổng số nhân viên
+      - active_employees     : Đang làm việc
+      - probation_employees  : Thử việc
+      - expiring_contracts   : Hợp đồng hết hạn trong 30 ngày tới
+    """
+    try:
+        summary = HRService.get_all_employee_summary()
+        return swal_success(
+            title="Thành công",
+            message="Lấy thống kê tổng quan nhân viên thành công.",
+            data=summary
+        )
+    except Exception as e:
+        return swal_error("Lỗi hệ thống", f"Không thể lấy dữ liệu tổng quan: {str(e)}", 500)
+
+
+# ------------------------------------------------------------------
+# GET /hr/employees
+# Danh sách nhân viên có hỗ trợ tìm kiếm / lọc nâng cao
+# ------------------------------------------------------------------
 @hr_bp.route("/employees", methods=["GET"])
-def employees_page():
-    guard = _guard_hr_access()
-    if guard:
-        return guard
-    return render_template("hr/employees.html", employee=_current_employee())
-
-@hr_bp.route("/contracts", methods=["GET"])
-def contracts_page():
-    guard = _guard_hr_access()
-    if guard:
-        return guard
-    return render_template("hr/contracts.html", employee=_current_employee())
-
-@hr_bp.route("/payroll", methods=["GET"])
-def payroll_page():
-    guard = _guard_hr_access()
-    if guard:
-        return guard
-    return render_template("hr/payroll.html", employee=_current_employee())
-
-@hr_bp.route("/attendance", methods=["GET"])
-def attendance_page():
-    guard = _guard_hr_access()
-    if guard:
-        return guard
-    return render_template("hr/attendance.html", employee=_current_employee())
-
-@hr_bp.route("/api/resignations", methods=["GET"])
-def list_resignations_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    status = (request.args.get("status") or "").strip().lower()
-    q = ResignationRequest.query.order_by(ResignationRequest.created_at.desc())
-    if status:
-        q = q.filter(ResignationRequest.status == status)
-    rows = q.limit(100).all()
-    return jsonify([row.to_dict() for row in rows])
-
-
-@hr_bp.route("/api/resignations/<int:request_id>/process", methods=["POST"])
-def process_resignation_api(request_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    current_user = _current_user()
-    request_item = ResignationRequest.query.get_or_404(request_id)
-    payload = request.get_json(silent=True) or {}
-    action = (payload.get("action") or "").strip().lower()
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_filtered_employees():
+    """
+    Lấy danh sách nhân viên với các bộ lọc tuỳ chọn qua query params:
+      - name            : Tìm kiếm theo tên (gần đúng)
+      - employee_code   : Tìm theo mã nhân viên
+      - department_id   : Lọc theo phòng ban (ID)
+      - position_id     : Lọc theo chức danh (ID)
+      - working_status  : Lọc theo trạng thái (active / resigned / ...)
+      - employment_type : Lọc theo loại hợp đồng (probation / full_time / ...)
+    """
     try:
-        ResignationService.hr_process(request_item, current_user.id if current_user else 0, action, payload)
-        return jsonify({"message": "HR đã xử lý resignation", "request": request_item.to_dict()})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-@hr_bp.route("/api/meta", methods=["GET"])
-def meta_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
+        filters = {
+            "name":            request.args.get("name"),
+            "employee_code":   request.args.get("employee_code"),
+            "department_id":   request.args.get("department_id"),
+            "position_id":     request.args.get("position_id"),
+            "working_status":  request.args.get("working_status"),
+            "employment_type": request.args.get("employment_type"),
+        }
+        # Loại bỏ các key None để service không hiểu nhầm
+        filters = {k: v for k, v in filters.items() if v is not None}
 
-    return jsonify(HRService.get_filter_meta())
-
-@hr_bp.route("/api/payroll/meta", methods=["GET"])
-def payroll_meta_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    return jsonify(HRService.get_payroll_meta())
-
-
-@hr_bp.route("/api/payroll/calculate", methods=["POST"])
-def calculate_payroll_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    month = int(payload.get("month") or 0)
-    year = int(payload.get("year") or 0)
-    if month < 1 or month > 12 or year < 2000:
-        return jsonify({"error": "Tháng/năm không hợp lệ"}), 400
-
-    dto = PayrollCalculationDTO(
-        month=month,
-        year=year,
-        department_id=payload.get("department_id"),
-    )
-    result = HRService.calculate_monthly_payroll(dto, actor_user_id=session.get("user_id"))
-    return jsonify(result)
-
-
-@hr_bp.route("/api/payroll", methods=["GET"])
-def payroll_list_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    dto = PayrollFilterDTO(
-        search=request.args.get("search") or None,
-        department_id=request.args.get("department_id", type=int),
-        status=request.args.get("status") or "all",
-        month=request.args.get("month", type=int),
-        year=request.args.get("year", type=int),
-    )
-    return jsonify(HRService.get_payroll_list(dto))
-
-
-@hr_bp.route("/api/payroll/<int:salary_id>", methods=["GET"])
-def payroll_detail_api(salary_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.get_payroll_detail(salary_id))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-
-@hr_bp.route("/api/payroll/<int:salary_id>/adjustments", methods=["PUT"])
-def payroll_adjustments_api(salary_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = PayrollAdjustmentDTO(
-        fuel_allowance=float(payload.get("fuel_allowance") or 0),
-        meal_allowance=float(payload.get("meal_allowance") or 0),
-        responsibility_allowance=float(payload.get("responsibility_allowance") or 0),
-        other_allowance=float(payload.get("other_allowance") or 0),
-        late_penalty=float(payload.get("late_penalty") or 0),
-        early_penalty=float(payload.get("early_penalty") or 0),
-        unpaid_leave_penalty=float(payload.get("unpaid_leave_penalty") or 0),
-        other_penalty=float(payload.get("other_penalty") or 0),
-        note=payload.get("note"),
-    )
-
-    try:
-        data = HRService.update_allowance_deduction(salary_id, dto, actor_user_id=session.get("user_id"))
-        return jsonify(data)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/payroll/<int:salary_id>/submit", methods=["POST"])
-def payroll_submit_api(salary_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.submit_payroll_approval(salary_id, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/payroll/<int:salary_id>/approve", methods=["POST"])
-def payroll_approve_api(salary_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = PayrollApprovalDTO(action=payload.get("action", ""), note=payload.get("note"))
-    try:
-        return jsonify(HRService.approve_payroll_flow(salary_id, dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/payroll/export", methods=["GET"])
-def payroll_export_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        dto = PayrollExportDTO(
-            month=int(request.args.get("month") or 0),
-            year=int(request.args.get("year") or 0),
-            export_scope=request.args.get("scope") or "company",
-            department_id=request.args.get("department_id", type=int),
-            export_format=request.args.get("format") or "excel",
+        employees = HRService.get_filtered_employees(filters)
+        return swal_success(
+            title="Thành công",
+            message=f"Tìm thấy {len(employees)} nhân viên.",
+            data={
+                "total": len(employees),
+                "employees": employees
+            }
         )
-        stream, filename, mimetype = HRService.export_payslip(dto)
-        stream.seek(0)
-        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except ValueError as e:
+        return swal_warning("Tham số không hợp lệ", str(e), 400)
+    except Exception as e:
+        return swal_error("Lỗi hệ thống", f"Không thể lấy danh sách nhân viên: {str(e)}", 500)
 
 
-@hr_bp.route("/api/payroll/<int:salary_id>/audit", methods=["GET"])
-def payroll_audit_api(salary_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
+# ------------------------------------------------------------------
+# GET /hr/employees/<int:id>
+# Chi tiết hồ sơ một nhân viên cụ thể
+# ------------------------------------------------------------------
+@hr_bp.route("/employees/<int:id>", methods=["GET"])
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_employee_detail(id: int):
+    """
+    Lấy đầy đủ thông tin hồ sơ của nhân viên theo ID.
 
-    return jsonify(HRService.payroll_audit_history(salary_id))
-
-
-@hr_bp.route("/api/payroll/complaints", methods=["GET"])
-def payroll_complaints_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    month = request.args.get("month", type=int)
-    year = request.args.get("year", type=int)
-    return jsonify(HRService.get_payroll_complaints(month=month, year=year))
-
-
-@hr_bp.route("/api/payroll/complaints/<int:complaint_id>/handle", methods=["POST"])
-def payroll_complaint_handle_api(complaint_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = PayrollComplaintHandleDTO(
-        complaint_id=complaint_id,
-        action=payload.get("action", ""),
-        message=payload.get("message"),
-        payroll_status=payload.get("payroll_status"),
-    )
-
+    Path param:
+      - id (int): ID của nhân viên
+    """
     try:
-        result = HRService.handle_complaint(
-            dto,
-            handler_employee_id=_current_employee().id if _current_employee() else None,
-            actor_user_id=session.get("user_id"),
+        detail = HRService.get_employee_detail(id)
+        return swal_success(
+            title="Thành công",
+            message="Lấy thông tin chi tiết nhân viên thành công.",
+            data=detail
         )
-        return jsonify(result)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@hr_bp.route("/api/attendance/meta", methods=["GET"])
-def attendance_meta_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    if hasattr(HRService, "get_attendance_meta"):
-        return jsonify(HRService.get_attendance_meta())
-
-    # Fallback cho môi trường còn dùng service cũ chưa có hàm get_attendance_meta
-    meta = HRService.get_filter_meta()
-    meta["attendance_statuses"] = [
-        {"value": "all", "label": "Tất cả"},
-        {"value": "normal", "label": "Bình thường"},
-        {"value": "late", "label": "Đi muộn"},
-        {"value": "early", "label": "Về sớm"},
-        {"value": "leave_approved", "label": "Nghỉ phép"},
-        {"value": "absent_unexcused", "label": "Vắng không phép"},
-        {"value": "overtime", "label": "Tăng ca"},
-        {"value": "abnormal", "label": "Bất thường"},
-    ]
-    meta["shift_types"] = [
-        {"value": "all", "label": "Tất cả"},
-        {"value": "normal", "label": "Ca chuẩn"},
-        {"value": "overtime", "label": "Ca tăng ca"},
-        {"value": "holiday", "label": "Ca ngày lễ"},
-    ]
-    return jsonify(meta)
+    except ValueError as e:
+        return swal_error("Không tìm thấy", str(e), 404)
+    except Exception as e:
+        return swal_error("Lỗi hệ thống", f"Không thể lấy thông tin nhân viên: {str(e)}", 500)
 
 
-@hr_bp.route("/api/attendance", methods=["GET"])
-def attendance_list_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    dto = AttendanceFilterDTO(
-        search=request.args.get("search") or None,
-        department_id=request.args.get("department_id", type=int),
-        status=request.args.get("status") or "all",
-        month=request.args.get("month", type=int),
-        year=request.args.get("year", type=int),
-        shift_type=request.args.get("shift_type") or "all",
-    )
-    return jsonify(HRService.get_attendance_list(dto))
-
-
-@hr_bp.route("/api/attendance/summary", methods=["GET"])
-def attendance_summary_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    dto = AttendanceFilterDTO(
-        department_id=request.args.get("department_id", type=int),
-        month=request.args.get("month", type=int),
-        year=request.args.get("year", type=int),
-    )
-    return jsonify(HRService.attendance_summary_dashboard(dto))
-
-
-@hr_bp.route("/api/attendance/<int:employee_id>/detail", methods=["GET"])
-def attendance_detail_api(employee_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
+# ------------------------------------------------------------------
+# GET /hr/stats/department
+# Thống kê số lượng nhân viên theo phòng ban
+# ------------------------------------------------------------------
+@hr_bp.route("/stats/department", methods=["GET"])
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_stats_by_department():
+    """
+    Trả về danh sách phòng ban kèm số lượng nhân viên:
+      [{ department_id, name, total_employees }, ...]
+    """
     try:
-        return jsonify(
-            HRService.attendance_detail(
-                employee_id,
-                month=request.args.get("month", type=int),
-                year=request.args.get("year", type=int),
-            )
+        stats = HRService.get_stats_by_department()
+        return swal_success(
+            title="Thành công",
+            message="Thống kê nhân viên theo phòng ban thành công.",
+            data={
+                "total_departments": len(stats),
+                "departments": stats
+            }
         )
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
+    except Exception as e:
+        return swal_error("Lỗi hệ thống", f"Không thể thống kê theo phòng ban: {str(e)}", 500)
 
 
-@hr_bp.route("/api/attendance/<int:attendance_id>/adjust", methods=["PUT"])
-def attendance_adjustment_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    payload = request.get_json(silent=True) or {}
-    dto = AttendanceAdjustmentDTO(
-        attendance_id=attendance_id,
-        check_in=payload.get("check_in"),
-        check_out=payload.get("check_out"),
-        status=payload.get("status"),
-        note=payload.get("note"),
-    )
+# ------------------------------------------------------------------
+# GET /hr/stats/position
+# Thống kê số lượng nhân viên theo chức danh
+# ------------------------------------------------------------------
+@hr_bp.route("/stats/position", methods=["GET"])
+@auth_required
+@role_required(RoleName.ADMIN, RoleName.HR)
+def get_stats_by_position():
+    """
+    Trả về danh sách chức danh kèm số lượng nhân viên:
+      [{ position_id, name, total_employees }, ...]
+    """
     try:
-        return jsonify(HRService.adjust_attendance(dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/attendance/<int:attendance_id>/audit", methods=["GET"])
-def attendance_audit_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    return jsonify(HRService.attendance_audit_history(attendance_id))
-
-@hr_bp.route("/api/attendance/<int:attendance_id>/record", methods=["GET"])
-def attendance_record_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    try:
-        return jsonify(HRService.attendance_record_detail(attendance_id))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-
-@hr_bp.route("/api/attendance/<int:attendance_id>/history", methods=["POST"])
-def attendance_history_save_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    payload = request.get_json(silent=True) or {}
-    try:
-        return jsonify(HRService.save_attendance_history(attendance_id, payload.get("note"), actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/attendance/overtime", methods=["GET"])
-def overtime_list_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    return jsonify(
-        HRService.overtime_pending_list(
-            month=request.args.get("month", type=int),
-            year=request.args.get("year", type=int),
+        stats = HRService.get_stats_by_position()
+        return swal_success(
+            title="Thành công",
+            message="Thống kê nhân viên theo chức danh thành công.",
+            data={
+                "total_positions": len(stats),
+                "positions": stats
+            }
         )
-    )
+    except Exception as e:
+        return swal_error("Lỗi hệ thống", f"Không thể thống kê theo chức danh: {str(e)}", 500)
 
 
-@hr_bp.route("/api/attendance/overtime/<int:attendance_id>/review", methods=["POST"])
-def overtime_review_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    payload = request.get_json(silent=True) or {}
-    dto = OvertimeApprovalDTO(attendance_id=attendance_id, action=payload.get("action", ""), note=payload.get("note"))
-    try:
-        return jsonify(HRService.review_overtime(dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-'''
-@hr_bp.route("/api/attendance/overtime/<int:overtime_id>/reset", methods=["POST"])
-def overtime_reset_api(overtime_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    row = OvertimeRequest.query.get_or_404(overtime_id)
-    return jsonify(reset_overtime_request_flow(overtime_request=row, actor_user_id=session.get("user_id"), source="hr"))
-'''
-
-
-@hr_bp.route("/api/attendance/abnormal", methods=["GET"])
-def abnormal_attendance_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    month = request.args.get("month", type=int)
-    year = request.args.get("year", type=int)
-
-    if hasattr(HRService, "detect_abnormal_attendance"):
-        return jsonify(HRService.detect_abnormal_attendance(month=month, year=year))
-
-    # Fallback cho service cũ: lấy danh sách attendance và tự lọc bất thường
-    data = HRService.get_attendance_list(
-        AttendanceFilterDTO(
-            month=month,
-            year=year,
-        )
-    )
-    items = data.get("items", []) if isinstance(data, dict) else []
-    return jsonify([item for item in items if item.get("is_abnormal")])
-@hr_bp.route("/api/attendance/abnormal/<int:attendance_id>/resolve", methods=["POST"])
-def abnormal_attendance_resolve_api(attendance_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    payload = request.get_json(silent=True) or {}
-    dto = AbnormalAttendanceResolveDTO(
-        attendance_id=attendance_id,
-        action=payload.get("action", ""),
-        note=payload.get("note"),
-        check_in=payload.get("check_in"),
-        check_out=payload.get("check_out"),
-        status=payload.get("status"),
-    )
-    try:
-        return jsonify(HRService.resolve_abnormal_attendance(dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-
-@hr_bp.route("/api/attendance/export", methods=["GET"])
-def attendance_export_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-    try:
-        dto = AttendanceExportDTO(
-            month=int(request.args.get("month") or 0),
-            year=int(request.args.get("year") or 0),
-            export_scope=request.args.get("scope") or "company",
-            department_id=request.args.get("department_id", type=int),
-            export_format=request.args.get("format") or "excel",
-        )
-        stream, filename, mimetype = HRService.export_attendance(dto)
-        stream.seek(0)
-        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/employees", methods=["GET"])
-def list_employees_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    filters = EmployeeFilterDTO(
-        search=request.args.get("search") or None,
-        department_id=request.args.get("department_id", type=int),
-        position_id=request.args.get("position_id", type=int),
-        working_status=request.args.get("working_status") or None,
-    )
-    return jsonify(HRService.get_employees(filters))
-
-
-@hr_bp.route("/api/employees/<int:employee_id>", methods=["GET"])
-def employee_detail_api(employee_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.get_employee_detail(employee_id))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-
-@hr_bp.route("/api/employees", methods=["POST"])
-def create_employee_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = CreateEmployeeDTO(
-        full_name=payload.get("full_name", ""),
-        dob=payload.get("dob", ""),
-        gender=payload.get("gender", "other"),
-        phone=payload.get("phone", ""),
-        address=payload.get("address"),
-        department_id=payload.get("department_id"),
-        position_id=payload.get("position_id"),
-        manager_id=payload.get("manager_id"),
-        hire_date=payload.get("hire_date"),
-        employment_type=payload.get("employment_type", "probation"),
-        working_status=payload.get("working_status", "active"),
-        create_account=bool(payload.get("create_account")),
-        username=payload.get("username"),
-        email=payload.get("email"),
-        password=payload.get("password"),
-    )
-
-    try:
-        employee = HRService.create_employee(dto)
-        return jsonify({"id": employee.id, "message": "Tạo nhân viên thành công"}), 201
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/employees/<int:employee_id>", methods=["PUT"])
-def update_employee_api(employee_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = UpdateEmployeeDTO(
-        full_name=payload.get("full_name"),
-        phone=payload.get("phone"),
-        address=payload.get("address"),
-        department_id=payload.get("department_id"),
-        position_id=payload.get("position_id"),
-        manager_id=payload.get("manager_id"),
-        working_status=payload.get("working_status"),
-    )
-
-    try:
-        employee = HRService.update_employee(employee_id, dto)
-        return jsonify({"id": employee.id, "message": "Cập nhật nhân viên thành công"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@hr_bp.route("/api/contracts", methods=["GET"])
-def list_contracts_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    filters = ContractFilterDTO(
-        search=request.args.get("search") or None,
-        contract_status=request.args.get("contract_status") or "all",
-        contract_type=request.args.get("contract_type") or "all",
-    )
-    return jsonify(HRService.get_contracts(filters))
-
-
-@hr_bp.route("/api/contracts/reminders", methods=["GET"])
-def contract_reminders_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    return jsonify(HRService.get_contract_reminders())
-
-
-@hr_bp.route("/api/contracts/<int:contract_id>", methods=["GET"])
-def contract_detail_api(contract_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.get_contract_detail(contract_id))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-
-
-@hr_bp.route("/api/contracts", methods=["POST"])
-def create_contract_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = CreateContractDTO(
-        employee_id=payload.get("employee_id"),
-        basic_salary=payload.get("basic_salary", 0),
-        start_date=payload.get("start_date"),
-        end_date=payload.get("end_date"),
-        contract_type=payload.get("contract_type"),
-        note=payload.get("note"),
-    )
-
-    try:
-        contract = HRService.create_contract(dto)
-        return jsonify({"id": contract.id, "contract_code": contract.contract_code, "message": "Tạo hợp đồng thành công"}), 201
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@hr_bp.route("/api/contracts/<int:contract_id>", methods=["PUT"])
-def update_contract_api(contract_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = UpdateContractDTO(
-        basic_salary=payload.get("basic_salary"),
-        start_date=payload.get("start_date"),
-        end_date=payload.get("end_date"),
-        contract_type=payload.get("contract_type"),
-        note=payload.get("note"),
-    )
-
-    try:
-        contract = HRService.update_contract(contract_id, dto)
-        return jsonify({"id": contract.id, "message": "Cập nhật hợp đồng thành công"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/contracts/<int:contract_id>/extend", methods=["POST"])
-def extend_contract_api(contract_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = ExtendContractDTO(
-        end_date=payload.get("end_date", ""),
-        note=payload.get("note"),
-    )
-
-    try:
-        contract = HRService.extend_contract(contract_id, dto)
-        return jsonify({"id": contract.id, "message": "Gia hạn hợp đồng thành công"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/contracts/<int:contract_id>/terminate", methods=["POST"])
-def terminate_contract_api(contract_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = TerminateContractDTO(
-        end_date=payload.get("end_date"),
-        note=payload.get("note"),
-    )
-
-    try:
-        contract = HRService.terminate_contract(contract_id, dto)
-        return jsonify({"id": contract.id, "message": "Đã kết thúc hợp đồng"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-
-@hr_bp.route("/api/accounts/<int:employee_id>/status", methods=["PATCH"])
-def update_account_status_api(employee_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = AccountStatusDTO(employee_id=employee_id, is_active=bool(payload.get("is_active")))
-    try:
-        account = HRService.update_account_status(dto)
-        return jsonify({"user_id": account.id, "is_active": account.is_active, "message": "Cập nhật trạng thái tài khoản thành công"})
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@hr_bp.route("/profile", methods=["GET"])
-def profile_page():
-    guard = _guard_hr_access()
-    if guard:
-        return guard
-    return render_template("hr/profile.html", employee=_current_employee())
-
-
-@hr_bp.route("/api/profile", methods=["GET"])
-def profile_detail_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.get_hr_profile(session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/personal-info", methods=["PUT"])
-def profile_update_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = HRProfileUpdateDTO(
-        full_name=payload.get("full_name", ""),
-        dob=payload.get("dob"),
-        gender=payload.get("gender"),
-        phone=payload.get("phone"),
-        personal_email=payload.get("personal_email"),
-        address=payload.get("address"),
-    )
-    try:
-        return jsonify(HRService.update_hr_personal_info(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/change-password", methods=["POST"])
-def profile_change_password_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = HRPasswordChangeDTO(
-        current_password=payload.get("current_password", ""),
-        new_password=payload.get("new_password", ""),
-        confirm_password=payload.get("confirm_password", ""),
-    )
-    try:
-        return jsonify(HRService.change_hr_password(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/avatar", methods=["POST"])
-def profile_avatar_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.upload_hr_avatar(session.get("user_id"), request.files.get("avatar"), actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/dependents", methods=["GET"])
-def profile_dependents_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.list_dependents(session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/dependents", methods=["POST"])
-def profile_create_dependent_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = DependentDTO(
-        full_name=payload.get("full_name", ""),
-        dob=payload.get("dob", ""),
-        relationship=payload.get("relationship", ""),
-        tax_code=payload.get("tax_code"),
-        is_valid=bool(payload.get("is_valid", True)),
-    )
-    try:
-        return jsonify(HRService.create_dependent(session.get("user_id"), dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/dependents/<int:dependent_id>", methods=["PUT"])
-def profile_update_dependent_api(dependent_id: int):
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    dto = DependentDTO(
-        full_name=payload.get("full_name", ""),
-        dob=payload.get("dob", ""),
-        relationship=payload.get("relationship", ""),
-        tax_code=payload.get("tax_code"),
-        is_valid=bool(payload.get("is_valid", True)),
-    )
-    try:
-        return jsonify(HRService.update_dependent(session.get("user_id"), dependent_id, dto, actor_user_id=session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@hr_bp.route("/api/profile/history", methods=["GET"])
-def profile_history_api():
-    guard = _guard_hr_access()
-    if guard:
-        return jsonify({"error": "forbidden"}), 403
-
-    try:
-        return jsonify(HRService.profile_audit_history(session.get("user_id")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400

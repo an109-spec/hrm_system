@@ -129,5 +129,4 @@ class HistoryService:
             description=description,
             performed_by=performed_by
         )
-        db.session.commit()
         return log

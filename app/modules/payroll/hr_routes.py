@@ -377,3 +377,142 @@ def get_hr_complaint_detail(complaint_id: int):
         return jsonify(swal_error(str(e), title="Không tìm thấy")), HTTPStatus.NOT_FOUND
     except Exception as e:
         return jsonify(swal_error(str(e))), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+@payroll_bp.route("/analytics/total-fund", methods=["GET"])
+@auth_required
+@role_required(RoleName.HR, RoleName.ADMIN)
+def get_total_payroll_fund():
+    """
+    GET /api/payroll/analytics/total-fund
+
+    Query params:
+        period_type   : "month" | "quarter" | "year"   (bắt buộc)
+        year          : int                             (bắt buộc)
+        month         : int 1-12                        (bắt buộc nếu period_type="month")
+        quarter       : int 1-4                         (bắt buộc nếu period_type="quarter")
+        department_id : int                             (tuỳ chọn)
+        role_name     : str                             (tuỳ chọn)
+        status        : str, nhiều giá trị cách nhau dấu phẩy
+                        vd: "approved,paid,locked"      (tuỳ chọn)
+
+    Response (Swal-compatible):
+        200 OK  → { success: true,  title, text, data }
+        400     → { success: false, title, text }
+        500     → { success: false, title, text }
+    """
+    # ── 1. Đọc & validate tham số bắt buộc ────────────────────────────────
+    period_type = request.args.get("period_type", "").strip().lower()
+    if period_type not in ("month", "quarter", "year"):
+        return jsonify({
+            "success": False,
+            "icon":    "warning",
+            "title":   "Tham số không hợp lệ",
+            "text":    "period_type phải là 'month', 'quarter' hoặc 'year'.",
+        }), 400
+
+    raw_year = request.args.get("year")
+    if not raw_year or not raw_year.isdigit():
+        return jsonify({
+            "success": False,
+            "icon":    "warning",
+            "title":   "Tham số không hợp lệ",
+            "text":    "Vui lòng truyền năm hợp lệ (vd: year=2025).",
+        }), 400
+    year = int(raw_year)
+
+    # ── 2. Đọc tham số theo period_type ───────────────────────────────────
+    month   = None
+    quarter = None
+
+    if period_type == "month":
+        raw_month = request.args.get("month")
+        if not raw_month or not raw_month.isdigit() or not (1 <= int(raw_month) <= 12):
+            return jsonify({
+                "success": False,
+                "icon":    "warning",
+                "title":   "Tham số không hợp lệ",
+                "text":    "Vui lòng truyền tháng hợp lệ từ 1 đến 12 (vd: month=5).",
+            }), 400
+        month = int(raw_month)
+
+    elif period_type == "quarter":
+        raw_quarter = request.args.get("quarter")
+        if not raw_quarter or not raw_quarter.isdigit() or int(raw_quarter) not in (1, 2, 3, 4):
+            return jsonify({
+                "success": False,
+                "icon":    "warning",
+                "title":   "Tham số không hợp lệ",
+                "text":    "Vui lòng truyền quý hợp lệ từ 1 đến 4 (vd: quarter=2).",
+            }), 400
+        quarter = int(raw_quarter)
+
+    # ── 3. Tham số tuỳ chọn ───────────────────────────────────────────────
+    department_id = None
+    raw_dept = request.args.get("department_id")
+    if raw_dept:
+        if not raw_dept.isdigit():
+            return jsonify({
+                "success": False,
+                "icon":    "warning",
+                "title":   "Tham số không hợp lệ",
+                "text":    "department_id phải là số nguyên dương.",
+            }), 400
+        department_id = int(raw_dept)
+
+    role_name_filter = request.args.get("role_name", "").strip() or None
+    valid_roles = {RoleName.ADMIN, RoleName.HR, RoleName.MANAGER, RoleName.EMPLOYEE}
+    if role_name_filter and role_name_filter not in valid_roles:
+        return jsonify({
+            "success": False,
+            "icon":    "warning",
+            "title":   "Tham số không hợp lệ",
+            "text":    f"role_name không hợp lệ. Các giá trị cho phép: {', '.join(valid_roles)}.",
+        }), 400
+
+    # Tham số status: chuỗi "approved,paid" → list ["approved", "paid"]
+    status_filter = None
+    raw_status = request.args.get("status", "").strip()
+    if raw_status:
+        status_filter = [s.strip() for s in raw_status.split(",") if s.strip()]
+
+    # ── 4. Gọi service ────────────────────────────────────────────────────
+    try:
+        result = HR_payroll_service.get_total_payroll_fund(
+            period_type   = period_type,
+            year          = year,
+            month         = month,
+            quarter       = quarter,
+            department_id = department_id,
+            role_name     = role_name_filter,
+            status_filter = status_filter,
+        )
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "icon":    "warning",
+            "title":   "Không thể tính quỹ lương",
+            "text":    str(e),
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "icon":    "error",
+            "title":   "Lỗi hệ thống",
+            "text":    "Đã xảy ra lỗi khi tính quỹ lương. Vui lòng thử lại sau.",
+        }), 500
+
+    # ── 5. Trả về Swal-compatible response ────────────────────────────────
+    period  = result["period"]
+    summary = result["summary"]
+
+    return jsonify({
+        "success": True,
+        "icon":    "success",
+        "title":   f"Quỹ lương {period['label']}",
+        "text": (
+            f"Tổng chi phí nhân sự: {summary['total_labor_cost']:,.0f} đ | "
+            f"Số phiếu lương: {summary['salary_count']} | "
+            f"Số nhân viên: {result['employee_count']}"
+        ),
+        "data": result,
+    }), 200

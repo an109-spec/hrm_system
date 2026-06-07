@@ -61,3 +61,22 @@ class GenderType:
         return cls.LABELS.get(cleaned_value, "Không rõ")
 
 
+class AccountStatus:
+    ACTIVE = "active"
+    LOCKED = "locked"
+    INACTIVE = "inactive"
+
+    LABELS = {
+        ACTIVE: "Hoạt động",
+        LOCKED: "Bị khóa",
+        INACTIVE: "Ngừng hoạt động",
+    }
+
+    @classmethod
+    def choices(cls):
+        return [(key, value) for key, value in cls.LABELS.items()]
+
+    @classmethod
+    def get_label(cls, value: str) -> str:
+        cleaned_value = (value or "").strip().lower()
+        return cls.LABELS.get(cleaned_value, "Không rõ")

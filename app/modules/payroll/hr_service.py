@@ -186,7 +186,13 @@ class HR_payroll_service(PersonalPayrollService):
         regular_hours = Decimal(str(emp_metrics["regular_hours"]))  # vd: 22 ngày × 8 = 176h
         ot_hours      = Decimal(str(emp_metrics["ot_hours"]))       # vd: 4h × 1.5 = 6h quy đổi
 
-        hourly_rate   = SalarySettings.FIXED_HOURLY_RATE            # 50.000đ/h
+        default_rate = Decimal("50000")
+    
+        position_config = PayrollPolicyService.get_salary_config_for_position(employee.position_id)
+        
+        # Lấy 'hourly_rate' từ dict config, nếu không có thì lấy giá trị mặc định
+        raw_rate = position_config.get("hourly_rate", str(default_rate))
+        hourly_rate = Decimal(str(raw_rate))
 
         # Gross = (giờ thường + giờ OT quy đổi) × đơn giá giờ
         gross_regular = regular_hours * hourly_rate
@@ -1012,3 +1018,249 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
             }
             for log in logs
         ]
+    
+    @staticmethod
+    def get_total_payroll_fund(
+        period_type: str,          # "month" | "quarter" | "year"
+        year: int,
+        month: int | None = None,  # Bắt buộc nếu period_type = "month"
+        quarter: int | None = None, # 1-4, bắt buộc nếu period_type = "quarter"
+        department_id: int | None = None,
+        role_name: str | None = None,
+        status_filter: list[str] | None = None,  # Lọc theo trạng thái lương (vd: ["approved", "paid"])
+    ) -> dict:
+        """
+        Tính tổng quỹ lương (Labor Cost) mà công ty phải chi ra trong một kỳ.
+
+        Chi phí công ty = Gross Salary + Bảo hiểm NSDLĐ đóng (17.5% theo luật VN)
+        - BHXH phần NSDLĐ: 17%
+        - BHYT phần NSDLĐ: 3%
+        - BHTN phần NSDLĐ: 1%
+        => Tổng NSDLĐ: 21% trên lương đóng BH (tính trên gross_salary / base_salary)
+
+        Kết quả trả về:
+        {
+            "period": {...},
+            "summary": {
+                "total_gross":            Tổng lương gộp nhân viên nhận,
+                "total_net":              Tổng lương thực nhận,
+                "total_allowance":        Tổng phụ cấp,
+                "total_pit_tax":          Tổng thuế TNCN (công ty khấu trừ hộ),
+                "total_insurance_employee": Tổng BH phần NLĐ đóng (trừ vào lương NV),
+                "total_insurance_employer": Tổng BH phần NSDLĐ đóng (chi phí thêm của công ty),
+                "total_penalty":          Tổng tiền phạt (thu về),
+                "total_labor_cost":       TỔNG CHI PHÍ NHÂN SỰ THỰC SỰ CỦA CÔNG TY,
+            },
+            "by_period": [...],   # Breakdown theo từng tháng (nếu lọc quý/năm)
+            "by_department": [...],
+            "by_role": [...],
+            "employee_count": số nhân viên,
+            "salary_count":   số phiếu lương được tính,
+        }
+        """
+        policy = PayrollPolicyService.get_policy()
+        ins_config = policy.get("insurance", {})
+
+        # ── Tỷ lệ NSDLĐ đóng (phần công ty chi thêm, không trừ vào lương NV) ──
+        employer_social_pct    = Decimal(str(ins_config.get("employer_social_percent",    17.0)))
+        employer_health_pct    = Decimal(str(ins_config.get("employer_health_percent",     3.0)))
+        employer_unemp_pct     = Decimal(str(ins_config.get("employer_unemployment_percent", 1.0)))
+        employer_total_pct     = employer_social_pct + employer_health_pct + employer_unemp_pct
+
+        # ── Xác định danh sách tháng cần tính ──────────────────────────────────
+        if period_type == "month":
+            if not month:
+                raise ValueError("Cần truyền `month` khi period_type='month'")
+            months_in_period = [(year, month)]
+            period_label = f"Tháng {month:02d}/{year}"
+
+        elif period_type == "quarter":
+            if not quarter or quarter not in (1, 2, 3, 4):
+                raise ValueError("Cần truyền `quarter` (1-4) khi period_type='quarter'")
+            q_start = (quarter - 1) * 3 + 1
+            months_in_period = [(year, m) for m in range(q_start, q_start + 3)]
+            period_label = f"Quý {quarter}/{year}"
+
+        elif period_type == "year":
+            months_in_period = [(year, m) for m in range(1, 13)]
+            period_label = f"Năm {year}"
+
+        else:
+            raise ValueError("period_type phải là 'month', 'quarter' hoặc 'year'")
+
+        # ── Query bảng Salary ───────────────────────────────────────────────────
+        month_values  = [m for _, m in months_in_period]
+        status_filter = status_filter or [
+            SalaryStatus.APPROVED,
+            SalaryStatus.PAID,
+            SalaryStatus.LOCKED,
+        ]
+
+        query = (
+            Salary.query
+            .join(Employee, Salary.employee_id == Employee.id)
+            .filter(
+                Salary.year  == year,
+                Salary.month.in_(month_values),
+                Salary.status.in_(status_filter),
+                Salary.is_deleted.is_(False),
+                Employee.is_deleted.is_(False),
+            )
+        )
+
+        if department_id:
+            query = query.filter(Employee.department_id == department_id)
+
+        if role_name:
+            query = (
+                query
+                .join(Employee.user)
+                .join(User.role)
+                .filter(Role.name == role_name)
+            )
+
+        salaries = query.all()
+
+        # ── Tổng hợp ────────────────────────────────────────────────────────────
+        # Accumulators toàn kỳ
+        acc = {
+            "gross":               Decimal("0"),
+            "net":                 Decimal("0"),
+            "allowance":           Decimal("0"),
+            "pit_tax":             Decimal("0"),
+            "insurance_employee":  Decimal("0"),
+            "insurance_employer":  Decimal("0"),
+            "penalty":             Decimal("0"),
+        }
+
+        # Breakdown theo tháng  {(year, month): acc_dict}
+        by_month: dict[tuple, dict] = {
+            ym: {k: Decimal("0") for k in acc} | {"salary_count": 0}
+            for ym in months_in_period
+        }
+
+        # Breakdown theo phòng ban  {dept_name: acc_dict}
+        by_dept:  dict[str, dict] = {}
+
+        # Breakdown theo role  {role_name: acc_dict}
+        by_role_map: dict[str, dict] = {}
+
+        employee_ids_seen: set[int] = set()
+
+        for sal in salaries:
+            emp  = sal.employee
+            ym   = (sal.year, sal.month)
+
+            # ── Bảo hiểm NSDLĐ: tính trên gross_salary (hoặc base lương đóng BH) ──
+            # Dùng gross_salary làm căn cứ (đã lưu tĩnh); phần NSDLĐ không trừ vào NV
+            ins_base          = HR_payroll_service._decimal(sal.gross_salary)
+            employer_ins      = (ins_base * employer_total_pct / Decimal("100")).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+
+            # ── Giá trị từng dòng ──────────────────────────────────────────────
+            row = {
+                "gross":              HR_payroll_service._decimal(sal.gross_salary),
+                "net":                HR_payroll_service._decimal(sal.net_salary),
+                "allowance":          HR_payroll_service._decimal(sal.total_allowance),
+                "pit_tax":            HR_payroll_service._decimal(sal.pit_tax),
+                "insurance_employee": HR_payroll_service._decimal(sal.insurance_employee),
+                "insurance_employer": employer_ins,
+                "penalty":            HR_payroll_service._decimal(sal.attendance_penalty),
+            }
+
+            # ── Cộng vào tổng toàn kỳ ─────────────────────────────────────────
+            for k in acc:
+                acc[k] += row[k]
+
+            # ── Cộng vào breakdown tháng ──────────────────────────────────────
+            if ym in by_month:
+                for k in acc:
+                    by_month[ym][k] += row[k]
+                by_month[ym]["salary_count"] += 1
+
+            # ── Cộng vào breakdown phòng ban ──────────────────────────────────
+            dept_name = emp.department.name if (emp and emp.department) else "Chưa phân phòng"
+            if dept_name not in by_dept:
+                by_dept[dept_name] = {k: Decimal("0") for k in acc} | {"salary_count": 0}
+            for k in acc:
+                by_dept[dept_name][k] += row[k]
+            by_dept[dept_name]["salary_count"] += 1
+
+            # ── Cộng vào breakdown role ───────────────────────────────────────
+            rname = (
+                emp.user.role.name
+                if (emp and emp.user and emp.user.role)
+                else "Không rõ"
+            )
+            if rname not in by_role_map:
+                by_role_map[rname] = {k: Decimal("0") for k in acc} | {"salary_count": 0}
+            for k in acc:
+                by_role_map[rname][k] += row[k]
+            by_role_map[rname]["salary_count"] += 1
+
+            employee_ids_seen.add(emp.id if emp else -1)
+
+        # ── Helper: format một acc dict ra float + labor_cost ─────────────────
+        def _fmt(d: dict) -> dict:
+            labor_cost = d["gross"] + d["insurance_employer"]  # chi phí thực công ty
+            return {
+                "total_gross":              float(d["gross"]),
+                "total_net":                float(d["net"]),
+                "total_allowance":          float(d["allowance"]),
+                "total_pit_tax":            float(d["pit_tax"]),
+                "total_insurance_employee": float(d["insurance_employee"]),
+                "total_insurance_employer": float(d["insurance_employer"]),
+                "total_penalty":            float(d["penalty"]),
+                "total_labor_cost":         float(labor_cost),
+                "salary_count":             d.get("salary_count", len(salaries)),
+            }
+
+        # ── Kết quả by_period (sắp xếp theo tháng tăng dần) ──────────────────
+        by_period_list = []
+        for (y, m), d in sorted(by_month.items()):
+            entry = _fmt(d)
+            entry["year"]  = y
+            entry["month"] = m
+            entry["label"] = f"Tháng {m:02d}/{y}"
+            by_period_list.append(entry)
+
+        # ── Kết quả by_department ─────────────────────────────────────────────
+        by_dept_list = []
+        for dname, d in sorted(by_dept.items(), key=lambda x: -x[1]["gross"]):
+            entry = _fmt(d)
+            entry["department"] = dname
+            by_dept_list.append(entry)
+
+        # ── Kết quả by_role ───────────────────────────────────────────────────
+        by_role_list = []
+        for rname, d in sorted(by_role_map.items(), key=lambda x: -x[1]["gross"]):
+            entry = _fmt(d)
+            entry["role"] = rname
+            by_role_list.append(entry)
+
+        # ── Tổng toàn kỳ ─────────────────────────────────────────────────────
+        summary = _fmt(acc)
+        summary["salary_count"] = len(salaries)
+
+        return {
+            "period": {
+                "type":    period_type,
+                "label":   period_label,
+                "year":    year,
+                "month":   month,
+                "quarter": quarter,
+                "months":  [{"year": y, "month": m} for y, m in months_in_period],
+            },
+            "filters": {
+                "department_id": department_id,
+                "role_name":     role_name,
+                "status_filter": status_filter,
+            },
+            "summary":        summary,
+            "by_period":      by_period_list,
+            "by_department":  by_dept_list,
+            "by_role":        by_role_list,
+            "employee_count": len(employee_ids_seen),
+            "salary_count":   len(salaries),
+        }

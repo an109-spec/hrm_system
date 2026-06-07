@@ -131,6 +131,7 @@ class SalarySettings:
         RoleName.ADMIN: Decimal("30000000"),   
         RoleName.HR: Decimal("25000000"),     
         RoleName.MANAGER: Decimal("40000000"), 
+        RoleName.EMPLOYEE: Decimal("8800000"),
     }
 
 class ConfigLockStatus:
