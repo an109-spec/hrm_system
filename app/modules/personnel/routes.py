@@ -1,6 +1,6 @@
 from flask import request, jsonify, g
 
-from app.modules.personnel import employee_bp
+from app.modules.personnel import personnel_bp
 from app.modules.personnel.profile_service import ProfileService
 from app.modules.personnel.dependent_service import EmployeeDependentService
 from app.modules.personnel.dto import UpdateProfileDTO, ChangePasswordDTO
@@ -56,7 +56,7 @@ def swal_warning(title="Cảnh báo", message="", status_code=400):
 # Admin và HR có thể xem/sửa của người khác qua employee_id.
 # ===========================================================================
 
-@employee_bp.route("/profile/me", methods=["GET"])
+@personnel_bp.route("/profile/me", methods=["GET"])
 @auth_required
 def get_my_profile():
     """
@@ -72,7 +72,7 @@ def get_my_profile():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>", methods=["GET"])
+@personnel_bp.route("/profile/<int:employee_id>", methods=["GET"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def get_profile_by_id(employee_id):
@@ -90,7 +90,7 @@ def get_profile_by_id(employee_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/me", methods=["PUT"])
+@personnel_bp.route("/profile/me", methods=["PUT"])
 @auth_required
 def update_my_profile():
     """
@@ -114,7 +114,7 @@ def update_my_profile():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>", methods=["PUT"])
+@personnel_bp.route("/profile/<int:employee_id>", methods=["PUT"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def update_profile_by_id(employee_id):
@@ -150,7 +150,7 @@ def update_profile_by_id(employee_id):
 # 🔑 PASSWORD — /personnel/profile/change-password
 # ===========================================================================
 
-@employee_bp.route("/profile/change-password", methods=["POST"])
+@personnel_bp.route("/profile/change-password", methods=["POST"])
 @auth_required
 def change_password():
     """
@@ -179,7 +179,7 @@ def change_password():
 # 🖼️ AVATAR — /personnel/profile/avatar
 # ===========================================================================
 
-@employee_bp.route("/profile/me/avatar", methods=["POST"])
+@personnel_bp.route("/profile/me/avatar", methods=["POST"])
 @auth_required
 def update_my_avatar():
     """
@@ -206,7 +206,7 @@ def update_my_avatar():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/avatar", methods=["POST"])
+@personnel_bp.route("/profile/<int:employee_id>/avatar", methods=["POST"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def update_avatar_by_id(employee_id):
@@ -237,7 +237,7 @@ def update_avatar_by_id(employee_id):
 # 📋 HISTORY — /personnel/profile/history
 # ===========================================================================
 
-@employee_bp.route("/profile/me/history", methods=["GET"])
+@personnel_bp.route("/profile/me/history", methods=["GET"])
 @auth_required
 def get_my_history():
     """
@@ -251,7 +251,7 @@ def get_my_history():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/history", methods=["GET"])
+@personnel_bp.route("/profile/<int:employee_id>/history", methods=["GET"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def get_history_by_id(employee_id):
@@ -270,7 +270,7 @@ def get_history_by_id(employee_id):
 # Quản lý người phụ thuộc (để tính giảm trừ gia cảnh thuế TNCN).
 # ===========================================================================
 
-@employee_bp.route("/profile/me/dependents", methods=["GET"])
+@personnel_bp.route("/profile/me/dependents", methods=["GET"])
 @auth_required
 def get_my_dependents():
     """
@@ -285,7 +285,7 @@ def get_my_dependents():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/dependents", methods=["GET"])
+@personnel_bp.route("/profile/<int:employee_id>/dependents", methods=["GET"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def get_dependents_by_id(employee_id):
@@ -306,7 +306,7 @@ def get_dependents_by_id(employee_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/me/dependents", methods=["POST"])
+@personnel_bp.route("/profile/me/dependents", methods=["POST"])
 @auth_required
 def create_my_dependent():
     """
@@ -331,7 +331,7 @@ def create_my_dependent():
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/dependents", methods=["POST"])
+@personnel_bp.route("/profile/<int:employee_id>/dependents", methods=["POST"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def create_dependent_by_id(employee_id):
@@ -362,7 +362,7 @@ def create_dependent_by_id(employee_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/me/dependents/<int:dependent_id>", methods=["PUT"])
+@personnel_bp.route("/profile/me/dependents/<int:dependent_id>", methods=["PUT"])
 @auth_required
 def update_my_dependent(dependent_id):
     """
@@ -387,7 +387,7 @@ def update_my_dependent(dependent_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/dependents/<int:dependent_id>", methods=["PUT"])
+@personnel_bp.route("/profile/<int:employee_id>/dependents/<int:dependent_id>", methods=["PUT"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def update_dependent_by_id(employee_id, dependent_id):
@@ -418,7 +418,7 @@ def update_dependent_by_id(employee_id, dependent_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/me/dependents/<int:dependent_id>", methods=["DELETE"])
+@personnel_bp.route("/profile/me/dependents/<int:dependent_id>", methods=["DELETE"])
 @auth_required
 def delete_my_dependent(dependent_id):
     """
@@ -441,7 +441,7 @@ def delete_my_dependent(dependent_id):
         return swal_error(message=str(e), status_code=500)
 
 
-@employee_bp.route("/profile/<int:employee_id>/dependents/<int:dependent_id>", methods=["DELETE"])
+@personnel_bp.route("/profile/<int:employee_id>/dependents/<int:dependent_id>", methods=["DELETE"])
 @auth_required
 @self_or_hr_required(employee_id_key="employee_id")
 def delete_dependent_by_id(employee_id, dependent_id):

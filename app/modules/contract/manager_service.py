@@ -15,7 +15,7 @@ from app.models.user import User
 from app.models.role import Role
 from app.modules.notification.notification_service import NotificationService
 from app.modules.history.service import HistoryService
-from app.modules.dashboard.dto import NotificationDTO
+from app.modules.notification.dto import NotificationDTO
 from app.constants.common import RoleName
 from app.extensions.db import db
 class Manager_Contract_Service:

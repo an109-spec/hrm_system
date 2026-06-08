@@ -36,6 +36,11 @@ class NotFoundError(AppException):
     status_code = 404
     message = "Không tìm thấy thông tin yêu cầu"
 
+class PermissionError(ForbiddenError):
+    """Backward-compatible permission exception used by legacy modules."""
+    pass
+
+
 class ConflictError(AppException):
     status_code = 409
     message = "Dữ liệu đã tồn tại hoặc bị xung đột"

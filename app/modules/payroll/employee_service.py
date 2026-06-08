@@ -5,7 +5,8 @@ import re
 from sqlalchemy import extract
 from app.constants.holidays import VN_FIXED_PUBLIC_HOLIDAYS, HolidayConfig
 from app.models.attendance import Attendance
-from app.models.leave import LeaveRequest, LeaveType, LeaveStatus
+from app.models.leave import LeaveRequest, LeaveType
+from app.constants.leave import LeaveStatus
 from calendar import monthrange
 from datetime import date, timedelta
 from app.utils.time import get_current_time

@@ -88,7 +88,8 @@ def get_my_payroll_history():
     except ValueError as e:
         return swal_error(title="Không tìm thấy", message=str(e), status_code=404)
     except Exception as e:
-        return swal_error(message=str(e), status_code=500)
+                return swal_error(message=str(e), status_code=500)
+from app.modules.payroll import admin_routes, employee_routes, hr_routes, manager_routes  
 
 
 @payroll_bp.route("/history/<int:employee_id>", methods=["GET"])

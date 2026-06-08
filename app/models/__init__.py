@@ -9,7 +9,7 @@ from app.models.system import SystemSetting
 from app.models.leave import LeaveType
 from app.models.leave import Holiday
 from app.models.allowance import AllowanceType
-from app.models.attendance import AttendanceStatus
+from app.models.attendance import AttendanceStatus, AttendanceType
 
 # Import các bảng có mối quan hệ phức tạp
 from app.models.user import User
@@ -51,6 +51,7 @@ __all__ = [
     'Department',
     'Position',
     'AttendanceStatus',
+    'AttendanceType',
     'Attendance',
     'LeaveType',
     'Holiday',

@@ -7,13 +7,13 @@ from app.models.attendance import Attendance, AttendanceStatus
 from app.models.contract import Contract
 from app.models.leave import LeaveRequest 
 from app.constants.employee import WorkingStatus, EmploymentType
-from app.modules.contract.service import ManagerService
+from app.modules.contract.manager_service import Manager_Contract_Service
 from .attendance_service import AttendanceManagerService
 from app.utils.time import get_current_time
 class EmployeeService:
     @staticmethod
     def get_department_employee_summary(manager_id: int) -> dict:
-        employees =AttendanceManagerService._get_subordinates(manager_id)
+        employees = AttendanceManagerService._get_subordinates(manager_id)
         result = {
             "total_employees": 0,
             "active_employees": 0,
@@ -45,7 +45,7 @@ class EmployeeService:
     @staticmethod
     def get_department_employee_list(manager_id: int, filters: dict | None = None) -> list[dict]:
         filters = filters or {}
-        employees = ManagerService._get_subordinates(manager_id)
+        employees = Manager_Contract_Service._get_subordinates(manager_id)
         if not employees:
             return []
         rows = []
@@ -85,7 +85,7 @@ class EmployeeService:
 
     @staticmethod
     def get_department_employee_detail(manager_id: int, employee_id: int) -> dict:
-        subordinate_ids = {x.id for x in ManagerService._get_subordinates(manager_id)}
+        subordinate_ids = {x.id for x in Manager_Contract_Service._get_subordinates(manager_id)}
         if employee_id not in subordinate_ids:
             raise ValueError("Không có quyền xem nhân viên này")
         emp = Employee.query.get(employee_id)

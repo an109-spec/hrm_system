@@ -1,7 +1,7 @@
 from app.constants.contract import ContractStatus, ContractRequestStatus, ProposalType
 from app.models.employee import Employee
 from app.modules.notification.notification_service import NotificationService
-from app.modules.dashboard.dto import NotificationDTO
+from app.modules.notification.dto import NotificationDTO
 from app.models.contract import Contract
 from app.extensions import db
 from .admin_service import Admin_Contract_Service

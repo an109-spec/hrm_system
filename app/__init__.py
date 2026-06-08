@@ -1,13 +1,10 @@
 import os
-from flask import Flask,redirect, url_for, flash
+from importlib.util import find_spec
+from flask import Flask, redirect, url_for, flash
 from datetime import datetime
-from sqlalchemy import inspect
-from werkzeug.security import generate_password_hash
 
 from app.config import config_by_name
 from app.extensions import init_extensions, db
-from app.extensions.jwt import jwt
-from app.extensions.socketio import socketio
 from flask_migrate import Migrate
 from flask_mail import Mail
 from app.common.exceptions import UnauthorizedError, ForbiddenError
@@ -77,15 +74,9 @@ def create_app():
     mail.init_app(app)
     migrate.init_app(app, db)
 
-    # Dev auto create tables (Dành cho SQLite hoặc chạy test nhanh)
-    with app.app_context():
-        from app import models
-        db.create_all()
-        #ensure_leave_types()
-    # Register blueprints & CLI
+    from app import models  
     register_blueprints(app)
     register_cli(app)
-    ensure_default_admin(app)
 
     @app.context_processor
     def inject_globals():
@@ -133,7 +124,7 @@ def create_app():
     # ======================
     # Scheduler jobs
     # ======================
-    if not app.config.get("TESTING", False):
+    if not app.config.get("TESTING", False) and find_spec("apscheduler") is not None:
         from apscheduler.schedulers.background import BackgroundScheduler
         from app.modules.jobs import register_jobs
 
@@ -152,67 +143,37 @@ def create_app():
     @app.errorhandler(ForbiddenError)
     def handle_forbidden(e):
         flash("Bạn không có quyền truy cập khu vực này.", "danger")
-        return redirect(url_for("home.index_page")) 
+        return redirect(url_for("auth.login"))
     return app
 
-def ensure_default_admin(app):
-    from app.models import User
-
-    with app.app_context():
-        try:
-            # Nếu chưa có bảng thì skip
-            inspector = inspect(db.engine)
-            if not inspector.has_table("users"):
-                return
-
-            # Check tồn tại
-            exists = User.query.filter_by(username="admin").first()
-            if exists:
-                return
-
-            # Tạo admin bằng ORM
-            admin = User(
-                username="admin",
-                email="admin@hrm.local",
-                password_hash=generate_password_hash("admin123"),
-            )
-
-            db.session.add(admin)
-            db.session.commit()
-
-            print("--- Đã tạo tài khoản Admin mặc định thành công! ---")
-
-        except Exception as e:
-            db.session.rollback()
-            print(f"Lỗi tạo admin: {e}")
-
 def register_blueprints(app):
-# --- IMPORT BLUEPRINTS HRM ---
-    from app.modules.auth import auth_bp
-    from app.modules.employee import employee_bp
-    from app.modules.home import home_bp
-    from app.modules.notification import notification_bp
-    from app.modules.complaint import complaint_bp
-    from app.modules.leave import leave_bp
-    from app.modules.attendance import attendance_bp
-    from app.modules.dashboard import dashboard_bp  
-    from app.modules.history import history_bp
-    from app.modules.leave_type import leave_type_bp
-    from app.modules.upload import upload_bp
-    from app.modules.manager import manager_bp
     from app.modules.admin import admin_bp
+    from app.modules.attendance import attendance_bp
+    from app.modules.auth import auth_bp
+    from app.modules.contract import contract_bp
+    from app.modules.history import history_bp
+
     from app.modules.hr import hr_bp
-    app.register_blueprint(auth_bp) # Đăng nhập/Đăng ký
-    app.register_blueprint(employee_bp) # Nhân viên
-    app.register_blueprint(home_bp)
-    app.register_blueprint(notification_bp)
-    app.register_blueprint(complaint_bp)
-    app.register_blueprint(leave_bp)
-    app.register_blueprint(attendance_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(history_bp)
-    app.register_blueprint(leave_type_bp)
-    app.register_blueprint(upload_bp)
-    app.register_blueprint(manager_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(hr_bp)
+    from app.modules.leave import leave_bp
+    from app.modules.manager import manager_bp
+    from app.modules.notification import notification_bp
+    from app.modules.payroll import payroll_bp
+    from app.modules.personnel import personnel_bp
+    from app.modules.resignation import resignation_bp
+
+    blueprints = (
+        auth_bp,
+        personnel_bp,
+        notification_bp,
+        leave_bp,
+        attendance_bp,
+        history_bp,
+        manager_bp,
+        admin_bp,
+        hr_bp,
+        payroll_bp,
+        contract_bp,
+        resignation_bp,
+    )
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)

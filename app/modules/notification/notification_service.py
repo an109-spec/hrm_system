@@ -2,7 +2,7 @@ from __future__ import annotations
 from app.common.exceptions import NotFoundError
 from app.extensions.db import db
 from app.models import Notification
-from app.modules.dashboard.dto import NotificationDTO
+from app.modules.notification.dto import NotificationDTO
 from app.utils.time import VN_TIMEZONE
 
 class NotificationService:

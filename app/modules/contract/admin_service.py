@@ -8,14 +8,22 @@ from app.constants.contract import ContractStatus
 from app.constants.employee import EmploymentType
 from app.constants.common import RoleName
 from decimal import Decimal
-from datetime import date
+from calendar import monthrange
+from datetime import date, timedelta
 import re
-from dateutil.relativedelta import relativedelta
 from .base_service import Base_Service
 from app.extensions import db
 from app.modules.payroll.admin_service import PayrollPolicyService
 from app.constants.payroll import SalarySettings
 from app.common.exceptions import NotFoundError
+
+def _add_months(source_date: date, months: int) -> date:
+    """Add months using stdlib while clamping invalid month-end days."""
+    month_index = source_date.month - 1 + months
+    year = source_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(source_date.day, monthrange(year, month)[1])
+    return date(year, month, day)
 class Admin_Contract_Service:
     @staticmethod
     def _generate_contract_code() -> str:
@@ -45,8 +53,8 @@ class Admin_Contract_Service:
             return None # Hoặc raise ValueError
         value = int(match.group(1))
         unit = match.group(2)
-        delta = relativedelta(months=value) if unit == 'm' else relativedelta(years=value)
-        return start_date + delta - relativedelta(days=1)
+        months = value if unit == 'm' else value * 12
+        return _add_months(start_date, months) - timedelta(days=1)
 
     @staticmethod
     def create_contract(data: dict, current_user_id: int) -> Contract:
