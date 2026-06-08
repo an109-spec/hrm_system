@@ -4,50 +4,7 @@ from app.constants.common import RoleName
 from app.common.security.decorators import auth_required, role_required
 from app.modules.hr.service import HRService
 from . import hr_bp
-
-
-# ------------------------------------------------------------------
-# Helpers SweetAlert2
-# ------------------------------------------------------------------
-
-def swal_success(title: str, message: str, data=None, status_code: int = 200):
-    """Response thành công theo chuẩn SweetAlert2."""
-    body = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        },
-        "success": True,
-    }
-    if data is not None:
-        body["data"] = data
-    return jsonify(body), status_code
-
-
-def swal_error(title: str, message: str, status_code: int = 400):
-    """Response lỗi theo chuẩn SweetAlert2."""
-    return jsonify({
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }), status_code
-
-
-def swal_warning(title: str, message: str, status_code: int = 400):
-    """Response cảnh báo theo chuẩn SweetAlert2."""
-    return jsonify({
-        "swal": {
-            "icon": "warning",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }), status_code
-
+from app.common.responses import swal_success, swal_error, swal_warning
 
 # ------------------------------------------------------------------
 # GET /hr/summary

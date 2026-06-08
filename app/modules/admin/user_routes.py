@@ -4,38 +4,7 @@ from app.modules.admin.user_service import User_Service
 from app.common.security.decorators import auth_required, role_required
 from app.common.exceptions import NotFoundError
 from app.constants.common import RoleName
-
-
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
-
-def swal_success(title: str, message: str, data=None, status_code: int = 200):
-    """Response thành công theo chuẩn SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        },
-        "success": True,
-    }
-    if data is not None:
-        payload["data"] = data
-    return jsonify(payload), status_code
-
-
-def swal_error(title: str, message: str, status_code: int = 400):
-    """Response lỗi theo chuẩn SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }
-    return jsonify(payload), status_code
+from app.common.responses import swal_success, swal_error
 
 
 def user_to_dict(user) -> dict:

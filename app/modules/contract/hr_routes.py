@@ -3,39 +3,7 @@ from . import contract_bp
 from app.modules.contract.hr_service import HR_Contract_Service
 from app.common.security.decorators import auth_required, role_required
 from app.constants.common import RoleName
-
-
-# ─────────────────────────────────────────────
-# Helpers (dùng chung với admin_routes nếu tách file)
-# ─────────────────────────────────────────────
-
-def swal_success(title: str, message: str, data=None, status_code: int = 200):
-    """Response thành công theo chuẩn SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        },
-        "success": True,
-    }
-    if data is not None:
-        payload["data"] = data
-    return jsonify(payload), status_code
-
-
-def swal_error(title: str, message: str, status_code: int = 400):
-    """Response lỗi theo chuẩn SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }
-    return jsonify(payload), status_code
-
+from app.common.responses import swal_success, swal_error
 
 def contract_to_dict(contract) -> dict:
     """Serialize Contract object sang dict."""

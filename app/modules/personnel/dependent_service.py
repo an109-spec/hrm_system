@@ -19,6 +19,47 @@ class EmployeeDependentService:
             raise ValueError("Không tìm thấy hồ sơ nhân viên")
         return employee
 
+
+    @staticmethod
+    def _get_employee_by_id(employee_id: int) -> Employee:
+        employee = db.session.get(Employee, employee_id)
+        if not employee or employee.is_deleted:
+            raise ValueError("Nhân viên không tồn tại.")
+        return employee
+
+    @staticmethod
+    def list_dependents_by_employee_id(*, employee_id: int) -> dict[str, Any]:
+        employee = EmployeeDependentService._get_employee_by_id(employee_id)
+        return EmployeeDependentService.list_dependents(employee=employee)
+
+    @staticmethod
+    def create_dependent_by_employee_id(*, employee_id: int, payload: dict[str, Any], actor_user_id: int) -> dict[str, Any]:
+        employee = EmployeeDependentService._get_employee_by_id(employee_id)
+        return EmployeeDependentService.create_dependent(
+            employee=employee,
+            payload=payload,
+            actor_user_id=actor_user_id,
+        )
+
+    @staticmethod
+    def update_dependent_by_employee_id(*, employee_id: int, dependent_id: int, payload: dict[str, Any], actor_user_id: int) -> dict[str, Any]:
+        employee = EmployeeDependentService._get_employee_by_id(employee_id)
+        return EmployeeDependentService.update_dependent(
+            employee=employee,
+            dependent_id=dependent_id,
+            payload=payload,
+            actor_user_id=actor_user_id,
+        )
+
+    @staticmethod
+    def delete_dependent_by_employee_id(*, employee_id: int, dependent_id: int, actor_user_id: int) -> dict[str, Any]:
+        employee = EmployeeDependentService._get_employee_by_id(employee_id)
+        return EmployeeDependentService.delete_dependent(
+            employee=employee,
+            dependent_id=dependent_id,
+            actor_user_id=actor_user_id,
+        )
+
     @staticmethod
     def _serialize_dependent(row: Dependent) -> dict:
         """

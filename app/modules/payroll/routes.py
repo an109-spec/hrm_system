@@ -6,31 +6,7 @@ from app.common.security.decorators import auth_required, role_required, self_or
 from app.common.security.permissions import salary_owner_or_hr_required
 from app.constants.common import RoleName
 
-
-# ===========================================================================
-# 🔧 HELPER: Chuẩn hoá response trả về dạng SweetAlert2 (Swal)
-# ===========================================================================
-
-def swal_success(title="Thành công", message="", data=None, status_code=200):
-    response = {
-        "swal": {"icon": "success", "title": title, "text": message}
-    }
-    if data is not None:
-        response["data"] = data
-    return jsonify(response), status_code
-
-
-def swal_error(title="Lỗi", message="Đã xảy ra lỗi, vui lòng thử lại.", status_code=400):
-    return jsonify({
-        "swal": {"icon": "error", "title": title, "text": message}
-    }), status_code
-
-
-def swal_warning(title="Cảnh báo", message="", status_code=400):
-    return jsonify({
-        "swal": {"icon": "warning", "title": title, "text": message}
-    }), status_code
-
+from app.common.responses import swal_error, swal_warning
 
 def _require_month_year():
     """

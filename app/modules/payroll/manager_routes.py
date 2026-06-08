@@ -7,40 +7,7 @@ from app.constants.common import RoleName
 from app.modules.payroll.manager_service import Manager_Payroll_Service
 
 
-def swal_success(message: str, data: dict = None) -> dict:
-    """Chuẩn hóa response thành công theo định dạng SweetAlert2."""
-    return {
-        "swal": {
-            "icon": "success",
-            "title": "Thành công",
-            "text": message,
-        },
-        "data": data or {}
-    }
-
-
-def swal_error(message: str, title: str = "Lỗi") -> dict:
-    """Chuẩn hóa response lỗi theo định dạng SweetAlert2."""
-    return {
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "data": None
-    }
-
-
-def swal_warning(message: str, data: dict = None) -> dict:
-    """Chuẩn hóa response cảnh báo theo định dạng SweetAlert2."""
-    return {
-        "swal": {
-            "icon": "warning",
-            "title": "Cảnh báo",
-            "text": message,
-        },
-        "data": data or {}
-    }
+from app.common.responses import payroll_success_payload as swal_success, payroll_error_payload as swal_error, payroll_warning_payload as swal_warning
 
 
 # ─────────────────────────────────────────────

@@ -13,41 +13,7 @@ from app.common.exceptions import NotFoundError, UnauthorizedError, ValidationEr
 # 🔧 HELPER: Chuẩn hoá response trả về dạng SweetAlert2 (Swal)
 # ===========================================================================
 
-def swal_success(title="Thành công", message="", data=None, status_code=200):
-    """Trả về response dạng Swal.fire success."""
-    response = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        }
-    }
-    if data is not None:
-        response["data"] = data
-    return jsonify(response), status_code
-
-
-def swal_error(title="Lỗi", message="Đã xảy ra lỗi, vui lòng thử lại.", status_code=400):
-    """Trả về response dạng Swal.fire error."""
-    return jsonify({
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        }
-    }), status_code
-
-
-def swal_warning(title="Cảnh báo", message="", status_code=400):
-    """Trả về response dạng Swal.fire warning."""
-    return jsonify({
-        "swal": {
-            "icon": "warning",
-            "title": title,
-            "text": message,
-        }
-    }), status_code
-
+from app.common.responses import swal_success, swal_error, swal_warning
 
 # ===========================================================================
 # 👤 PROFILE ROUTES — /personnel/profile
@@ -123,16 +89,11 @@ def update_profile_by_id(employee_id):
     Nhân viên chỉ có thể sửa của chính mình (đã kiểm soát bởi self_or_hr_required).
     """
     try:
-        emp_user_id = None
-        from app.models.employee import Employee
-        from app.extensions.db import db
-        emp = db.session.get(Employee, employee_id)
-        if emp:
-            emp_user_id = emp.user_id
+
 
         dto = UpdateProfileDTO(request.get_json(silent=True) or {})
         validate_update_profile(dto)
-        result = ProfileService.update_profile(user_id=emp_user_id, dto=dto)
+        result = ProfileService.update_profile_by_employee_id(employee_id=employee_id, dto=dto)
         return swal_success(
             title=result.get("title", "Thành công"),
             message=result.get("message", "Thông tin đã được cập nhật."),
@@ -293,12 +254,7 @@ def get_dependents_by_id(employee_id):
     Admin / HR xem danh sách người phụ thuộc của nhân viên.
     """
     try:
-        from app.models.employee import Employee as EmployeeModel
-        from app.extensions.db import db
-        employee = db.session.get(EmployeeModel, employee_id)
-        if not employee:
-            return swal_error(title="Không tìm thấy", message="Nhân viên không tồn tại.", status_code=404)
-        result = EmployeeDependentService.list_dependents(employee=employee)
+        result = EmployeeDependentService.list_dependents_by_employee_id(employee_id=employee_id)
         return jsonify({"data": result}), 200
     except ValueError as e:
         return swal_error(title="Không hợp lệ", message=str(e))
@@ -339,14 +295,10 @@ def create_dependent_by_id(employee_id):
     Admin / HR thêm người phụ thuộc cho nhân viên.
     """
     try:
-        from app.models.employee import Employee as EmployeeModel
-        from app.extensions.db import db
-        employee = db.session.get(EmployeeModel, employee_id)
-        if not employee:
-            return swal_error(title="Không tìm thấy", message="Nhân viên không tồn tại.", status_code=404)
+
         payload = request.get_json(silent=True) or {}
-        result = EmployeeDependentService.create_dependent(
-            employee=employee,
+        result = EmployeeDependentService.create_dependent_by_employee_id(
+            employee_id=employee_id,
             payload=payload,
             actor_user_id=g.user.id
         )
@@ -395,14 +347,10 @@ def update_dependent_by_id(employee_id, dependent_id):
     Admin / HR cập nhật thông tin người phụ thuộc của nhân viên.
     """
     try:
-        from app.models.employee import Employee as EmployeeModel
-        from app.extensions.db import db
-        employee = db.session.get(EmployeeModel, employee_id)
-        if not employee:
-            return swal_error(title="Không tìm thấy", message="Nhân viên không tồn tại.", status_code=404)
+
         payload = request.get_json(silent=True) or {}
-        result = EmployeeDependentService.update_dependent(
-            employee=employee,
+        result = EmployeeDependentService.update_dependent_by_employee_id(
+            employee_id=employee_id,
             dependent_id=dependent_id,
             payload=payload,
             actor_user_id=g.user.id
@@ -449,13 +397,8 @@ def delete_dependent_by_id(employee_id, dependent_id):
     Admin / HR xóa người phụ thuộc của nhân viên.
     """
     try:
-        from app.models.employee import Employee as EmployeeModel
-        from app.extensions.db import db
-        employee = db.session.get(EmployeeModel, employee_id)
-        if not employee:
-            return swal_error(title="Không tìm thấy", message="Nhân viên không tồn tại.", status_code=404)
-        result = EmployeeDependentService.delete_dependent(
-            employee=employee,
+        result = EmployeeDependentService.delete_dependent_by_employee_id(
+            employee_id=employee_id,
             dependent_id=dependent_id,
             actor_user_id=g.user.id
         )

@@ -115,6 +115,14 @@ class ProfileService:
         except Exception as e:
             db.session.rollback()
             raise e
+        
+    @staticmethod
+    def update_profile_by_employee_id(employee_id, dto):
+        """Cập nhật hồ sơ theo employee_id và giữ logic truy vấn DB trong service."""
+        emp = db.session.get(Employee, employee_id)
+        if not emp or not emp.user_id:
+            raise NotFoundError("Không tìm thấy thông tin nhân viên để cập nhật.")
+        return ProfileService.update_profile(user_id=emp.user_id, dto=dto)
     
     @staticmethod
     def change_password(user_id, dto):

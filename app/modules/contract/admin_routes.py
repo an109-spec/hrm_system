@@ -6,38 +6,7 @@ from app.common.security.permissions import permission_required
 from app.constants.common import RoleName
 from app.common.exceptions import NotFoundError
 from app.models.contract import Contract
-
-
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
-
-def swal_success(title: str, message: str, data=None, status_code: int = 200):
-    """Trả về response theo định dạng SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        },
-        "success": True,
-    }
-    if data is not None:
-        payload["data"] = data
-    return jsonify(payload), status_code
-
-
-def swal_error(title: str, message: str, status_code: int = 400):
-    """Trả về response lỗi theo định dạng SweetAlert2."""
-    payload = {
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }
-    return jsonify(payload), status_code
+from app.common.responses import swal_success, swal_error
 
 
 def contract_to_dict(contract: Contract) -> dict:

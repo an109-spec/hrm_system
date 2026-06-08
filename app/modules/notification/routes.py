@@ -5,33 +5,8 @@ from app.models.notification import Notification
 from app.modules.notification.notification_service import NotificationService
 from app.common.exceptions import NotFoundError
 from . import notification_bp
+from app.common.responses import flat_swal_success as swal_success, flat_swal_error as swal_error, flat_swal_info as swal_info
 
-def swal_success(title: str, message: str = "", data=None, status_code: int = 200):
-    payload = {
-        "icon": "success",
-        "title": title,
-        "text": message,
-    }
-    if data is not None:
-        payload["data"] = data
-    return jsonify(payload), status_code
-
-def swal_error(title: str, message: str = "", status_code: int = 400):
-    return jsonify({
-        "icon": "error",
-        "title": title,
-        "text": message,
-    }), status_code
-
-def swal_info(title: str, message: str = "", data=None, status_code: int = 200):
-    payload = {
-        "icon": "info",
-        "title": title,
-        "text": message,
-    }
-    if data is not None:
-        payload["data"] = data
-    return jsonify(payload), status_code
 
 
 # ─────────────────────────────────────────────

@@ -21,41 +21,14 @@ from app.models.contract import Contract
 from app.models.history import HistoryLog
 from app.constants.contract import ContractStatus
 from app.models.user import User
-from app.models.user import User
 from app.modules.payroll.admin_service import PayrollPolicyService
 from app.utils.date_utils import get_month_range
 from app.utils.time import _normalize, get_current_time
 from .base_service import PersonalPayrollService
+from .tax_rules import TaxRules
 
-class TaxRules:
-    DEFAULT_MEAL_LIMIT = 730_000
-    DEFAULT_FUEL_LIMIT = 500_000
 class HR_payroll_service(PersonalPayrollService):
-    ################################################################################
-    #TTính toán số tiền thực nhận, thuế, phụ cấp, và cập nhật lương theo tháng.
-    ################################################################################
-    @staticmethod
-    def tax_by_bracket(taxable_income: Decimal, brackets: list[dict]) -> Decimal:
-        """
-        Tính thuế TNCN theo phương pháp lũy tiến từng phần.
-        Công thức: Thuế = Thu nhập tính thuế * Thuế suất - Khấu trừ nhanh
-        """
-        if taxable_income <= 0:
-            return Decimal("0")
-        selected = None
-        for b in brackets:
-            from_val = Decimal(str(b["from"]))
-            to_val = Decimal(str(b["to"]))
-            if taxable_income > from_val and taxable_income <= to_val:
-                selected = b
-                break
-        if not selected:
-            selected = brackets[-1]
-        rate = Decimal(str(selected["rate_percent"])) / Decimal("100")
-        quick_deduction = Decimal(str(selected["quick_deduction"]))
-        tax = (taxable_income * rate) - quick_deduction
-        return max(Decimal("0"), tax).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
- 
+    tax_by_bracket = staticmethod(TaxRules.tax_by_bracket)
     @staticmethod
     def sum_allowance(employee_id: int) -> dict:
         rows = EmployeeAllowance.query.filter_by(employee_id=employee_id, status=True, is_deleted=False).all()

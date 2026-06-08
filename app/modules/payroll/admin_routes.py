@@ -5,38 +5,7 @@ from app.modules.payroll import payroll_bp
 from app.common.security.decorators import auth_required, role_required
 from app.constants.common import RoleName
 from app.modules.payroll.admin_service import PayrollPolicyService
-
-
-# ─────────────────────────────────────────────
-# Helper: Chuẩn hóa response SweetAlert2
-# ─────────────────────────────────────────────
-def swal_success(message: str, data=None) -> dict:
-    return {
-        "swal": {"icon": "success", "title": "Thành công", "text": message},
-        "data": data if data is not None else {}
-    }
-
-
-def swal_error(message: str, title: str = "Lỗi") -> dict:
-    return {
-        "swal": {"icon": "error", "title": title, "text": message},
-        "data": None
-    }
-
-
-def swal_warning(message: str, data=None) -> dict:
-    return {
-        "swal": {"icon": "warning", "title": "Cảnh báo", "text": message},
-        "data": data if data is not None else {}
-    }
-
-
-def swal_info(message: str, data=None) -> dict:
-    return {
-        "swal": {"icon": "info", "title": "Thông tin", "text": message},
-        "data": data if data is not None else {}
-    }
-
+from app.common.responses import payroll_success_payload as swal_success, payroll_error_payload as swal_error, payroll_warning_payload as swal_warning, payroll_info_payload as swal_info
 
 # ════════════════════════════════════════════════════════════════
 # NHÓM 1: CẤU HÌNH CHÍNH SÁCH LƯƠNG (Global Policy)

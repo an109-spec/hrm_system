@@ -4,32 +4,7 @@ from app.constants.common import RoleName
 from app.common.security.decorators import auth_required, role_required
 from app.modules.manager.employee_service import EmployeeService
 from . import manager_bp
-def swal_success(title, message, data=None):
-    """Chuẩn hoá response dạng SweetAlert2 thành công."""
-    response = {
-        "swal": {
-            "icon": "success",
-            "title": title,
-            "text": message,
-        },
-        "success": True,
-    }
-    if data is not None:
-        response["data"] = data
-    return jsonify(response), 200
-
-
-def swal_error(title, message, status_code=400):
-    """Chuẩn hoá response dạng SweetAlert2 lỗi."""
-    return jsonify({
-        "swal": {
-            "icon": "error",
-            "title": title,
-            "text": message,
-        },
-        "success": False,
-    }), status_code
-
+from app.common.responses import swal_success, swal_error
 
 # ===========================================================
 # GET /manager/summary

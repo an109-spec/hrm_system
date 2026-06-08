@@ -14,22 +14,13 @@ def auth_required(fn):
     @jwt_required(locations=["headers", "cookies"])
     def wrapper(*args, **kwargs):
         from app.models.user import User 
-        from app.models.employee import Employee 
         user_id = get_jwt_identity()
         user = db.session.get(User, user_id)
         if not user or not user.is_active:
             raise UnauthorizedError("Tài khoản không tồn tại hoặc đã bị khóa")
         employee = user.employee_profile
         if not employee:
-            from app.utils.time import get_current_time
-            employee = Employee(
-                user_id=user.id,
-                full_name=(user.username or user.email or f"User {user.id}").strip(),
-                working_status="active",
-                hire_date=get_current_time().date()
-            )
-            db.session.add(employee)
-            db.session.commit()
+            raise UnauthorizedError("Tài khoản chưa được liên kết với hồ sơ nhân viên")
         if employee.working_status == 'resigned':
             raise UnauthorizedError("Nhân viên đã nghỉ việc không thể truy cập")
         g.user = user
