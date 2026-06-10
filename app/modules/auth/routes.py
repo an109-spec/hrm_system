@@ -1,246 +1,295 @@
-from flask import request, render_template, redirect, url_for, session, current_app
-from flask_jwt_extended import create_access_token, set_access_cookies
-from app.common.exceptions import UnauthorizedError, ValidationError, ConflictError
-from app.models import User, Role
-from . import auth_bp
-from .validators import validate_login, validate_register
-# CHỈ import các Class cần thiết, KHÔNG import module 'dto' trùng tên
-from .dto import (
-    LoginDTO,
-    RegisterDTO,
-    RequestPasswordResetDTO,
-    ResetPasswordDTO,
+import logging
+from flask import request, jsonify, redirect, url_for, render_template, make_response
+from flask_jwt_extended import (
+    create_access_token, create_refresh_token,
+    set_access_cookies, set_refresh_cookies,
+    unset_jwt_cookies, jwt_required, get_jwt_identity
 )
-from .service import AuthService
 
-def _mask_identifier(identifier: str) -> str:
-    identifier = (identifier or "").strip()
-    if "@" in identifier:
-        local, domain = identifier.split("@", 1)
-        masked_local = local[:2] + "*" * (len(local) - 2) if len(local) > 2 else local + "*"
-        return f"{masked_local}@{domain}"
-    return f"{identifier[:2]}{'*' * (len(identifier) - 4)}{identifier[-2:]}" if len(identifier) > 4 else "*" * len(identifier)
-def _redirect_after_login(user, next_url: str | None):
-    if next_url:
-        return redirect(next_url)
+from app.common.exceptions import (
+    UnauthorizedError, ValidationError, ConflictError, TooManyRequestsError
+)
+from app.constants.common import RoleName
+from app.extensions.db import db
+from app.modules.auth import auth_bp
+from app.modules.auth.service import AuthService
+from app.modules.auth.dto import (
+    LoginDTO, RequestPasswordResetDTO, ResetPasswordDTO
+)
 
-    role_name = (user.role.name if getattr(user, "role", None) else "Employee").strip().lower()
-    if role_name == "admin":
-        return redirect(url_for("admin.admin_dashboard_page"))
-    if role_name == "hr":
-        return redirect(url_for("hr.employees_page"))
-    if role_name == "manager":
-        return redirect(url_for("manager.dashboard_page"))
-    return redirect(url_for("employee.dashboard"))
-# ======================================================
-# LOGIN
-# ======================================================
-@auth_bp.route("/login", methods=["GET", "POST"])
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _swal_error(title: str, text: str, status: int = 400):
+    """JSON dùng cho SweetAlert2 – phía client hiển thị Swal.fire(...)."""
+    return jsonify({
+        "swal": {
+            "icon": "error",
+            "title": title,
+            "text": text,
+        }
+    }), status
+
+
+def _swal_success(title: str, text: str, redirect_url: str | None = None, status: int = 200):
+    payload: dict = {
+        "swal": {
+            "icon": "success",
+            "title": title,
+            "text": text,
+        }
+    }
+    if redirect_url:
+        payload["redirect_url"] = redirect_url
+    return jsonify(payload), status
+
+
+def _swal_warning(title: str, text: str, status: int = 429):
+    return jsonify({
+        "swal": {
+            "icon": "warning",
+            "title": title,
+            "text": text,
+        }
+    }), status
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/login
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/login", methods=["GET"])
+def login_page():
+    """Hiển thị giao diện đăng nhập."""
+    return render_template("auth/login.html")
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/login
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/login", methods=["POST"])
 def login():
-    if request.method == "GET":
-        return render_template("auth/login.html", next_url=request.args.get("next"))
+    """Xác thực thông tin, cấp JWT và chuyển hướng về dashboard phù hợp."""
+    data = request.get_json(silent=True) or request.form
 
-    data = request.form.to_dict()
-    next_url = data.get("next") or request.args.get("next")
-    
-    try:
-        # 1. Validate dữ liệu đầu vào
-        validate_login(data)
-        
-        # 2. Khởi tạo đối tượng DTO từ dữ liệu form (Đặt tên là auth_dto để tránh trùng)
-        auth_dto = LoginDTO(
-            identifier=data.get("identifier"),
-            password=data.get("password")
-        )
-        
-        # 3. Gọi service xử lý logic login
-        user = AuthService.login(auth_dto)
-        
-        # 4. Tạo JWT Token
-        access_token = create_access_token(identity=str(user.id))
-
-        response = _redirect_after_login(user, next_url)
-
-        # 6. Đính Token vào Cookie (Quan trọng để @jwt_required đọc được)
-        set_access_cookies(response, access_token)
-        
-        # Lưu session song song nếu cần dùng cho inject_globals
-        session["user_id"] = user.id
-        
-        return response
-
-    except (ValidationError, UnauthorizedError) as e:
-        return render_template(
-            "auth/login.html",
-            error=str(e),
-            next_url=next_url
-        )
-
-# ======================================================
-# REGISTER
-# ======================================================
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "GET":
-        return render_template("auth/register.html")
-
-    data = request.form.to_dict()
-    
-    # Tạo DTO để truyền vào Service
-    reg_dto = RegisterDTO(
-        email=data.get("email"),
-        phone=data.get("phone"),
-        password=data.get("password"),
-        full_name=data.get("full_name"),
-        position=data.get("position"),
-        department_id=data.get("department_id")
+    dto = LoginDTO(
+        identifier=data.get("identifier", ""),
+        password=data.get("password", ""),
     )
 
     try:
-        user = AuthService.register(reg_dto)
-        
-        # Sau khi đăng ký, tạo luôn token để user vào thẳng dashboard
-        access_token = create_access_token(identity=str(user.id))
-        response = redirect(url_for("employee.dashboard"))
-        set_access_cookies(response, access_token)
-        
-        session["user_id"] = user.id
-        return response
+        user = AuthService.login(dto)
+    except ValidationError as exc:
+        return _swal_error("Thông tin không hợp lệ", str(exc), 422)
+    except UnauthorizedError as exc:
+        return _swal_error("Đăng nhập thất bại", str(exc), 401)
+    except Exception as exc:
+        logger.exception("Unexpected login error: %s", exc)
+        return _swal_error("Lỗi hệ thống", "Vui lòng thử lại sau.", 500)
 
-    except ConflictError as e:
-        return render_template("auth/register.html", error=str(e), data=data)
+    access_token  = create_access_token(identity=user.id)
+    refresh_token = create_refresh_token(identity=user.id)
 
-# ... Các hàm Logout, Forgot Password giữ nguyên ...
+    redirect_url = url_for("auth.dashboard_redirect")
+    response = _swal_success(
+        "Đăng nhập thành công",
+        f"Chào mừng trở lại, {user.username}!",
+        redirect_url=redirect_url,
+    )
+    # response là tuple (Response, status_code) → lấy phần tử đầu
+    resp_obj = make_response(response[0], response[1])
+    set_access_cookies(resp_obj, access_token)
+    set_refresh_cookies(resp_obj, refresh_token)
+    return resp_obj
 
-# ======================================================
-# LOGOUT
-# ======================================================
 
-@auth_bp.route("/logout", methods=["GET", "POST"])
+# ---------------------------------------------------------------------------
+# GET /auth/dashboard
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/dashboard", methods=["GET"])
+@jwt_required(locations=["headers", "cookies"])
+def dashboard_redirect():
+    """Kiểm tra role, điều hướng về trang chủ phù hợp."""
+    from app.models.user import User
+
+    user_id = get_jwt_identity()
+    user = db.session.get(User, user_id)
+
+    if not user or not user.is_active:
+        return redirect(url_for("auth.login_page"))
+
+    role = user.role.name if user.role else None
+
+    role_map = {
+        RoleName.ADMIN:    "admin.get_employee_summary",
+        RoleName.HR:       "hr.get_all_employee_summary",
+        RoleName.MANAGER:  "manager.get_department_employee_summary",
+        RoleName.EMPLOYEE: "personnel.get_my_profile",
+    }
+
+    target = role_map.get(role, "auth.login_page")
+    return redirect(url_for(target))
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/logout
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
-    session.pop("user_id", None)
-    return redirect(url_for("auth.login"))
-# ======================================================
-# FORGOT PASSWORD
-# ======================================================
+    """Xóa JWT cookie, hủy phiên làm việc và chuyển hướng về trang đăng nhập."""
+    response = make_response(
+        jsonify({
+            "swal": {
+                "icon": "success",
+                "title": "Đã đăng xuất",
+                "text": "Hẹn gặp lại bạn!",
+            },
+            "redirect_url": url_for("auth.login_page"),
+        }),
+        200,
+    )
+    unset_jwt_cookies(response)
+    return response
 
-@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+
+# ---------------------------------------------------------------------------
+# GET /auth/forgot-password
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/forgot-password", methods=["GET"])
+def forgot_password_page():
+    """Hiển thị form nhập Email / SĐT để yêu cầu khôi phục mật khẩu."""
+    return render_template("auth/forgot_password.html")
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/forgot-password
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
-    if request.method == "GET":
-        return render_template("auth/forgot_password.html", otp_sent=False)
+    """Tiếp nhận yêu cầu, gọi AuthService.request_password_reset và gửi OTP."""
+    data = request.get_json(silent=True) or request.form
 
-    identifier = (request.form.get("identifier") or "").strip()
+    dto = RequestPasswordResetDTO(identifier=data.get("identifier", ""))
 
     try:
-        dto = RequestPasswordResetDTO(identifier=identifier)
         result = AuthService.request_password_reset(dto)
-        channel_text = "email" if result.delivery_channel == "email" else "SMS"
+    except ValidationError as exc:
+        return _swal_error("Không thể gửi OTP", str(exc), 422)
+    except TooManyRequestsError as exc:
+        return _swal_warning("Quá nhiều yêu cầu", str(exc))
+    except Exception as exc:
+        logger.exception("Unexpected forgot_password error: %s", exc)
+        return _swal_error("Lỗi hệ thống", "Vui lòng thử lại sau.", 500)
 
-        return render_template(
-            "auth/forgot_password.html",
-            otp_sent=True,
-            masked_identifier=_mask_identifier(identifier),
-            identifier=identifier,
-            otp_type=result.delivery_channel,
-            otp_expires_at=result.otp_expires_at_iso,
-            otp_preview=result.otp_preview if current_app.debug else None,
-        )
+    return jsonify({
+        "swal": {
+            "icon": "success",
+            "title": "Đã gửi mã OTP",
+            "text": (
+                f"Mã OTP đã được gửi qua {result.delivery_channel}. "
+                f"Mã có hiệu lực đến {result.otp_expires_at_iso}."
+            ),
+        },
+        "redirect_url": url_for("auth.verify_otp_page"),
+        "otp_expires_at": result.otp_expires_at_iso,
+        "delivery_channel": result.delivery_channel,
+    }), 200
 
-    except ValidationError as e:
-        return render_template(
-            "auth/forgot_password.html",
-            otp_sent=False,
-            error=str(e),
-            identifier=identifier,
-        )
-# ======================================================
-# RESET PASSWORD
-# ======================================================
 
-@auth_bp.route("/reset-password", methods=["GET", "POST"])
+# ---------------------------------------------------------------------------
+# GET /auth/verify-otp
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/verify-otp", methods=["GET"])
+def verify_otp_page():
+    """Hiển thị form nhập mã OTP và mật khẩu mới."""
+    return render_template("auth/verify_otp.html")
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/verify-otp  (Cách 1 – verify OTP + đặt mật khẩu mới trong 1 bước)
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/verify-otp", methods=["POST"])
+def verify_otp():
+    """Xác thực OTP và cập nhật mật khẩu mới."""
+    data = request.get_json(silent=True) or request.form
+
+    dto = ResetPasswordDTO(
+        identifier=data.get("identifier", ""),
+        otp_code=data.get("otp_code", ""),
+        new_password=data.get("new_password", ""),
+        otp_type=data.get("otp_type", "email"),
+    )
+
+    try:
+        AuthService.reset_password(dto)
+    except ValidationError as exc:
+        return _swal_error("Thông tin không hợp lệ", str(exc), 422)
+    except UnauthorizedError as exc:
+        return _swal_error("OTP không hợp lệ", str(exc), 401)
+    except ConflictError as exc:
+        return _swal_error("Không thể đặt mật khẩu", str(exc), 409)
+    except Exception as exc:
+        logger.exception("Unexpected verify_otp error: %s", exc)
+        return _swal_error("Lỗi hệ thống", "Vui lòng thử lại sau.", 500)
+
+    return _swal_success(
+        "Đặt lại mật khẩu thành công",
+        "Mật khẩu của bạn đã được cập nhật. Vui lòng đăng nhập lại.",
+        redirect_url=url_for("auth.login_page"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/reset-password  (Cách 2 – có xác nhận mật khẩu confirm)
+# ---------------------------------------------------------------------------
+
+@auth_bp.route("/reset-password", methods=["POST"])
 def reset_password():
-    if request.method == "GET":
-        return render_template(
-            "auth/reset_password.html",
-            identifier=(request.args.get("identifier") or "").strip(),
-        )
+    """Kiểm tra khớp mật khẩu (confirm) rồi gọi AuthService.reset_password."""
+    data = request.get_json(silent=True) or request.form
 
-    data = request.form.to_dict()
-    identifier = (data.get("identifier") or "").strip()
-    otp_code = (data.get("otp_code") or "").strip()
-    new_password = data.get("new_password") or ""
-    confirm_password = data.get("confirm_password") or ""
-    otp_type = "email"
+    new_password     = data.get("new_password", "")
+    confirm_password = data.get("confirm_password", "")
 
     if new_password != confirm_password:
-        return render_template(
-            "auth/reset_password.html",
-            identifier=identifier,
-            error="Mật khẩu xác nhận không khớp",
+        return _swal_error(
+            "Mật khẩu không khớp",
+            "Mật khẩu xác nhận không trùng với mật khẩu mới.",
+            422,
         )
+
+    dto = ResetPasswordDTO(
+        identifier=data.get("identifier", ""),
+        otp_code=data.get("otp_code", ""),
+        new_password=new_password,
+        otp_type=data.get("otp_type", "email"),
+    )
 
     try:
-        dto = ResetPasswordDTO(
-            identifier=identifier,
-            otp_code=otp_code,
-            new_password=new_password,
-            otp_type=otp_type,
-        )
-
         AuthService.reset_password(dto)
+    except ValidationError as exc:
+        return _swal_error("Thông tin không hợp lệ", str(exc), 422)
+    except UnauthorizedError as exc:
+        return _swal_error("OTP không hợp lệ", str(exc), 401)
+    except ConflictError as exc:
+        return _swal_error("Không thể đặt mật khẩu", str(exc), 409)
+    except Exception as exc:
+        logger.exception("Unexpected reset_password error: %s", exc)
+        return _swal_error("Lỗi hệ thống", "Vui lòng thử lại sau.", 500)
 
-        return redirect(url_for("auth.login"))
-    except (ValidationError, UnauthorizedError, ConflictError) as e:
-        return render_template(
-            "auth/reset_password.html",
-            identifier=identifier,
-            error=str(e),
-        )
-@auth_bp.route("/verify-otp", methods=["GET", "POST"])
-def verify_otp():
-    if request.method == "GET":
-        identifier = request.args.get("identifier")
-        return render_template("auth/verify_otp.html", identifier=identifier)
-
-    data = request.form.to_dict()
-
-    try:
-        dto = ResetPasswordDTO(
-            identifier=data["identifier"],
-            otp_code=data["otp_code"],
-            otp_type=data["otp_type"],
-            new_password=data["new_password"],
-        )
-
-        AuthService.reset_password(dto)
-
-        return redirect(url_for("auth.login"))
-
-    except (ValidationError, UnauthorizedError, ConflictError) as e:
-        return render_template(
-            "auth/verify_otp.html",
-            error=str(e),
-            identifier=data.get("identifier"),
-        )
-
-@auth_bp.route("/dev-login/<string:role_name>", methods=["GET"])
-def dev_login(role_name):
-    if not current_app.config.get("DEBUG") and not current_app.config.get("TESTING"):
-        return "Cơ chế bảo vệ: Tính năng này chỉ dùng trong môi trường Phát triển/Demo!", 403
-    normalized_role = role_name.strip().lower()
-    role_record = Role.query.filter(Role.name.ilike(normalized_role)).first()
-    if not role_record:
-        return f"Vai trò '{role_name}' không tồn tại trong hệ thống cấu hình quyền.", 400
-    user = User.query.filter_by(role_id=role_record.id, is_deleted=False).first()
-    if not user:
-        return f"Không tìm thấy tài khoản mẫu nào thuộc vai trò '{role_record.name}' để demo.", 404
-    session.clear() 
-    session["user_id"] = user.id
-    actual_role_name = role_record.name.lower()
-    if "admin" in actual_role_name:
-        return redirect("/admin/dashboard")
-    elif "manager" in actual_role_name:
-        return redirect("/manager/dashboard")
-    elif "hr" in actual_role_name:
-        return redirect("/hr/dashboard") 
-    return redirect("/employee/dashboard")
+    return _swal_success(
+        "Đặt lại mật khẩu thành công",
+        "Mật khẩu của bạn đã được cập nhật. Vui lòng đăng nhập lại.",
+        redirect_url=url_for("auth.login_page"),
+    )

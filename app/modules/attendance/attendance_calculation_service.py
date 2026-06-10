@@ -1,5 +1,5 @@
 from decimal import Decimal
-from app.constants.attendance import AttendanceConstants, AttendanceStatus
+from app.constants.attendance import AttendanceConstants
 from app.constants.overtime import OvertimeConfig
 from .dto import WorkUnitDTO
 from app.models.attendance import Attendance
@@ -31,7 +31,9 @@ class attendance_calculation_service:
             normalized_type,
             OvertimeConfig.MULTIPLIERS["normal"]
         )
-    
+    '''
+    tính toán công hàng ngày
+    '''
     @staticmethod
     def calculate_regular_work_units(attendance: Attendance) -> WorkUnitDTO:
         # 1. Trường hợp thiếu dữ liệu check-in/out cơ bản
@@ -117,7 +119,9 @@ class attendance_calculation_service:
             late_minutes=late_minutes,
             early_leave_minutes=early_leave_minutes
         )
-    
+    '''
+    Tính toán giờ tăng ca (OT) thực tế
+    '''
     @staticmethod
     def calculate_overtime_hours_raw(
         overtime_check_in: Optional[datetime],

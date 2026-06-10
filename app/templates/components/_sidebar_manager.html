@@ -1,0 +1,43 @@
+<li class="nav-header text-uppercase text-muted px-3 mt-3">
+    Quản lý nhân sự
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('manager.get_department_employee_summary') }}">
+        <i class="fas fa-chart-pie me-2"></i> Tổng quan phòng ban
+    </a>
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('manager.get_department_employee_list') }}">
+        <i class="fas fa-users me-2"></i> Danh sách nhân viên
+    </a>
+</li>
+
+<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý nghỉ phép</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('leave.get_manager_leave_summary') }}">
+        <i class="fas fa-chart-line me-2"></i> Thống kê nghỉ phép
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('leave.get_manager_leaves') }}">
+        <i class="fas fa-tasks me-2"></i> Tất cả đơn của team
+    </a>
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('history.get_team_timeline') }}">
+        <i class="fas fa-users-viewfinder me-2"></i> Lịch sử nhóm
+    </a>
+</li>
+
+
+<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('contract.manager_get_contracts') }}">
+        <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
+    </a>
+</li>

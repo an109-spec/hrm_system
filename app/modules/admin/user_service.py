@@ -33,19 +33,17 @@ class User_Service:
     def create_user_for_pending_employee(employee_id: int, user_data: dict, current_user_id: int) -> User:
         """
         Tạo tài khoản cho nhân viên đang chờ (pending) và thiết lập liên kết 2 chiều.
-        Điều kiện: Nhân viên phải có hợp đồng 'active' và chưa hết hạn.
+        Điều kiện: Nhân viên phải có hợp đồng 'active', chưa hết hạn và mật khẩu mạnh.
         """
-        # 1. Lấy thông tin nhân viên (đảm bảo nhân viên này chưa có tài khoản)
+        # 1. Lấy thông tin nhân viên
         employee = Admin_Service.get_pending_employee_detail(employee_id)
 
-        # 2. KIỂM TRA HỢP ĐỒNG (Bổ sung mới)
-        # Tìm hợp đồng đang có trạng thái 'active'
+        # 2. KIỂM TRA HỢP ĐỒNG
         active_contract = Contract.query.filter_by(
             employee_id=employee.id, 
             status='active'
         ).first()
 
-        # Kiểm tra: Phải có hợp đồng tồn tại VÀ không được quá hạn
         if not active_contract:
             raise ValueError(f"Nhân viên {employee.full_name} chưa có hợp đồng lao động. Vui lòng tạo hợp đồng trước.")
         
@@ -58,8 +56,12 @@ class User_Service:
         password = user_data.get("password")
         role_id = user_data.get("role_id")
 
-        if not username or not email or not password or not role_id:
-            raise ValueError("Thông tin tài khoản không đầy đủ (username, email, password, role_id)")
+        if not username or not email or not role_id:
+            raise ValueError("Thông tin tài khoản không đầy đủ (username, email, role_id)")
+
+        # Validate Mật khẩu (Logic mới)
+        if not password or len(password) < 8:
+            raise ValueError("Mật khẩu không được để trống và phải có ít nhất 8 ký tự")
 
         # Kiểm tra trùng lặp
         if User.query.filter(or_(User.username == username, User.email == email)).first():
@@ -80,7 +82,7 @@ class User_Service:
 
         try:
             db.session.add(new_user)
-            db.session.flush() # Flush để lấy new_user.id trước khi commit
+            db.session.flush() # Lấy ID để ghi log
 
             # 5. Liên kết User với Employee
             employee.user = new_user 

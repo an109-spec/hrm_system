@@ -119,7 +119,7 @@ def submit_resignation():
 
 @resignation_bp.route("/propose", methods=["POST"])
 @auth_required
-@role_required(RoleName.MANAGER, RoleName.HR, RoleName.ADMIN)
+@role_required(RoleName.MANAGER)
 def propose_resignation():
     """
     Manager / HR / Admin đề xuất nghỉ việc cho một nhân viên.

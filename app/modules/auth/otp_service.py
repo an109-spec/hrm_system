@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
+# Import hàm get_current_time từ utility của bạn
+from app.utils.time import get_current_time
 from sqlalchemy import and_
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -7,10 +9,9 @@ from app.models.otp import OTPCode
 from app.common.security.otp import (
     generate_otp,
     get_otp_expired_at,
-    is_otp_expired,
+    is_otp_expired, 
 )
 from app.common.exceptions import ValidationError, TooManyRequestsError
-from .sms_service import SMSService
 
 class OTPService:
 
@@ -18,15 +19,11 @@ class OTPService:
     RESEND_COOLDOWN_SECONDS = 60
     MAX_REQUESTS_PER_15_MIN = 3
 
-    # ==========================================================
-    # CREATE OTP
-    # ==========================================================
     @staticmethod
     def create_otp(user, otp_type: str = "email") -> str:
-        now = datetime.now(timezone.utc)
-
-        # 1. Rate limit 15 phút
-        fifteen_minutes_ago = now - timedelta(minutes=15)
+        now = get_current_time() 
+        now_utc = now.astimezone(timezone.utc)
+        fifteen_minutes_ago = now_utc - timedelta(minutes=15)
         recent_count = OTPCode.query.filter(
             and_(
                 OTPCode.user_id == user.id,
@@ -48,12 +45,11 @@ class OTPService:
         ).order_by(OTPCode.created_at.desc()).first()
 
         if latest_otp:
-            # Chú ý: Đảm bảo latest_otp.created_at cũng có timezone info
-            diff = (now - latest_otp.created_at).total_seconds()
+            # So sánh với created_at (thường đã là timezone-aware từ DB)
+            diff = (now_utc - latest_otp.created_at).total_seconds()
             if diff < OTPService.RESEND_COOLDOWN_SECONDS:
                 raise ValidationError(f"Vui lòng chờ {int(OTPService.RESEND_COOLDOWN_SECONDS - diff)}s để yêu cầu mã mới.")
-
-            # Vô hiệu hóa OTP cũ thay vì xóa (để lưu log audit cho HRM)
+            
             latest_otp.is_used = True 
 
         # 3. Generate & Save OTP
@@ -62,22 +58,16 @@ class OTPService:
             user_id=user.id,
             otp_code=generate_password_hash(raw_code),
             type=otp_type,
-            expired_at=get_otp_expired_at(),
+            # Giả sử hàm này cũng cần dùng thời gian hiện tại
+            expired_at=get_otp_expired_at(), 
             is_used=False,
             failed_attempts=0,
         )
 
         db.session.add(otp)
         db.session.commit()
-
-        if otp_type == "sms" and user.phone:
-            SMSService.send(user.phone, f"Mã OTP HRM của bạn là: {raw_code}")
-
         return raw_code
 
-    # ==========================================================
-    # VERIFY OTP
-    # ==========================================================
     @staticmethod
     def verify_otp(user_id: int, code: str, otp_type: str = "email") -> bool:
         # Tìm OTP mới nhất chưa dùng
@@ -89,8 +79,6 @@ class OTPService:
 
         if not otp:
             return False
-
-        # Kiểm tra hết hạn hoặc Brute Force
         if is_otp_expired(otp.expired_at) or otp.failed_attempts >= OTPService.MAX_FAILED_ATTEMPTS:
             otp.is_used = True
             db.session.commit()

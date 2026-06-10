@@ -37,21 +37,15 @@ class MailService:
                 "Trân trọng,\n"
                 "Ban quản trị hệ thống HRM."
             )
-
             sender = current_app.config.get("MAIL_DEFAULT_SENDER") or "annduyy85@gmail.com"
-            
             msg = Message(
                 subject=subject,
                 recipients=[to_email.strip()],
                 body=body,
                 sender=sender
             )
-
             mail.send(msg)
             logger.info(f"Successfully sent OTP email to {to_email}")
-
         except Exception as e:
             logger.error(f"Email sending failed to {to_email}: {str(e)}")
-            # Không raise lỗi hệ thống ở đây để tránh làm crash luồng đăng ký của User,
-            # nhưng vẫn báo cho phía Service biết
             raise RuntimeError("Dịch vụ gửi email hiện không khả dụng")

@@ -5,7 +5,7 @@ from app.common.security.decorators import auth_required, role_required
 from app.modules.manager.employee_service import EmployeeService
 from . import manager_bp
 from app.common.responses import swal_success, swal_error
-
+from . import attendance_routes
 # ===========================================================
 # GET /manager/summary
 # Lấy số liệu tổng quan nhân viên trong phòng ban của manager

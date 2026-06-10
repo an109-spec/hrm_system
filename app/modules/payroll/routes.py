@@ -5,7 +5,7 @@ from app.modules.payroll.base_service import BasePayrollService, PersonalPayroll
 from app.common.security.decorators import auth_required, role_required, self_or_hr_required
 from app.common.security.permissions import salary_owner_or_hr_required
 from app.constants.common import RoleName
-
+from app.utils.time import get_current_time
 from app.common.responses import swal_error, swal_warning
 
 def _require_month_year():
@@ -41,7 +41,7 @@ def get_my_payroll_history():
       - has_complaint (str, tuỳ chọn)  — '1' | 'true' | 'yes'
     """
     try:
-        year = request.args.get("year", type=int)
+        year = request.args.get("year", type=int) or get_current_time().year
         if not year:
             return swal_warning(
                 title="Thiếu thông tin",
@@ -158,7 +158,7 @@ def get_my_salary_history():
     Trả về list tháng gồm: net_salary, status, status_label.
     """
     try:
-        year = request.args.get("year", type=int)
+        year = request.args.get("year", type=int) or get_current_time().year
         if not year:
             return swal_warning(
                 title="Thiếu thông tin",

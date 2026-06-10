@@ -68,7 +68,9 @@ class AttendanceCommandService:
         if recurring_holiday:
             return recurring_holiday
         return None
-
+    '''
+    Tra cứu trạng thái hôm nay
+    '''
     @staticmethod
     def get_today(
         employee_id: int,
@@ -96,7 +98,9 @@ class AttendanceCommandService:
                 ]:
                     record = prev_record
         return record
-
+    '''
+    Xem lịch sử/Bảng công tháng
+    '''
     @staticmethod
     def get_history(
         employee_id: int,
@@ -240,7 +244,9 @@ class AttendanceCommandService:
                 )
             current = date.fromordinal(current.toordinal() - 1)
         return history
-    
+    '''
+    Quản lý & Xóa công
+    '''
     @staticmethod
     def delete_attendance(
         employee_id: int,

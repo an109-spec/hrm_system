@@ -5,7 +5,6 @@ from app.modules.contract.employee_service import ContractService
 from app.constants.common import RoleName
 @contract_bp.route("/<int:contract_id>", methods=["GET"])
 @auth_required
-@role_required(RoleName.ADMIN, RoleName.HR)
 def get_my_contract_detail(contract_id):
     """
     API lấy chi tiết hợp đồng của nhân viên đang đăng nhập.

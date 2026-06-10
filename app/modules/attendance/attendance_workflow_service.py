@@ -11,9 +11,7 @@ from app.models.overtime_request import OvertimeRequest
 from app.models.leave import LeaveRequest
 from app.models.notification import Notification
 from app.models.attendance import AttendanceType, Attendance, AttendanceStatus, AttendanceShiftStatus
-
 from app.modules.attendance.constants import AttendanceAction
-
 from app.constants.attendance import WorkConfig, AttendanceConstants
 
 from .attendance_calculation_service import attendance_calculation_service
@@ -962,8 +960,8 @@ class Attendance_workflow_service:
         }
     
     @staticmethod
-    def check_in_overtime(employee_id: int) -> dict:
-        now_dt = get_current_time()
+    def check_in_overtime(employee_id: int, current_time: datetime = None) -> dict:
+        now_dt = current_time or get_current_time()
         if not now_dt:
             raise ValidationError("Không xác định được thời gian hệ thống.")
         record = Attendance.query.filter_by(

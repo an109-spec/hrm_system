@@ -1,23 +1,10 @@
 from dataclasses import dataclass
 from typing import Optional
 
-
 @dataclass
 class LoginDTO:
     identifier: str   # email hoặc phone
     password: str
-
-
-@dataclass
-class RegisterDTO:
-    password: str
-    full_name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    # Bổ sung để phục vụ HRM:
-    position: Optional[str] = None  # Vị trí ứng tuyển/làm việc
-    department_id: Optional[int] = None # Phòng ban dự kiến
-
 
 @dataclass
 class RequestPasswordResetDTO:

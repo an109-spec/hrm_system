@@ -50,7 +50,7 @@ class OvertimeService:
                 ]
                 all_subordinates.extend(emps)
         return all_subordinates
-    
+
     @classmethod
     def get_overtime_requests(cls, manager_id: int) -> list[dict]:
         """
@@ -89,32 +89,6 @@ class OvertimeService:
             }
             for x in rows
         ]
-
-    @staticmethod
-    def _get_subordinates(manager_id: int) -> list[Employee]:
-        """
-        Lấy toàn bộ nhân viên thuộc (các) phòng ban mà manager này quản lý.
-        """
-        manager = Employee.query.get(manager_id)
-        if not manager or manager.is_deleted:
-            return []
-        managed_depts = manager.managed_department
-        if not managed_depts:
-            return []
-            
-        if not isinstance(managed_depts, list):
-            managed_depts = [managed_depts]
-            
-        all_subordinates = []
-        for dept in managed_depts:
-            if hasattr(dept, 'employees'):
-                # Lọc nhân viên không phải chính manager và không bị xóa
-                emps = [
-                    e for e in dept.employees 
-                    if e.id != manager_id and not e.is_deleted
-                ]
-                all_subordinates.extend(emps)
-        return all_subordinates
 
     @staticmethod
     def _get_users_by_role(role_name: str) -> list[User]:

@@ -1,42 +1,58 @@
-from datetime import datetime, timezone, timedelta
 import logging
 from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
-
+import re
 from app.common.exceptions import ConflictError, UnauthorizedError, ValidationError
 from app.extensions import db
-from app.models import User, Employee # Đổi UserProfile thành Employee cho HRM
+from app.models import User, Employee 
 from app.models.otp import OTPCode
 
 from app.common.security.otp import get_otp_expired_at
-from .dto import (
-    LoginDTO, RegisterDTO, RequestPasswordResetDTO, 
-    ResetPasswordDTO, RequestPasswordResetResultDTO,
+from .dto import ( RequestPasswordResetDTO, 
+    LoginDTO, ResetPasswordDTO, RequestPasswordResetResultDTO,
 )
-
+from app.utils.time import get_current_time
 from .otp_service import OTPService
 from .mail_service import MailService
-from .sms_service import SMSService
 
 logger = logging.getLogger(__name__)
 
+EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+PHONE_PATTERN = re.compile(r"^\+?\d{9,15}$")
 class AuthService:
-
-    # ======================================================
-    # UTIL
-    # ======================================================
     @staticmethod
-    def _normalize_identifier(identifier: str) -> str:
-        if not identifier or not identifier.strip():
-            raise ValidationError("Thiếu email hoặc số điện thoại")
-        identifier = identifier.strip()
-        return identifier.lower() if "@" in identifier else AuthService._normalize_phone(identifier)
+    def validate_password(password: str) -> None:
+        if not password or not password.strip():
+            raise ValidationError("Mật khẩu không được để trống")
+        if len(password) < 8:
+            raise ValidationError("Mật khẩu phải có ít nhất 8 ký tự")
 
     @staticmethod
     def _normalize_phone(phone: str) -> str:
-        return phone.strip().replace(" ", "").replace("-", "").replace(".", "")
+        return re.sub(r'\D', '', phone)
 
+    @staticmethod
+    def validate_identifier_data(raw_identifier: str) -> str:
+        """
+        Nhận vào chuỗi thô, trả về chuỗi đã chuẩn hóa.
+        """
+        if not raw_identifier or not raw_identifier.strip():
+            raise ValidationError("Vui lòng nhập Email hoặc Số điện thoại")
+        clean_identifier = raw_identifier.strip()
+        if "@" in clean_identifier:
+            if not EMAIL_PATTERN.fullmatch(clean_identifier):
+                raise ValidationError("Định dạng Email không hợp lệ")
+            clean_identifier = clean_identifier.lower()
+        else:
+            clean_identifier = AuthService._normalize_phone(clean_identifier)
+            if not PHONE_PATTERN.fullmatch(clean_identifier):
+                raise ValidationError("Số điện thoại không hợp lệ")
+                
+        return clean_identifier
+    
+    '''
+    CHO PHÉP ĐĂNG NHẬP BẰNG SDT HOẶC EMAIL 
+    '''
     @staticmethod
     def _get_user_by_identifier(identifier: str) -> User | None:
             return User.query.filter(
@@ -48,89 +64,26 @@ class AuthService:
             ).first()
 
     @staticmethod
-    def _generate_username(email: str | None, phone: str | None) -> str:
-        base_username = email.split("@", 1)[0].strip().lower() if email else phone.strip()
-        candidate = base_username
-        suffix = 1
-        while User.query.filter_by(username=candidate).first() is not None:
-            candidate = f"{base_username}{suffix}"
-            suffix += 1
-        return candidate
-
-    # ======================================================
-    # REGISTER (Tối ưu cho HRM)
-    # ======================================================
-    @staticmethod
-    def register(dto: RegisterDTO) -> User:
-        # 1. Kiểm tra input
-        if not dto.email and not dto.phone:
-            raise ValidationError("Phải cung cấp email hoặc số điện thoại")
-
-        email = dto.email.lower().strip() if dto.email else None
-        phone = AuthService._normalize_phone(dto.phone) if dto.phone else None
-
-        # Hack nhỏ để tránh lỗi null email nếu dùng Database cũ
-        if not email and phone:
-            email = f"{phone}@hrm.local"
-
-        # 2. Tạo User tài khoản
-        user = User(
-            username=AuthService._generate_username(email, phone),
-            email=email,
-            password_hash=generate_password_hash(dto.password),
-            role_id=3
-        )
-
-        try:
-            db.session.add(user)
-            db.session.flush() # Để lấy user.id
-
-            # 3. QUAN TRỌNG: Tạo bản ghi Nhân viên (Employee) trong HRM
-            # Thay vì UserProfile đơn giản, HRM cần Employee để quản lý lương/nghỉ phép
-            employee = Employee(
-                user_id=user.id,
-                full_name=dto.full_name.strip(),
-                phone=phone,
-                working_status='active',
-                hire_date=datetime.now(timezone.utc).date()
-            )
-            
-            db.session.add(employee)
-            db.session.commit()
-            return user
-
-        except IntegrityError:
-            db.session.rollback()
-            raise ConflictError("Tài khoản hoặc nhân viên đã tồn tại trong hệ thống")
-
-    # ======================================================
-    # LOGIN
-    # ======================================================
-    @staticmethod
     def login(dto: LoginDTO) -> User:
-        identifier = AuthService._normalize_identifier(dto.identifier)
-        user = AuthService._get_user_by_identifier(identifier)
-
-        if not user or not check_password_hash(user.password_hash, dto.password):
-            # Tăng số lần sai để lock tài khoản
+        """
+        Xử lý đăng nhập với LoginDTO.
+        """
+        clean_identifier = AuthService.validate_identifier_data(dto.identifier)
+        AuthService.validate_password(dto.password)
+        user = AuthService._get_user_by_identifier(clean_identifier)
+        if not user or not user.check_password(dto.password):
             if user:
                 user.failed_login_attempts += 1
                 db.session.commit()
             raise UnauthorizedError("Sai thông tin đăng nhập")
-
-        now = datetime.now(timezone.utc)
+        now = get_current_time()
         if user.locked_at and user.locked_at > now:
-            raise UnauthorizedError(f"Tài khoản bị khóa đến {user.locked_until}")
-
-        # Login thành công: Reset số lần sai
+            raise UnauthorizedError(f"Tài khoản bị khóa đến {user.locked_at}")
         user.failed_login_attempts = 0
-        user.locked_until = None
+        user.locked_at = None
+        user.lock_reason = None 
         db.session.commit()
-
-        # XÓA: CartService (HRM không có giỏ hàng)
         return user
-
-    # ... Các hàm Reset Password Duy An giữ nguyên logic xử lý OTP là ổn ...
 
     # ======================================================
     # REQUEST PASSWORD RESET

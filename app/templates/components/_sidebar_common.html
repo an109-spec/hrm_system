@@ -1,0 +1,23 @@
+<!--
+LƯƠNG
+-->
+<li class="nav-header text-uppercase text-muted px-3 mt-2">Lương</li>
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('payroll.get_my_payroll_history') }}">Lịch sử lương</a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('payroll.get_my_salary_history') }}">Biểu đồ thu nhập</a>
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('history.get_my_timeline') }}">
+        <i class="fas fa-history me-2"></i> Lịch sử của tôi
+    </a>
+</li>
+
+<li class="nav-header text-uppercase text-muted px-3 mt-3">Chấm công</li>
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('attendance.get_today') }}">
+        <i class="fas fa-file-contract me-2"></i> chấm công hôm nay
+    </a>
+</li>
