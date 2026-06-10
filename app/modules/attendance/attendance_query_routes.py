@@ -87,14 +87,14 @@ def _swal_bad_request(message: str):
 
 
 # ============================================================
-# 1️⃣  GET /attendance/today  — Trạng thái nhanh Sidebar Widget
+# 1️⃣  GET /attendance/today/list  — Danh sách chấm công hôm nay
 # ============================================================
 
-@attendance_bp.route("/today", methods=["GET"])
+@attendance_bp.route("/today/list", methods=["GET"])
 @auth_required
-def get_today():
+def list_today():
     """
-    Lấy bản ghi chấm công của hôm nay.
+    Lấy danh sách bản ghi chấm công của tất cả nhân viên hôm nay (dành cho Manager/HR/Admin).
 
     Query params:
         employee_id (int, optional): HR/Admin có thể xem người khác;
