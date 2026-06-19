@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 from app.modules.payroll import payroll_bp
 from app.modules.payroll.employee_service import EmployeePayrollService
 from app.common.security.decorators import (
@@ -215,3 +215,8 @@ def monthly_report():
             "title": "Không thể lấy báo cáo",
             "text": str(e)
         }), 400
+    
+@payroll_bp.route("/complaints/form", methods=["GET"])
+def complaint_form_page():
+    print("DEBUG: User đã vào được route!") # Dòng này có xuất hiện trong terminal không?
+    return render_template("modules/payroll/complaint_form.html")

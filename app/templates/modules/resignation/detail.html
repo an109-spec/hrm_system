@@ -1,0 +1,310 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Chi tiết đơn nghỉ việc #{{ resignation.id }} — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resignation.css') }}">
+{% endblock %}
+
+{% block content %}
+{# ── Ẩn resignation_id cho JS ── #}
+<input type="hidden" id="resignationId" value="{{ resignation.id }}">
+
+{# ── Header ── #}
+<div class="mb-4">
+    <a href="javascript:history.back()" class="btn btn-sm btn-light border mb-3">
+        <i class="fas fa-arrow-left me-1"></i> Quay lại
+    </a>
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+        <h4 class="fw-bold mb-0">Đơn nghỉ việc #{{ resignation.id }}</h4>
+        {# Badge render phía server cho SEO/no-JS fallback #}
+        {% set status_map = {
+            'PENDING_MANAGER': ('pending-manager', 'fa-user-tie',    'Chờ Manager'),
+            'PENDING_HR':      ('pending-hr',      'fa-id-badge',    'Chờ HR'),
+            'PENDING_ADMIN':   ('pending-admin',   'fa-user-shield', 'Chờ Admin'),
+            'APPROVED':        ('approved',        'fa-check-circle','Đã duyệt'),
+            'REJECTED':        ('rejected',        'fa-times-circle','Từ chối'),
+            'CANCELLED':       ('cancelled',       'fa-ban',         'Đã huỷ'),
+        } %}
+        {% set sm = status_map.get(resignation.status, ('cancelled','fa-circle', resignation.status)) %}
+        <span class="resign-badge {{ sm[0] }}">
+            <i class="fas {{ sm[1] }}"></i>{{ sm[2] }}
+        </span>
+        {% if resignation.request_type == 'manager_proposal' %}
+        <span class="badge bg-info text-dark"><i class="fas fa-user-tie me-1"></i>Đề xuất bởi Manager</span>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Stepper ── #}
+<div class="mb-4">
+    <div id="resignStepper" data-status="{{ resignation.status }}"></div>
+</div>
+
+<div class="row g-4">
+    {# ── Cột trái: thông tin đơn ── #}
+    <div class="col-lg-8">
+
+        {# Thông tin nhân viên #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 text-secondary"><i class="fas fa-user me-2"></i>Thông tin nhân viên</h6>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="label">Họ và tên</div>
+                        <div class="value">{{ resignation.employee_name or '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Mã nhân viên</div>
+                        <div class="value">{{ resignation.employee_code or '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Phòng ban</div>
+                        <div class="value">{{ resignation.department_name or '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Chức vụ</div>
+                        <div class="value">{{ resignation.position_name or '—' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Thông tin đơn #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 text-secondary"><i class="fas fa-file-alt me-2"></i>Thông tin đơn</h6>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="label">Ngày gửi đơn</div>
+                        <div class="value">{{ resignation.created_at | date_fmt if resignation.created_at else '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Ngày dự kiến nghỉ</div>
+                        <div class="value fw-bold text-danger">{{ resignation.expected_last_day | date_fmt if resignation.expected_last_day else '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Lý do</div>
+                        <div class="value">{{ resignation.reason_category or '—' }}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="label">Nhân viên bàn giao</div>
+                        <div class="value">{{ resignation.handover_employee_name or 'Chưa xác định' }}</div>
+                    </div>
+                </div>
+
+                {% if resignation.reason_text %}
+                <div class="mt-3 p-3 bg-light rounded">
+                    <div class="small text-muted fw-semibold mb-1">Mô tả chi tiết</div>
+                    <p class="mb-0 small">{{ resignation.reason_text }}</p>
+                </div>
+                {% endif %}
+
+                {% if resignation.extra_note %}
+                <div class="mt-2 p-3 bg-light rounded">
+                    <div class="small text-muted fw-semibold mb-1">Ghi chú thêm</div>
+                    <p class="mb-0 small">{{ resignation.extra_note }}</p>
+                </div>
+                {% endif %}
+
+                {% if resignation.attachment_url %}
+                <div class="mt-3">
+                    <a href="{{ resignation.attachment_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-paperclip me-1"></i> Xem tài liệu đính kèm
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Nhận xét Manager #}
+        {% if resignation.manager_note %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 text-secondary"><i class="fas fa-user-tie me-2"></i>Nhận xét của Manager</h6>
+                <p class="mb-0 small">{{ resignation.manager_note }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Checklist HR #}
+        {% if resignation.status in ['PENDING_ADMIN', 'APPROVED', 'REJECTED'] and (
+                resignation.hr_note or resignation.final_payroll_note or
+                resignation.final_attendance_note or resignation.leave_balance_note or
+                resignation.insurance_note or resignation.asset_handover_note) %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 text-secondary"><i class="fas fa-id-badge me-2"></i>Biên bản offboarding HR</h6>
+                {% macro note_row(label, val) %}
+                {% if val %}
+                <div class="checklist-item">
+                    <label>{{ label }}</label>
+                    <div class="small text-secondary">{{ val }}</div>
+                </div>
+                {% endif %}
+                {% endmacro %}
+                {{ note_row('Thanh toán lương cuối kỳ', resignation.final_payroll_note) }}
+                {{ note_row('Chốt công / chấm công', resignation.final_attendance_note) }}
+                {{ note_row('Số dư nghỉ phép', resignation.leave_balance_note) }}
+                {{ note_row('Bảo hiểm / BHXH', resignation.insurance_note) }}
+                {{ note_row('Bàn giao tài sản', resignation.asset_handover_note) }}
+                {{ note_row('Ghi chú HR', resignation.hr_note) }}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Nhận xét Admin #}
+        {% if resignation.admin_note %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 text-secondary"><i class="fas fa-user-shield me-2"></i>Nhận xét của Admin</h6>
+                <p class="mb-0 small">{{ resignation.admin_note }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    {# ── Cột phải: action panels ── #}
+    <div class="col-lg-4">
+
+        {# ── Manager Panel ── #}
+        {% if current_user.role.name in ['MANAGER', 'ADMIN'] and resignation.status == 'PENDING_MANAGER' %}
+        <div class="action-panel manager-panel mb-3" id="managerActionPanel">
+            <h6 class="fw-bold mb-3"><i class="fas fa-user-tie me-2 text-warning"></i>Duyệt đơn</h6>
+            <div class="mb-3">
+                <label class="form-label small fw-semibold">Ghi chú (bắt buộc nếu từ chối)</label>
+                <textarea id="managerNote" class="form-control form-control-sm" rows="3"
+                          placeholder="Nhận xét hoặc lý do từ chối..."></textarea>
+            </div>
+            <div class="d-grid gap-2">
+                <button class="btn btn-success btn-sm" data-action="approve">
+                    <i class="fas fa-check me-1"></i> Duyệt — Chuyển HR
+                </button>
+                <button class="btn btn-outline-danger btn-sm" data-action="reject">
+                    <i class="fas fa-times me-1"></i> Từ chối
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── HR Panel ── #}
+        {% if current_user.role.name in ['HR', 'ADMIN'] and resignation.status == 'PENDING_HR' %}
+        <div class="action-panel hr-panel mb-3" id="hrActionPanel">
+            <h6 class="fw-bold mb-3"><i class="fas fa-id-badge me-2 text-info"></i>Xử lý offboarding</h6>
+
+            <div class="checklist-item mb-2">
+                <label>Thanh toán lương cuối kỳ</label>
+                <textarea id="final_payroll_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Ghi chú thanh toán lương..."></textarea>
+            </div>
+            <div class="checklist-item mb-2">
+                <label>Chốt công / chấm công</label>
+                <textarea id="final_attendance_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Ghi chú chấm công..."></textarea>
+            </div>
+            <div class="checklist-item mb-2">
+                <label>Số dư nghỉ phép</label>
+                <textarea id="leave_balance_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Số ngày phép còn lại..."></textarea>
+            </div>
+            <div class="checklist-item mb-2">
+                <label>Bảo hiểm / BHXH</label>
+                <textarea id="insurance_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Trạng thái BHXH, BHYT..."></textarea>
+            </div>
+            <div class="checklist-item mb-2">
+                <label>Bàn giao tài sản</label>
+                <textarea id="asset_handover_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Máy tính, thẻ từ, dụng cụ..."></textarea>
+            </div>
+            <div class="checklist-item mb-3">
+                <label>Ghi chú HR chung</label>
+                <textarea id="hr_note" class="form-control form-control-sm mt-1" rows="2"
+                          placeholder="Ghi chú tổng quát của HR..."></textarea>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button class="btn btn-primary btn-sm" data-action="forward_admin">
+                    <i class="fas fa-paper-plane me-1"></i> Hoàn tất — Chuyển Admin
+                </button>
+                <button class="btn btn-outline-danger btn-sm" data-action="reject">
+                    <i class="fas fa-times me-1"></i> Từ chối hồ sơ
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Admin Panel ── #}
+        {% if current_user.role.name == 'ADMIN' and resignation.status == 'PENDING_ADMIN' %}
+        <div class="action-panel admin-panel mb-3" id="adminActionPanel">
+            <h6 class="fw-bold mb-3"><i class="fas fa-user-shield me-2 text-purple"></i>Phê duyệt cuối</h6>
+
+            <div class="alert alert-warning small py-2 mb-3">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Duyệt sẽ <strong>khoá tài khoản</strong> nhân viên và cập nhật trạng thái nhân sự thành <strong>Đã nghỉ việc</strong>.
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold">Ghi chú (bắt buộc nếu từ chối)</label>
+                <textarea id="adminNote" class="form-control form-control-sm" rows="3"
+                          placeholder="Nhận xét hoặc lý do từ chối..."></textarea>
+            </div>
+            <div class="d-grid gap-2">
+                <button class="btn btn-success btn-sm" data-action="approve">
+                    <i class="fas fa-check-double me-1"></i> Phê duyệt nghỉ việc
+                </button>
+                <button class="btn btn-outline-danger btn-sm" data-action="reject">
+                    <i class="fas fa-times me-1"></i> Từ chối
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Trạng thái kết thúc ── #}
+        {% if resignation.status in ['APPROVED', 'REJECTED', 'CANCELLED'] %}
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body text-center py-4">
+                {% if resignation.status == 'APPROVED' %}
+                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                <p class="fw-bold mb-1 text-success">Đã phê duyệt</p>
+                <p class="small text-muted">Nhân viên chính thức nghỉ việc từ ngày {{ resignation.expected_last_day | date_fmt if resignation.expected_last_day else '—' }}.</p>
+                {% elif resignation.status == 'REJECTED' %}
+                <i class="fas fa-times-circle fa-2x text-danger mb-2"></i>
+                <p class="fw-bold mb-1 text-danger">Đã từ chối</p>
+                <p class="small text-muted">Đơn nghỉ việc đã bị từ chối. Nhân viên vẫn tiếp tục làm việc.</p>
+                {% else %}
+                <i class="fas fa-ban fa-2x text-secondary mb-2"></i>
+                <p class="fw-bold mb-1 text-secondary">Đã huỷ</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Audit info ── #}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 small text-muted text-uppercase">Thông tin xử lý</h6>
+                <ul class="list-unstyled small text-secondary mb-0">
+                    <li class="mb-1"><i class="fas fa-calendar-plus me-2 text-muted"></i>Ngày gửi: {{ resignation.created_at | date_fmt if resignation.created_at else '—' }}</li>
+                    {% if resignation.reviewed_by_manager_name %}
+                    <li class="mb-1"><i class="fas fa-user-tie me-2 text-muted"></i>Manager: {{ resignation.reviewed_by_manager_name }}</li>
+                    {% endif %}
+                    {% if resignation.processed_by_hr_name %}
+                    <li class="mb-1"><i class="fas fa-id-badge me-2 text-muted"></i>HR: {{ resignation.processed_by_hr_name }}</li>
+                    {% endif %}
+                    {% if resignation.approved_by_admin_name %}
+                    <li class="mb-1"><i class="fas fa-user-shield me-2 text-muted"></i>Admin: {{ resignation.approved_by_admin_name }}</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation.js') }}"></script>
+{% endblock %}

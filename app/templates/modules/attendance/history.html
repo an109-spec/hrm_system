@@ -1,0 +1,88 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Lich Su Cham Cong — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 fw-bold">Lich Su Cham Cong</h4>
+            <p class="text-muted mb-0 small">Xem va quan ly ban ghi cham cong cua ban</p>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="att-filter-bar">
+        <!-- HR / Manager: co the loc theo nhan vien -->
+        {% if current_user and current_user.role.name in ['HR', 'ADMIN', 'MANAGER'] %}
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Ma nhan vien</label>
+            <input type="number" id="employee_id_filter" class="form-control form-control-sm"
+                   placeholder="De trong = ban than" style="width:160px;">
+        </div>
+        {% endif %}
+
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Tu ngay</label>
+            <input type="date" id="from_date" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Den ngay</label>
+            <input type="date" id="to_date" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+            <button id="btn-filter" class="btn btn-primary btn-sm px-4">
+                Loc
+            </button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table att-table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Ngay</th>
+                            <th>Ho ten</th>
+                            <th>Gio vao</th>
+                            <th>Gio ra</th>
+                            <th>Loai ngay</th>
+                            <th>Gio lam</th>
+                            <th>Di muon</th>
+                            <th>Thao tac</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <tr><td colspan="8" class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary"></div>
+                            Dang tai...
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-transparent d-flex justify-content-end" id="history-pagination"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates: first of month → today
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('from_date').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('to_date').value   = today.toISOString().split('T')[0];
+
+    AttendanceHistory.init();
+});
+</script>
+{% endblock %}

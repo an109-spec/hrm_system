@@ -1,0 +1,312 @@
+/* ────────────────────────────────────────────────────────────
+   admin.css  –  Styles dùng chung cho toàn bộ module admin
+   ──────────────────────────────────────────────────────────── */
+
+/* ── Page header ─────────────────────────────────────────── */
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.page-subtitle {
+    font-size: .875rem;
+    color: #6b7280;
+}
+
+/* ── Stat cards (lock_unlock) ─────────────────────────────── */
+.stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    border-left: 4px solid transparent;
+    transition: box-shadow .2s;
+}
+
+.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+
+.stat-card--total   { border-left-color: #6366f1; }
+.stat-card--active  { border-left-color: #22c55e; }
+.stat-card--locked  { border-left-color: #ef4444; }
+.stat-card--pending { border-left-color: #f59e0b; }
+
+.stat-label {
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+}
+
+/* ── Status badges ────────────────────────────────────────── */
+.badge-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #dcfce7;
+    color: #16a34a;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 99px;
+}
+
+.badge-locked {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 99px;
+}
+
+.badge-active::before  { content: "●"; font-size: .5rem; }
+.badge-locked::before  { content: "●"; font-size: .5rem; }
+
+/* ── Action buttons in table ─────────────────────────────── */
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #374151;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: all .15s;
+    text-decoration: none;
+}
+
+.btn-action:hover           { background: #f3f4f6; color: #111827; border-color: #d1d5db; }
+.btn-action--danger:hover   { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.btn-action--success:hover  { background: #dcfce7; color: #16a34a; border-color: #86efac; }
+.btn-action--warning:hover  { background: #fef9c3; color: #ca8a04; border-color: #fde047; }
+
+/* ── Modal icon ───────────────────────────────────────────── */
+.modal-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin: 0 auto;
+}
+
+.modal-icon--danger  { background: #fee2e2; color: #dc2626; }
+.modal-icon--success { background: #dcfce7; color: #16a34a; }
+.modal-icon--warning { background: #fef9c3; color: #ca8a04; }
+
+/* ── Admin tabs (metadata) ────────────────────────────────── */
+.admin-tabs {
+    border-bottom: 2px solid #e5e7eb;
+    gap: 4px;
+}
+
+.admin-tabs .nav-link {
+    color: #6b7280;
+    font-weight: 500;
+    font-size: .9rem;
+    padding: 10px 18px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: all .15s;
+    background: none;
+}
+
+.admin-tabs .nav-link:hover { color: #4f46e5; background: #f5f3ff; }
+
+.admin-tabs .nav-link.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+    background: transparent;
+}
+
+/* ── Roles grid (metadata) ────────────────────────────────── */
+.role-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    border: 1px solid #e5e7eb;
+    text-align: center;
+    transition: box-shadow .2s;
+}
+
+.role-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+
+.role-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin: 0 auto 12px;
+}
+
+.role-icon--admin    { background: #ede9fe; color: #7c3aed; }
+.role-icon--hr       { background: #dbeafe; color: #2563eb; }
+.role-icon--manager  { background: #dcfce7; color: #16a34a; }
+.role-icon--employee { background: #fef9c3; color: #ca8a04; }
+.role-icon--default  { background: #f3f4f6; color: #6b7280; }
+
+.role-name  { font-weight: 700; color: #111827; margin-bottom: 2px; }
+.role-desc  { font-size: .8rem; color: #6b7280; }
+
+/* ── Settings nav (system_settings) ──────────────────────── */
+.settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    color: #374151;
+    font-weight: 500;
+    font-size: .9rem;
+    cursor: pointer;
+    transition: all .15s;
+    text-decoration: none;
+}
+
+.settings-nav-item:hover  { background: #f3f4f6; color: #4f46e5; }
+.settings-nav-item.active { background: #ede9fe; color: #4f46e5; font-weight: 600; }
+.settings-nav-item i      { font-size: 1rem; width: 18px; text-align: center; }
+
+/* ── Settings section header ─────────────────────────────── */
+.settings-section-header {
+    font-weight: 600;
+    font-size: .95rem;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 14px 20px;
+}
+
+/* ── Toggle group ─────────────────────────────────────────── */
+.settings-toggle-group {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.settings-toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    gap: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    transition: background .15s;
+}
+
+.settings-toggle-item:last-child { border-bottom: none; }
+.settings-toggle-item:hover      { background: #f9fafb; }
+
+.form-check-input:checked {
+    background-color: #4f46e5;
+    border-color: #4f46e5;
+}
+
+/* ── System info rows ─────────────────────────────────────── */
+.sys-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: .875rem;
+}
+
+.sys-info-row:last-child { border-bottom: none; }
+.sys-info-label { color: #6b7280; }
+
+.card-title-sm {
+    font-size: .85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #6b7280;
+}
+
+/* ── Maintenance action rows ─────────────────────────────── */
+.maint-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    gap: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    transition: background .15s;
+}
+
+.maint-action-row:hover { background: #f9fafb; }
+
+/* ── Table empty / loading state ─────────────────────────── */
+.table-empty-state {
+    padding: 48px 16px;
+    text-align: center;
+    color: #6b7280;
+}
+
+.table-empty-state i {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    opacity: .3;
+}
+
+/* ── form-label-sm ────────────────────────────────────────── */
+.form-label-sm {
+    font-size: .8rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+/* ── Responsive tweaks ────────────────────────────────────── */
+@media (max-width: 768px) {
+    .stat-value { font-size: 1.4rem; }
+
+    .settings-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .settings-nav-item {
+        flex: 1 1 auto;
+        justify-content: center;
+        font-size: .8rem;
+        padding: 8px 10px;
+    }
+
+    .settings-nav-item span { display: none; }
+
+    .maint-action-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+}

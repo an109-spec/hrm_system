@@ -1,0 +1,114 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Lịch Sử Lương — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-history me-2 text-primary"></i>Lịch Sử Lương
+        </h4>
+        <small class="text-muted">Xem lại toàn bộ kỳ lương của bạn theo năm</small>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="filterYear" class="form-select form-select-sm" style="width:110px">
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+        </select>
+        <select id="filterStatus" class="form-select form-select-sm" style="width:160px">
+            <option value="">Tất cả trạng thái</option>
+            <option value="draft">Nháp</option>
+            <option value="pending">Chờ duyệt</option>
+            <option value="approved">Đã duyệt</option>
+            <option value="paid">Đã thanh toán</option>
+            <option value="rejected">Bị từ chối</option>
+        </select>
+        <button id="btnFilter" class="btn btn-primary btn-sm">
+            <i class="fas fa-search me-1"></i>Lọc
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4" id="summaryCards">
+    <div class="col-md-3">
+        <div class="summary-card card-blue position-relative">
+            <div class="card-value" id="sumNetSalary">--</div>
+            <div class="card-label">Lương gần nhất</div>
+            <i class="fas fa-money-bill-wave card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-green position-relative">
+            <div class="card-value" id="sumStatus">--</div>
+            <div class="card-label">Trạng thái</div>
+            <i class="fas fa-check-circle card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-orange position-relative">
+            <div class="card-value" id="sumPaymentDate">--</div>
+            <div class="card-label">Ngày thanh toán gần nhất</div>
+            <i class="fas fa-calendar card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-purple position-relative">
+            <div class="card-value" id="sumDependents">--</div>
+            <div class="card-label">Người phụ thuộc hiện tại</div>
+            <i class="fas fa-users card-icon"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Chart -->
+<div class="chart-card mb-4">
+    <div class="chart-title">Biểu Đồ Thu Nhập Theo Tháng</div>
+    <canvas id="salaryChart" height="100"></canvas>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table payroll-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Kỳ lương</th>
+                        <th>Lương cơ bản</th>
+                        <th>Phụ cấp</th>
+                        <th>Tăng ca</th>
+                        <th>Bảo hiểm</th>
+                        <th>Thuế TNCN</th>
+                        <th>Khấu trừ</th>
+                        <th class="text-success">Thực lĩnh</th>
+                        <th>Trạng thái</th>
+                        <th>Khiếu nại</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="payrollTableBody">
+                    <tr>
+                        <td colspan="11" class="text-center py-4 text-muted">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Đang tải dữ liệu...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_history.js') }}"></script>
+{% endblock %}

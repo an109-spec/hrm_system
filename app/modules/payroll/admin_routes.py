@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 from http import HTTPStatus
 
 from app.modules.payroll import payroll_bp
@@ -279,3 +279,11 @@ def set_salary_config_for_position(position_id: int):
         return jsonify(swal_error(str(e), title="Không thể cập nhật")), HTTPStatus.BAD_REQUEST
     except Exception as e:
         return jsonify(swal_error(str(e))), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+@payroll_bp.route("/finalize", methods=["GET"])
+@auth_required
+def finalize_page():
+    """
+    Hiển thị trang giao diện Chốt sổ & Duyệt bảng lương cho HR/Admin.
+    """
+    return render_template("modules/payroll/finalize.html")

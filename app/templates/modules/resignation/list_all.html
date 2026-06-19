@@ -1,0 +1,51 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Quản lý đơn nghỉ việc — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resignation.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-0">Quản lý đơn nghỉ việc</h4>
+        <p class="text-muted small mb-0">
+            {% if current_user.role.name == 'MANAGER' %}
+                Đơn của nhóm bạn phụ trách.
+            {% elif current_user.role.name == 'HR' %}
+                Tất cả đơn cần xử lý offboarding.
+            {% else %}
+                Toàn bộ đơn nghỉ việc trong hệ thống.
+            {% endif %}
+        </p>
+    </div>
+    {% if current_user.role.name == 'MANAGER' %}
+    <a href="{{ url_for('resignation.propose_form') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-user-minus me-1"></i> Đề xuất nghỉ cho nhân viên
+    </a>
+    {% endif %}
+</div>
+
+<!-- Filter bar -->
+<form id="resignFilterForm" class="filter-bar">
+    <label class="fw-semibold small text-nowrap">Lọc theo:</label>
+    <select name="status" class="form-select form-select-sm">
+        <option value="">Tất cả trạng thái</option>
+        <option value="PENDING_MANAGER">Chờ Manager duyệt</option>
+        <option value="PENDING_HR">Chờ HR xử lý</option>
+        <option value="PENDING_ADMIN">Chờ Admin duyệt</option>
+        <option value="APPROVED">Đã duyệt</option>
+        <option value="REJECTED">Từ chối</option>
+    </select>
+</form>
+
+<!-- Danh sách đơn -->
+<div id="resignListContainer"></div>
+<div id="resignPagination"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation.js') }}"></script>
+{% endblock %}

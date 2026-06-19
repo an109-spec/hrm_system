@@ -1,18 +1,24 @@
 from flask_jwt_extended import JWTManager
-from flask import redirect, request, url_for, flash
+from flask import redirect, request, url_for, flash, jsonify
 
 jwt = JWTManager()
 
 def init_jwt(app):
     jwt.init_app(app)
 
-    # Nếu Token không hợp lệ hoặc thiếu, tự động redirect về trang login
     @jwt.unauthorized_loader
     def unauthorized_response(callback):
-        # Đây chính là nơi in ra dòng "Please log in to access this page"
-        # flash("Vui lòng đăng nhập để tiếp tục", "warning") 
-        return redirect(url_for('auth.login', next=request.path))
+        # Thay vì redirect, trả về JSON để frontend xử lý
+        return jsonify({
+            "success": False,
+            "message": "Phiên đăng nhập đã hết hạn hoặc bạn không có quyền truy cập.",
+            "redirect": url_for('auth.login')
+        }), 401
 
     @jwt.expired_token_loader
     def expired_token_response(jwt_header, jwt_payload):
-        return redirect(url_for('auth.login'))
+        return jsonify({
+            "success": False,
+            "message": "Token đã hết hạn, vui lòng đăng nhập lại.",
+            "redirect": url_for('auth.login')
+        }), 401

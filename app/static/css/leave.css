@@ -1,0 +1,197 @@
+/* ─────────────────────────────────────────────
+   leave.css — HRM Leave Module Styles
+   ───────────────────────────────────────────── */
+
+/* ── Color utilities ── */
+.bg-primary-soft  { background: rgba(13, 110, 253, .10); }
+.bg-success-soft  { background: rgba(25, 135, 84,  .10); }
+.bg-warning-soft  { background: rgba(255,193,  7,  .10); }
+.bg-danger-soft   { background: rgba(220, 53,  69, .10); }
+
+/* ── Stat cards ── */
+.leave-stat-card {
+    transition: box-shadow .15s;
+}
+.leave-stat-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+}
+.stat-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.stat-label { font-size: .75rem; color: #6c757d; }
+.stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+
+/* ── Balance bar ── */
+.leave-balance-bar { background: #f8fafc; border-radius: 10px; }
+
+/* ── Days preview ── */
+.leave-days-preview {
+    background: #eef4ff;
+    border: 1px solid #c9d9ff;
+    border-radius: 8px;
+    padding: .6rem 1rem;
+    font-size: .9rem;
+}
+
+/* ── Detail fields ── */
+.detail-field { margin-bottom: .5rem; }
+.detail-label {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6c757d;
+    margin-bottom: .15rem;
+}
+.detail-value { font-size: .95rem; }
+.detail-reason {
+    background: #f8fafc;
+    border: 1px solid #e9ecef;
+    font-size: .92rem;
+    color: #495057;
+    white-space: pre-wrap;
+}
+
+/* ── Timeline ── */
+.timeline-item {
+    display: flex;
+    gap: .75rem;
+    padding-bottom: 1rem;
+    position: relative;
+}
+.timeline-item:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 7px; top: 16px;
+    width: 2px;
+    height: calc(100% - 8px);
+    background: #dee2e6;
+}
+.timeline-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.timeline-content { flex: 1; }
+
+/* ── Avatar ── */
+.avatar-circle {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.avatar-circle-sm {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.avatar-initials { font-size: 1rem; }
+
+/* ── Pending cards ── */
+.pending-card {
+    border-left: 3px solid #ffc107 !important;
+    transition: box-shadow .15s, transform .15s;
+}
+.pending-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.09);
+    transform: translateY(-2px);
+}
+
+/* ── Skeleton loader ── */
+.skeleton-line {
+    height: 14px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+}
+.w-25 { width: 25%; }
+.w-50 { width: 50%; }
+.w-75 { width: 75%; }
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Calendar ── */
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+.cal-header { margin-bottom: 4px; }
+.cal-day-header {
+    text-align: center;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6c757d;
+    padding: .25rem 0;
+}
+.cal-cell {
+    min-height: 90px;
+    background: #fff;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    padding: .35rem .4rem;
+    cursor: pointer;
+    transition: background .1s;
+}
+.cal-cell:hover { background: #f8fafc; }
+.cal-cell.cal-today {
+    border-color: #0d6efd;
+    background: #eef4ff;
+}
+.cal-cell.cal-weekend { background: #fafafa; }
+.cal-cell.cal-empty   { background: transparent; border: none; }
+.cal-day-num {
+    font-size: .8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: .2rem;
+}
+.cal-today .cal-day-num {
+    color: #0d6efd;
+}
+.cal-event {
+    font-size: .68rem;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff;
+}
+.cal-event-approved             { background: #198754; }
+.cal-event-pending              { background: #ffc107; color: #333; }
+.cal-event-rejected             { background: #dc3545; }
+.cal-event-cancelled            { background: #6c757d; }
+.cal-event-supplement_requested { background: #6c757d; }
+.cal-event-more {
+    font-size: .65rem;
+    color: #6c757d;
+    padding-left: 4px;
+}
+
+/* ── Legend dots ── */
+.legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+/* ── Report table extras ── */
+.btn-xs {
+    padding: .15rem .4rem;
+    font-size: .75rem;
+}
+
+/* ── Page header ── */
+.page-header h4 { color: #1e293b; }

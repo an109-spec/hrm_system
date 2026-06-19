@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 from http import HTTPStatus
 
 from app.modules.payroll import payroll_bp
@@ -491,3 +491,15 @@ def get_total_payroll_fund():
         ),
         "data": result,
     }), 200
+
+@payroll_bp.route("/analytics", methods=["GET"])
+@auth_required
+@role_required(RoleName.HR, RoleName.ADMIN)
+def payroll_analytics():
+    return render_template("modules/payroll/analytics.html")
+
+@payroll_bp.route("/generate-ui", methods=["GET"])
+@auth_required
+@role_required(RoleName.HR)
+def get_generate_page():
+    return render_template("modules/payroll/generate.html")

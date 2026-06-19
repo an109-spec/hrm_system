@@ -1,0 +1,116 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Đề xuất nghỉ việc cho nhân viên — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resignation.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('resignation.list_all') }}" class="btn btn-sm btn-light border mb-3">
+        <i class="fas fa-arrow-left me-1"></i> Quay lại
+    </a>
+    <h4 class="fw-bold mb-0">Đề xuất nghỉ việc</h4>
+    <p class="text-muted small">Đề xuất nhân viên thuộc nhóm của bạn thôi việc. Đơn sẽ được chuyển trực tiếp tới HR.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="resign-form-card">
+            <form id="resignProposeForm" novalidate>
+
+                <p class="form-section-title">Chọn nhân viên</p>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Nhân viên <span class="text-danger">*</span></label>
+                    <select name="employee_id" class="form-select" required>
+                        <option value="">— Chọn nhân viên —</option>
+                        {% for emp in subordinates %}
+                        <option value="{{ emp.id }}">{{ emp.full_name }} — {{ emp.position.name if emp.position else '—' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <p class="form-section-title">Thông tin nghỉ việc</p>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Ngày dự kiến nghỉ việc <span class="text-danger">*</span></label>
+                    <input type="date" name="expected_last_day" class="form-control"
+                           min="{{ today_iso }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Lý do đề xuất <span class="text-danger">*</span></label>
+                    <select name="reason_category" class="form-select" required>
+                        <option value="">— Chọn lý do —</option>
+                        <option value="performance">Hiệu suất làm việc</option>
+                        <option value="disciplinary">Kỷ luật</option>
+                        <option value="restructuring">Tái cơ cấu phòng ban</option>
+                        <option value="contract_end">Hết hợp đồng / không gia hạn</option>
+                        <option value="mutual_agreement">Thoả thuận chấm dứt hợp đồng</option>
+                        <option value="other">Khác</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Chi tiết lý do</label>
+                    <textarea name="reason_text" class="form-control" rows="3"
+                              placeholder="Mô tả rõ lý do đề xuất để HR và Admin có đầy đủ thông tin..."></textarea>
+                </div>
+
+                <p class="form-section-title mt-4">Bàn giao công việc</p>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Nhân viên tiếp nhận bàn giao <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
+                    <select name="handover_employee_id" class="form-select">
+                        <option value="">— Chưa xác định —</option>
+                        {% for emp in handover_candidates %}
+                        <option value="{{ emp.id }}">{{ emp.full_name }} — {{ emp.position.name if emp.position else '—' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Ghi chú thêm</label>
+                    <textarea name="extra_note" class="form-control" rows="2"
+                              placeholder="Thông tin bổ sung nếu cần..."></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Đính kèm tài liệu <span class="text-muted fw-normal">(URL, tuỳ chọn)</span></label>
+                    <input type="url" name="attachment_url" class="form-control"
+                           placeholder="https://drive.google.com/...">
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-warning flex-grow-1 text-dark fw-semibold">
+                        <i class="fas fa-user-minus me-1"></i> Gửi đề xuất
+                    </button>
+                    <a href="{{ url_for('resignation.list_all') }}" class="btn btn-light border">Huỷ</a>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="fas fa-info-circle text-warning me-2"></i>Lưu ý quan trọng</h6>
+                <ul class="ps-3 small text-secondary lh-lg">
+                    <li>Đề xuất của Manager sẽ bỏ qua bước Manager duyệt và đi thẳng tới <strong>HR</strong>.</li>
+                    <li>Nhân viên sẽ nhận <strong>thông báo</strong> về đề xuất này.</li>
+                    <li>Chỉ được đề xuất nhân viên <strong>trực thuộc nhóm</strong> của bạn.</li>
+                    <li>Mỗi nhân viên chỉ được có <strong>một đơn đang xử lý</strong> cùng lúc.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/resignation/resignation.js') }}"></script>
+{% endblock %}

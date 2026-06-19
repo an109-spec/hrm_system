@@ -1,0 +1,33 @@
+/*dành cho form nhập input*/
+.form-control{
+    border-radius:8px;
+}
+
+.form-select{
+    border-radius:8px;
+}
+
+.btn{
+    border-radius:8px;
+}
+
+.card{
+    border:none;
+    border-radius:12px;
+
+    box-shadow:
+        0 3px 10px rgba(0,0,0,.05);
+}
+
+/* Tăng độ nổi bật khi click vào ô nhập */
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe; /* Màu xanh nhạt của Bootstrap */
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: none;
+}
+
+/* Thêm hiệu ứng di chuột cho nút */
+.btn:hover {
+    filter: brightness(90%); /* Làm nút tối hơn một chút khi di chuột vào */
+    transition: 0.2s;
+}

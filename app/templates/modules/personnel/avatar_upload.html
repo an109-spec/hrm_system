@@ -1,0 +1,142 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Cập nhật ảnh đại diện – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .avatar-upload-card { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; box-shadow: 0 2px 14px rgba(0,0,0,.07); padding: 36px; text-align: center; }
+  .drop-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px 20px; cursor: pointer; transition: all .25s; background: #f8fafc; position: relative; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .preview-ring { width: 130px; height: 130px; border-radius: 50%; object-fit: cover; border: 4px solid #fff; box-shadow: 0 4px 16px rgba(0,0,0,.12); margin: 0 auto 16px; display: block; transition: opacity .3s; }
+  .file-rules { font-size: .78rem; color: #94a3b8; margin-top: 8px; }
+  .progress-wrap { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin: 12px 0; display: none; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 3px; width: 0%; transition: width .4s; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3" style="font-size:.82rem">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('personnel.get_my_profile') }}">Hồ sơ</a></li>
+    <li class="breadcrumb-item active">Ảnh đại diện</li>
+  </ol>
+</nav>
+
+<div class="avatar-upload-card">
+  <h5 class="fw-bold mb-1">Cập nhật ảnh đại diện</h5>
+  <p class="text-muted small mb-4">Ảnh sẽ hiển thị trong hồ sơ và các trang quản lý.</p>
+
+  <!-- Preview -->
+  <img id="previewImg"
+       src="{{ current_user.employee_profile.avatar or url_for('static', filename='img/default_avatar.png') }}"
+       alt="Preview" class="preview-ring">
+  <p id="previewName" class="fw-semibold text-muted small mb-4">Ảnh hiện tại</p>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="avatarFile" accept=".jpg,.jpeg,.png,.webp" onchange="previewFile(this)">
+    <i class="fas fa-cloud-upload-alt fa-2x text-primary mb-2"></i>
+    <p class="mb-0 fw-medium text-slate-600">Kéo thả hoặc <span class="text-primary">chọn tệp</span></p>
+    <p class="file-rules">JPG, PNG, WEBP — tối đa 5 MB</p>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <div class="d-flex gap-2 mt-4">
+    <a href="{{ url_for('personnel.get_my_profile') }}" class="btn btn-outline-secondary flex-fill">
+      <i class="fas fa-arrow-left me-1"></i>Quay lại
+    </a>
+    <button class="btn btn-primary flex-fill" id="btnUpload" onclick="uploadAvatar()" disabled>
+      <i class="fas fa-upload me-1"></i>Lưu ảnh mới
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const AVATAR_API = "/personnel/profile/me/avatar";
+let selectedFile = null;
+
+// Drag and drop
+const dz = document.getElementById("dropZone");
+dz.addEventListener("dragover",  e => { e.preventDefault(); dz.classList.add("dragover"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+dz.addEventListener("drop", e => {
+  e.preventDefault(); dz.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+function previewFile(input) {
+  if (input.files[0]) handleFile(input.files[0]);
+}
+
+function handleFile(file) {
+  const allowed = ["image/jpeg","image/png","image/webp"];
+  if (!allowed.includes(file.type)) {
+    return Swal.fire("Định dạng không hỗ trợ", "Chỉ chấp nhận JPG, PNG, WEBP.", "warning");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return Swal.fire("Tệp quá lớn", "Vui lòng chọn tệp nhỏ hơn 5 MB.", "warning");
+  }
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById("previewImg").src = e.target.result;
+    document.getElementById("previewName").textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+  document.getElementById("btnUpload").disabled = false;
+}
+
+async function uploadAvatar() {
+  if (!selectedFile) return;
+  const btn = document.getElementById("btnUpload");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tải lên...';
+
+  const wrap = document.getElementById("progressWrap");
+  const fill = document.getElementById("progressFill");
+  wrap.style.display = "block";
+
+  // Fake progress
+  let pct = 0;
+  const interval = setInterval(() => {
+    pct = Math.min(pct + 15, 85);
+    fill.style.width = pct + "%";
+  }, 150);
+
+  const fd = new FormData();
+  fd.append("avatar", selectedFile);
+
+  try {
+    const res  = await fetch(AVATAR_API, { method: "POST", body: fd });
+    const data = await res.json();
+    clearInterval(interval);
+    fill.style.width = "100%";
+    setTimeout(() => { wrap.style.display = "none"; fill.style.width = "0%"; }, 500);
+
+    await Swal.fire({
+      icon:  data.swal?.icon  || "error",
+      title: data.swal?.title || "Lỗi",
+      text:  data.swal?.text  || "",
+      timer: data.success ? 1500 : undefined,
+      showConfirmButton: !data.success
+    });
+    if (data.success) window.location.href = "{{ url_for('personnel.get_my_profile') }}";
+  } catch {
+    clearInterval(interval);
+    wrap.style.display = "none";
+    Swal.fire("Lỗi", "Không thể kết nối máy chủ.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-upload me-1"></i>Lưu ảnh mới';
+  }
+}
+</script>
+{% endblock %}

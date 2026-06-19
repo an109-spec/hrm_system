@@ -1,0 +1,118 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Thông báo — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Page header ── -->
+<div class="noti-page-header">
+    <div>
+        <h1 class="noti-page-title">
+            <i class="fa-solid fa-bell"></i> Thông báo
+        </h1>
+        <div class="noti-breadcrumb">
+            <a href="#">Dashboard</a> / Thông báo
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn-noti-action" id="btnMarkAllRead" title="Đánh dấu tất cả đã đọc">
+            <i class="fa-solid fa-check-double"></i> Đánh dấu tất cả đã đọc
+        </button>
+        <button class="btn-noti-action" id="btnRefresh" title="Làm mới">
+            <i class="fa-solid fa-rotate-right"></i>
+        </button>
+    </div>
+</div>
+
+<!-- ── Summary bar ── -->
+<div class="noti-summary-bar">
+    <div class="noti-summary-stat">
+        <i class="fa-solid fa-layer-group" style="color:var(--noti-muted);"></i>
+        Tổng cộng: <strong id="statTotal">—</strong> thông báo
+    </div>
+    <div class="noti-summary-divider"></div>
+    <div class="noti-summary-stat">
+        <span class="dot-unread"></span>
+        Chưa đọc: <strong id="statUnread" style="color:var(--noti-primary);">—</strong>
+    </div>
+    <div class="noti-summary-divider"></div>
+    <div class="noti-summary-stat">
+        <i class="fa-solid fa-circle-check" style="color:#16a34a;"></i>
+        Đã đọc: <strong id="statRead" style="color:#16a34a;">—</strong>
+    </div>
+</div>
+
+<!-- ── Filter toolbar ── -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div class="noti-toolbar" id="filterBar">
+        <button class="noti-filter-btn active" data-filter="all">
+            Tất cả <span class="count" id="cntAll">0</span>
+        </button>
+        <button class="noti-filter-btn" data-filter="unread">
+            Chưa đọc <span class="count" id="cntUnread">0</span>
+        </button>
+        <button class="noti-filter-btn" data-filter="read">
+            Đã đọc <span class="count" id="cntRead">0</span>
+        </button>
+    </div>
+
+    <div>
+        <select id="typeFilter" class="form-select form-select-sm" style="min-width:150px;font-size:.8rem;">
+            <option value="">Tất cả loại</option>
+            <option value="contract">Hợp đồng</option>
+            <option value="leave">Nghỉ phép</option>
+            <option value="payroll">Lương</option>
+            <option value="attendance">Chấm công</option>
+            <option value="info">Thông tin</option>
+            <option value="warning">Cảnh báo</option>
+            <option value="success">Thành công</option>
+        </select>
+    </div>
+</div>
+
+<!-- ── Main notification list ── -->
+<div class="noti-panel" id="notiPanel">
+    <!-- Skeleton loading -->
+    <div id="notiSkeleton">
+        {% for i in range(6) %}
+        <div class="skeleton-item">
+            <div class="skeleton skeleton-icon"></div>
+            <div style="flex:1;">
+                <div class="skeleton skeleton-line-1"></div>
+                <div class="skeleton skeleton-line-2"></div>
+                <div class="skeleton skeleton-line-3"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Populated list -->
+    <div id="notiList" style="display:none;"></div>
+
+    <!-- Empty state -->
+    <div id="notiEmpty" style="display:none;" class="noti-empty">
+        <i class="fa-solid fa-bell-slash noti-empty-icon"></i>
+        <p class="noti-empty-title">Không có thông báo nào</p>
+        <p class="noti-empty-sub">Bạn đã xem hết tất cả thông báo.</p>
+    </div>
+
+    <!-- Load more -->
+    <div class="noti-load-more" id="loadMoreWrap" style="display:none;">
+        <button class="btn-noti-action" id="btnLoadMore">
+            <i class="fa-solid fa-chevron-down"></i> Xem thêm thông báo
+        </button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/admin/notification.js') }}"></script>
+{% endblock %}

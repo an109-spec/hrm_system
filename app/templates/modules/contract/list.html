@@ -1,0 +1,212 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Danh sách Hợp đồng – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/contract.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-file-contract text-primary me-2"></i>Danh sách Hợp đồng
+        </h4>
+        <p class="text-muted mb-0 small">Quản lý toàn bộ hợp đồng lao động trong hệ thống</p>
+    </div>
+    {% if current_user.role.name == 'ADMIN' %}
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContractModal">
+        <i class="fas fa-plus me-1"></i>Tạo hợp đồng
+    </button>
+    {% endif %}
+</div>
+
+{# ── Summary Cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="summary-card card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="summary-icon" style="background:#dbeafe">
+                    <i class="fas fa-file-contract text-primary"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1" id="sumTotal">–</div>
+                    <div class="text-muted small">Tổng hợp đồng</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="summary-card card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="summary-icon" style="background:#d1fae5">
+                    <i class="fas fa-check-circle text-success"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1" id="sumActive">–</div>
+                    <div class="text-muted small">Đang hiệu lực</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="summary-card card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="summary-icon" style="background:#fef3c7">
+                    <i class="fas fa-clock text-warning"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1" id="sumExpiring">–</div>
+                    <div class="text-muted small">Sắp hết hạn</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="summary-card card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="summary-icon" style="background:#fee2e2">
+                    <i class="fas fa-times-circle text-danger"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1" id="sumExpired">–</div>
+                    <div class="text-muted small">Đã hết hạn</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Filter Bar ── #}
+<div class="contract-filter-bar mb-4">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-muted mb-1">Tìm kiếm</label>
+            <div class="input-group">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="fas fa-search text-muted"></i>
+                </span>
+                <input type="text" id="searchInput"
+                       class="form-control border-start-0"
+                       placeholder="Mã HĐ, tên nhân viên...">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small text-muted mb-1">Trạng thái</label>
+            <select id="statusFilter" class="form-select">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="active">Đang hiệu lực</option>
+                <option value="expiring">Sắp hết hạn</option>
+                <option value="expired">Đã hết hạn</option>
+                <option value="terminated">Đã chấm dứt</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small text-muted mb-1">Loại hợp đồng</label>
+            <select id="typeFilter" class="form-select">
+                <option value="all">Tất cả loại</option>
+                <option value="probation">Thử việc</option>
+                <option value="official">Chính thức</option>
+                <option value="part_time">Bán thời gian</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" id="btnReset">
+                <i class="fas fa-undo me-1"></i>Đặt lại
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Table ── #}
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 contract-table">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Mã HĐ</th>
+                        <th>Nhân viên</th>
+                        <th>Ngày bắt đầu</th>
+                        <th>Ngày kết thúc</th>
+                        <th>Trạng thái</th>
+                        <th class="text-center">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="contractTableBody">
+                    <tr>
+                        <td colspan="6">
+                            <div class="contract-loading">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <span>Đang tải dữ liệu...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# ── Create Modal (Admin only) ── #}
+{% if current_user.role.name == 'ADMIN' %}
+<div class="modal fade" id="createContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle text-primary me-2"></i>Tạo Hợp đồng Mới
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">ID Nhân viên <span class="text-danger">*</span></label>
+                    <input type="number" id="newEmpId" class="form-control" placeholder="Nhập ID nhân viên">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Thời hạn hợp đồng</label>
+                    <select id="newDuration" class="form-select">
+                        <option value="2m">2 tháng (thử việc)</option>
+                        <option value="6m">6 tháng</option>
+                        <option value="12m">1 năm</option>
+                        <option value="24m">2 năm</option>
+                        <option value="permanent">Không thời hạn</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Loại hợp đồng</label>
+                    <select id="newContractType" class="form-select">
+                        <option value="probation">Thử việc</option>
+                        <option value="official">Chính thức</option>
+                        <option value="part_time">Bán thời gian</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Lương cơ bản (để trống = tự động)</label>
+                    <input type="number" id="newSalary" class="form-control" placeholder="VD: 8800000">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú</label>
+                    <textarea id="newNote" class="form-control" rows="2" placeholder="Ghi chú thêm..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" id="btnCreateContract">
+                    <i class="fas fa-save me-1"></i>Tạo hợp đồng
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_list.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,357 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Báo cáo nhóm – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- ── Page header ─────────────────────────────────────────── -->
+<div class="mgr-page-header">
+    <h1 class="mgr-page-title">
+        <span class="title-icon"><i class="bi bi-file-earmark-bar-graph-fill"></i></span>
+        Báo cáo nhóm
+    </h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" onclick="TeamReports.exportExcel()" id="btn-export">
+            <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
+        </button>
+    </div>
+</div>
+
+<!-- ── Filter card ─────────────────────────────────────────── -->
+<div class="mgr-card mb-4">
+    <div class="mgr-card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Tháng</label>
+                <select id="f-month" class="form-select form-select-sm">
+                    {% for m in range(1,13) %}
+                    <option value="{{ m }}">Tháng {{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Năm</label>
+                <select id="f-year" class="form-select form-select-sm">
+                    {% for y in range(2023, 2027) %}
+                    <option value="{{ y }}">{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Trạng thái</label>
+                <select id="f-status" class="form-select form-select-sm">
+                    <option value="">Tất cả</option>
+                    <option value="on_time">Đúng giờ</option>
+                    <option value="late">Đi muộn</option>
+                    <option value="absent">Vắng</option>
+                    <option value="leave">Nghỉ phép</option>
+                    <option value="overtime">Tăng ca</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <button class="btn btn-primary btn-sm w-100" onclick="TeamReports.load()">
+                    <i class="bi bi-search me-1"></i>Xem báo cáo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabs ─────────────────────────────────────────────────── -->
+<div class="mgr-tabs" id="report-tabs">
+    <button class="mgr-tab active" data-tab="attendance" onclick="TeamReports.switchTab(this, 'attendance')">
+        <i class="bi bi-calendar2-check me-1"></i>Chấm công
+    </button>
+    <button class="mgr-tab" data-tab="overtime" onclick="TeamReports.switchTab(this, 'overtime')">
+        <i class="bi bi-lightning-charge me-1"></i>Tăng ca
+    </button>
+    <button class="mgr-tab" data-tab="absence" onclick="TeamReports.switchTab(this, 'absence')">
+        <i class="bi bi-person-x me-1"></i>Vắng & Nghỉ phép
+    </button>
+    <button class="mgr-tab" data-tab="reminders" onclick="TeamReports.switchTab(this, 'reminders')">
+        <i class="bi bi-bell me-1"></i>Nhắc nhở
+    </button>
+</div>
+
+<!-- ─── TAB: Chấm công ────────────────────────────────────── -->
+<div id="tab-attendance">
+    <div class="mgr-card">
+        <div class="mgr-card-header">
+            <h2 class="mgr-card-title">
+                <i class="bi bi-table text-primary"></i>
+                Bảng chấm công tháng
+            </h2>
+            <span class="text-muted" style="font-size:.83rem;">
+                Tổng <strong id="att-total-items">—</strong> bản ghi
+            </span>
+        </div>
+        <div class="mgr-table-wrapper">
+            <table class="mgr-table">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th>Ngày</th>
+                        <th class="text-center">Vào</th>
+                        <th class="text-center">Ra</th>
+                        <th class="text-center">Giờ làm</th>
+                        <th class="text-center">Tăng ca</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th class="text-center">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="att-tbody">
+                    <tr>
+                        <td colspan="8">
+                            <div class="mgr-empty">
+                                <div class="mgr-empty-icon"><i class="bi bi-calendar2"></i></div>
+                                <div class="mgr-empty-title">Chọn kỳ và nhấn Xem báo cáo</div>
+                                <div class="mgr-empty-text">Dữ liệu chấm công sẽ hiển thị tại đây.</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="mgr-pagination" id="att-pagination" style="display:none;">
+            <span id="att-page-info" style="font-size:.83rem; color:var(--mgr-muted);"></span>
+            <div class="d-flex gap-1" id="att-page-btns"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── TAB: Tăng ca ─────────────────────────────────────── -->
+<div id="tab-overtime" style="display:none;">
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon orange"><i class="bi bi-lightning-charge-fill"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="ot-total-sessions">—</div>
+                    <div class="mgr-stat-label">Lượt tăng ca</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon blue"><i class="bi bi-clock-history"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="ot-total-hours">—</div>
+                    <div class="mgr-stat-label">Tổng giờ OT</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon purple"><i class="bi bi-people-fill"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="ot-emp-count">—</div>
+                    <div class="mgr-stat-label">Nhân viên OT</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon teal"><i class="bi bi-person-fill-up"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="ot-avg-hours">—</div>
+                    <div class="mgr-stat-label">TB giờ/người</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mgr-card">
+        <div class="mgr-card-header">
+            <h2 class="mgr-card-title"><i class="bi bi-table text-primary"></i>Chi tiết tăng ca</h2>
+        </div>
+        <div class="mgr-table-wrapper">
+            <table class="mgr-table">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th>Phòng ban</th>
+                        <th class="text-center">Ngày</th>
+                        <th class="text-center">Giờ OT</th>
+                        <th class="text-center">Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody id="ot-tbody">
+                    <tr>
+                        <td colspan="5">
+                            <div class="mgr-empty">
+                                <div class="mgr-empty-icon"><i class="bi bi-lightning-charge"></i></div>
+                                <div class="mgr-empty-title">Chọn kỳ và nhấn Xem báo cáo</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ─── TAB: Vắng & nghỉ phép ────────────────────────────── -->
+<div id="tab-absence" style="display:none;">
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-4">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon red"><i class="bi bi-person-dash-fill"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="abs-absent-days">—</div>
+                    <div class="mgr-stat-label">Ngày vắng</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon teal"><i class="bi bi-umbrella-fill"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="abs-leave-days">—</div>
+                    <div class="mgr-stat-label">Ngày nghỉ phép</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="mgr-stat-card">
+                <div class="mgr-stat-icon orange"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <div class="mgr-stat-body">
+                    <div class="mgr-stat-value" id="abs-unexcused">—</div>
+                    <div class="mgr-stat-label">Vắng không phép</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mgr-card">
+        <div class="mgr-card-header">
+            <h2 class="mgr-card-title"><i class="bi bi-person-x-fill text-danger"></i>Danh sách vắng & nghỉ phép</h2>
+        </div>
+        <div class="mgr-table-wrapper">
+            <table class="mgr-table">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th class="text-center">Ngày</th>
+                        <th class="text-center">Loại</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody id="abs-tbody">
+                    <tr>
+                        <td colspan="4">
+                            <div class="mgr-empty">
+                                <div class="mgr-empty-icon"><i class="bi bi-calendar2-x"></i></div>
+                                <div class="mgr-empty-title">Chọn kỳ và nhấn Xem báo cáo</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ─── TAB: Nhắc nhở ────────────────────────────────────── -->
+<div id="tab-reminders" style="display:none;">
+    <div class="mgr-card mb-3">
+        <div class="mgr-card-header">
+            <h2 class="mgr-card-title"><i class="bi bi-bell-fill text-warning"></i>Gửi nhắc nhở chấm công</h2>
+        </div>
+        <div class="mgr-card-body">
+            <p class="text-muted mb-3" style="font-size:.85rem;">
+                Chọn nhân viên bên dưới và gửi thông báo nhắc nhở. Hệ thống sẽ gửi thông báo tới từng tài khoản.
+            </p>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" style="font-size:.83rem;">Nội dung tùy chỉnh (để trống = mặc định)</label>
+                <textarea id="reminder-message" class="form-control form-control-sm" rows="2"
+                    placeholder="Chào [tên], bạn chưa chấm công hôm nay…"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-warning btn-sm" onclick="TeamReports.sendReminders()">
+                    <i class="bi bi-send-fill me-1"></i>Gửi nhắc nhở
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="TeamReports.loadAbsentToday()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Tải NV chưa chấm hôm nay
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mgr-card">
+        <div class="mgr-card-header">
+            <h2 class="mgr-card-title"><i class="bi bi-person-x text-danger"></i>Nhân viên chưa chấm công hôm nay</h2>
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="select-all-reminder"
+                    onchange="TeamReports.toggleSelectAll(this)">
+                <label class="form-check-label" style="font-size:.83rem;" for="select-all-reminder">Chọn tất cả</label>
+            </div>
+        </div>
+        <div class="mgr-table-wrapper">
+            <table class="mgr-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;"></th>
+                        <th>Nhân viên</th>
+                        <th>Phòng ban</th>
+                        <th>Chức vụ</th>
+                        <th class="text-center">Trạng thái hôm nay</th>
+                    </tr>
+                </thead>
+                <tbody id="reminder-tbody">
+                    <tr>
+                        <td colspan="5">
+                            <div class="mgr-empty">
+                                <div class="mgr-empty-icon"><i class="bi bi-bell"></i></div>
+                                <div class="mgr-empty-title">Nhấn "Tải NV chưa chấm hôm nay"</div>
+                                <div class="mgr-empty-text">Danh sách nhân viên cần nhắc nhở sẽ xuất hiện ở đây.</div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Edit attendance modal ────────────────────────────────── -->
+<div class="modal fade" id="editAttModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border:none; border-radius:12px; overflow:hidden;">
+            <div class="modal-header border-0" style="background:var(--mgr-primary); color:white; padding:16px 20px;">
+                <h5 class="modal-title">Chỉnh sửa chấm công</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="edit-att-id">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:.83rem;">Giờ Check-in mới</label>
+                    <input type="time" id="edit-check-in" class="form-control form-control-sm">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:.83rem;">Giờ Check-out mới</label>
+                    <input type="time" id="edit-check-out" class="form-control form-control-sm">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:.83rem;">Lý do chỉnh sửa <span class="text-danger">*</span></label>
+                    <textarea id="edit-reason" class="form-control form-control-sm" rows="2"
+                        placeholder="VD: Lỗi máy chấm công ngày 12/06…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0 px-4 pb-4">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary btn-sm" onclick="TeamReports.saveEdit()">
+                    <i class="bi bi-check-lg me-1"></i>Lưu thay đổi
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/manager/team_reports.js') }}"></script>
+{% endblock %}

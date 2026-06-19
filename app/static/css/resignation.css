@@ -1,0 +1,290 @@
+/* =========================================================
+   Resignation Module — resignation.css
+   Phong cách: chuyên nghiệp, rõ ràng, nhất quán với HRM System
+   ========================================================= */
+
+/* ── Timeline trạng thái ── */
+.resign-stepper {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.resign-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 80px;
+    position: relative;
+}
+
+.resign-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 16px);
+    right: calc(-50% + 16px);
+    height: 2px;
+    background: #e2e8f0;
+    z-index: 0;
+    transition: background .3s;
+}
+
+.resign-step.done:not(:last-child)::after {
+    background: #22c55e;
+}
+
+.resign-step .step-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    font-weight: 700;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    color: #94a3b8;
+    z-index: 1;
+    transition: all .3s;
+}
+
+.resign-step.done .step-circle {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #fff;
+}
+
+.resign-step.active .step-circle {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+}
+
+.resign-step.rejected .step-circle {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #fff;
+}
+
+.resign-step .step-label {
+    font-size: .68rem;
+    text-align: center;
+    margin-top: 6px;
+    color: #94a3b8;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.resign-step.done .step-label,
+.resign-step.active .step-label {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* ── Badge trạng thái ── */
+.resign-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.resign-badge.pending-manager  { background: #fef3c7; color: #92400e; }
+.resign-badge.pending-hr       { background: #e0f2fe; color: #075985; }
+.resign-badge.pending-admin    { background: #ede9fe; color: #4c1d95; }
+.resign-badge.approved         { background: #dcfce7; color: #14532d; }
+.resign-badge.rejected         { background: #fee2e2; color: #7f1d1d; }
+.resign-badge.cancelled        { background: #f1f5f9; color: #475569; }
+
+/* ── Card đơn trong danh sách ── */
+.resign-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    padding: 1.25rem 1.5rem;
+    transition: box-shadow .2s, transform .2s;
+    cursor: pointer;
+    border-left: 4px solid transparent;
+}
+
+.resign-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.1);
+    transform: translateY(-1px);
+}
+
+.resign-card.border-pending-manager { border-left-color: #f59e0b; }
+.resign-card.border-pending-hr      { border-left-color: #0ea5e9; }
+.resign-card.border-pending-admin   { border-left-color: #8b5cf6; }
+.resign-card.border-approved        { border-left-color: #22c55e; }
+.resign-card.border-rejected        { border-left-color: #ef4444; }
+.resign-card.border-cancelled       { border-left-color: #94a3b8; }
+
+.resign-card .card-meta {
+    font-size: .78rem;
+    color: #64748b;
+}
+
+/* ── Form nghỉ việc ── */
+.resign-form-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.07);
+    padding: 2rem;
+}
+
+.form-section-title {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: .75rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+/* ── Offboarding checklist (HR) ── */
+.checklist-item {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    margin-bottom: .5rem;
+    border: 1px solid #e2e8f0;
+}
+
+.checklist-item label {
+    font-weight: 600;
+    font-size: .82rem;
+    color: #374151;
+    margin-bottom: .25rem;
+}
+
+/* ── Detail view ── */
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.detail-item {
+    padding: .75rem 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e9eef5;
+}
+
+.detail-item .label {
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #94a3b8;
+    margin-bottom: .25rem;
+}
+
+.detail-item .value {
+    font-size: .92rem;
+    color: #1e293b;
+    font-weight: 500;
+}
+
+/* ── Action panel ── */
+.action-panel {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    padding: 1.5rem;
+    border-top: 3px solid #3b82f6;
+}
+
+.action-panel.manager-panel { border-top-color: #f59e0b; }
+.action-panel.hr-panel      { border-top-color: #0ea5e9; }
+.action-panel.admin-panel   { border-top-color: #8b5cf6; }
+
+/* ── Empty state ── */
+.resign-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #94a3b8;
+}
+
+.resign-empty i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    display: block;
+    opacity: .4;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    margin-bottom: 1.25rem;
+}
+
+.filter-bar .form-select,
+.filter-bar .form-control {
+    min-width: 160px;
+    font-size: .85rem;
+}
+
+/* ── Pagination ── */
+.resign-pagination {
+    display: flex;
+    justify-content: center;
+    gap: .35rem;
+    margin-top: 1.5rem;
+}
+
+.resign-pagination .page-btn {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s;
+}
+
+.resign-pagination .page-btn:hover,
+.resign-pagination .page-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .resign-stepper { gap: 0; }
+    .resign-form-card { padding: 1.25rem; }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-bar .form-select { min-width: unset; width: 100%; }
+}
+
+@media (max-width: 480px) {
+    .detail-grid { grid-template-columns: 1fr; }
+}

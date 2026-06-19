@@ -1,0 +1,156 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Phân tích nhóm – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager.css') }}">
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- ── Page header ─────────────────────────────────────────── -->
+<div class="mgr-page-header">
+    <h1 class="mgr-page-title">
+        <span class="title-icon"><i class="bi bi-graph-up-arrow"></i></span>
+        Phân tích nhóm
+    </h1>
+    <div class="d-flex gap-2 align-items-center">
+        <select id="ctrl-month" class="form-select form-select-sm" style="width:130px;">
+            {% for m in range(1,13) %}
+            <option value="{{ m }}">Tháng {{ m }}</option>
+            {% endfor %}
+        </select>
+        <select id="ctrl-year" class="form-select form-select-sm" style="width:100px;">
+            {% for y in range(2023, 2027) %}
+            <option value="{{ y }}">{{ y }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="Analytics.load()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Cập nhật
+        </button>
+    </div>
+</div>
+
+<!-- ── Top KPI row ─────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon blue"><i class="bi bi-clock-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="kpi-ontime">—</div>
+                <div class="mgr-stat-label">Đúng giờ</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon orange"><i class="bi bi-alarm-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="kpi-late">—</div>
+                <div class="mgr-stat-label">Đi muộn</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon red"><i class="bi bi-person-dash-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="kpi-absent">—</div>
+                <div class="mgr-stat-label">Vắng mặt</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon teal"><i class="bi bi-umbrella-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="kpi-leave">—</div>
+                <div class="mgr-stat-label">Nghỉ phép</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Charts row ──────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+
+    <!-- Stacked bar: attendance distribution per employee -->
+    <div class="col-12 col-lg-7">
+        <div class="mgr-card h-100">
+            <div class="mgr-card-header">
+                <h2 class="mgr-card-title">
+                    <i class="bi bi-bar-chart-fill text-primary"></i>
+                    Chấm công theo nhân viên
+                </h2>
+                <span class="text-muted" style="font-size:.78rem;" id="chart-period-label"></span>
+            </div>
+            <div class="mgr-card-body">
+                <div class="chart-container" style="height:280px;">
+                    <canvas id="chart-attendance-bar"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Donut: distribution summary -->
+    <div class="col-12 col-lg-5">
+        <div class="mgr-card h-100">
+            <div class="mgr-card-header">
+                <h2 class="mgr-card-title">
+                    <i class="bi bi-pie-chart-fill text-primary"></i>
+                    Tỷ lệ chung
+                </h2>
+            </div>
+            <div class="mgr-card-body d-flex flex-column align-items-center">
+                <div class="chart-container" style="height:220px; max-width:220px;">
+                    <canvas id="chart-donut"></canvas>
+                </div>
+                <div id="donut-legend" class="d-flex flex-wrap gap-3 mt-3 justify-content-center" style="font-size:.82rem;"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Per-employee ranking table ──────────────────────────── -->
+<div class="mgr-card">
+    <div class="mgr-card-header">
+        <h2 class="mgr-card-title">
+            <i class="bi bi-trophy-fill text-warning"></i>
+            Xếp hạng chấm công tháng này
+        </h2>
+        <span class="text-muted" style="font-size:.78rem;">Sắp xếp theo số ngày đúng giờ (cao → thấp)</span>
+    </div>
+
+    <div class="mgr-table-wrapper">
+        <table class="mgr-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width:50px;">#</th>
+                    <th>Nhân viên</th>
+                    <th class="text-center">Đúng giờ</th>
+                    <th class="text-center">Đi muộn</th>
+                    <th class="text-center">Vắng</th>
+                    <th class="text-center">Nghỉ phép</th>
+                    <th style="width:160px;">Phân bổ</th>
+                </tr>
+            </thead>
+            <tbody id="ranking-tbody">
+                <tr>
+                    <td colspan="7">
+                        <div class="mgr-empty">
+                            <div class="mgr-empty-icon"><i class="bi bi-hourglass-split"></i></div>
+                            <div class="mgr-empty-title">Đang tải…</div>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/manager/team_analytics.js') }}"></script>
+{% endblock %}

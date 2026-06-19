@@ -1,5 +1,5 @@
 from datetime import date
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 
 from app.common.exceptions import ForbiddenError, NotFoundError
 from app.common.security.decorators import auth_required, role_required
@@ -11,7 +11,6 @@ from app.models import Employee
 from app.models.resignation import ResignationRequest
 from app.modules.resignation import resignation_bp
 from app.modules.resignation.resignation_service import ResignationService
-
 
 # ─────────────────────────────────────────────
 # Helpers
@@ -410,3 +409,113 @@ def get_resignation(resignation_id: int):
         return _swal_error(str(exc), 403)
     except Exception as exc:
         return _swal_error(f"Đã xảy ra lỗi: {str(exc)}", 500)
+    
+"""
+Phần bổ sung vào routes.py của module resignation.
+Thêm các route render template (GET pages).
+Dán vào cuối file routes.py hiện tại.
+"""
+# ─────────────────────────────────────────────
+# PAGE: /resignation/my-list   (Nhân viên xem đơn của mình)
+# ─────────────────────────────────────────────
+
+@resignation_bp.route("/my-list", methods=["GET"])
+@auth_required
+def my_list():
+    return render_template("modules/resignation/my_list.html")
+
+
+# ─────────────────────────────────────────────
+# PAGE: /resignation/          (Manager / HR / Admin xem tất cả)
+# ─────────────────────────────────────────────
+
+@resignation_bp.route("/all", methods=["GET"])
+@auth_required
+@role_required(RoleName.MANAGER, RoleName.HR, RoleName.ADMIN)
+def list_all():
+    return render_template("modules/resignation/list_all.html")
+
+
+# ─────────────────────────────────────────────
+# PAGE: /resignation/submit-form
+# ─────────────────────────────────────────────
+
+@resignation_bp.route("/submit-form", methods=["GET"])
+@auth_required
+@role_required(RoleName.EMPLOYEE, RoleName.MANAGER)
+def submit_form():
+    current_employee: Employee = g.employee
+    # Lấy danh sách đồng nghiệp để chọn bàn giao (cùng phòng ban, trừ chính mình)
+    handover_candidates = (
+        Employee.query
+        .filter(
+            Employee.department_id == current_employee.department_id,
+            Employee.id != current_employee.id,
+            Employee.is_deleted == False,
+        )
+        .all()
+    )
+    return render_template(
+        "modules/resignation/submit_form.html",
+        today_iso=date.today().isoformat(),
+        handover_candidates=handover_candidates,
+    )
+
+
+# ─────────────────────────────────────────────
+# PAGE: /resignation/propose-form   (Manager đề xuất)
+# ─────────────────────────────────────────────
+
+@resignation_bp.route("/propose-form", methods=["GET"])
+@auth_required
+@role_required(RoleName.MANAGER)
+def propose_form():
+    manager_employee: Employee = g.employee
+    subordinates = manager_employee.subordinates or []
+
+    # Ứng viên bàn giao: cùng phòng ban, không phải subordinate này
+    handover_candidates = (
+        Employee.query
+        .filter(
+            Employee.department_id == manager_employee.department_id,
+            Employee.is_deleted == False,
+        )
+        .all()
+    )
+    return render_template(
+        "modules/resignation/propose_form.html",
+        today_iso=date.today().isoformat(),
+        subordinates=subordinates,
+        handover_candidates=handover_candidates,
+    )
+
+
+# ─────────────────────────────────────────────
+# PAGE: /resignation/<id>      (Chi tiết đơn)
+# ─────────────────────────────────────────────
+
+@resignation_bp.route("/<int:resignation_id>/detail", methods=["GET"])
+@auth_required
+def resignation_detail_page(resignation_id: int):
+    from app.common.exceptions import ForbiddenError, NotFoundError
+    from app.common.security.permissions import is_manager_of
+    from app.models.resignation import ResignationRequest
+
+    current_user = g.user
+    current_employee: Employee = g.employee
+
+    item = ResignationRequest.query.filter_by(id=resignation_id, is_deleted=False).first()
+    if not item:
+        return render_template("errors/404.html"), 404
+
+    role_name = current_user.role.name
+    if role_name in (RoleName.ADMIN, RoleName.HR):
+        pass
+    elif role_name == RoleName.MANAGER:
+        if not is_manager_of(item.employee_id) and item.employee_id != current_employee.id:
+            return render_template("errors/403.html"), 403
+    else:
+        if item.employee_id != current_employee.id:
+            return render_template("errors/403.html"), 403
+
+    return render_template("modules/resignation/detail.html", resignation=item)

@@ -1,0 +1,224 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Duyet Luong Phong Ban — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-user-check me-2 text-primary"></i>Duyet Luong Phong Ban
+        </h4>
+        <small class="text-muted">Xem xet va phe duyet bang luong nhan vien</small>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <input type="month" id="filterMonth" class="form-control form-control-sm" style="width:160px"
+            value="{{ now.strftime('%Y-%m') if now else '' }}">
+        <button id="btnLoad" class="btn btn-primary btn-sm">
+            <i class="fas fa-sync me-1"></i>Tai du lieu
+        </button>
+    </div>
+</div>
+
+<!-- Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="summary-card card-blue position-relative">
+            <div class="card-value" id="totalEmployees">--</div>
+            <div class="card-label">Tong nhan vien</div>
+            <i class="fas fa-users card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-orange position-relative">
+            <div class="card-value" id="pendingCount">--</div>
+            <div class="card-label">Cho phe duyet</div>
+            <i class="fas fa-clock card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-green position-relative">
+            <div class="card-value" id="approvedCount">--</div>
+            <div class="card-label">Da phe duyet</div>
+            <i class="fas fa-check card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-red position-relative">
+            <div class="card-value" id="complaintsCount">--</div>
+            <div class="card-label">Dang khieu nai</div>
+            <i class="fas fa-exclamation card-icon"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <div>
+        <div class="form-label">Tim kiem</div>
+        <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="Ten nhan vien..." style="width:200px">
+    </div>
+    <div>
+        <div class="form-label">Trang thai</div>
+        <select id="statusFilter" class="form-select form-select-sm" style="width:150px">
+            <option value="">Tat ca</option>
+            <option value="pending">Cho duyet</option>
+            <option value="approved">Da duyet</option>
+            <option value="complaint">Khieu nai</option>
+        </select>
+    </div>
+    <div>
+        <div class="form-label">Vi tri</div>
+        <input type="text" id="positionFilter" class="form-control form-control-sm" placeholder="Ten vi tri..." style="width:160px">
+    </div>
+    <button class="btn btn-primary btn-sm" id="btnApplyFilter">
+        <i class="fas fa-filter me-1"></i>Loc
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" id="btnReset">
+        <i class="fas fa-undo me-1"></i>Dat lai
+    </button>
+</div>
+
+<!-- Payroll Table -->
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Danh Sach Bang Luong</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success d-none" id="btnBulkApprove">
+                <i class="fas fa-check-double me-1"></i>Duyet tat ca Pending
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table payroll-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="checkAll"></th>
+                        <th>Nhan vien</th>
+                        <th>Vi tri</th>
+                        <th>Gio lam</th>
+                        <th>Gio OT</th>
+                        <th>Khau tru</th>
+                        <th>Luong rong</th>
+                        <th>NPT</th>
+                        <th>Trang thai</th>
+                        <th>Hanh dong</th>
+                    </tr>
+                </thead>
+                <tbody id="managerTableBody">
+                    <tr>
+                        <td colspan="10" class="text-center py-4 text-muted">
+                            <i class="fas fa-calendar-alt fa-2x mb-2 d-block"></i>
+                            Chon thang va bam "Tai du lieu" de xem danh sach
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Complaint List Tab -->
+<div class="card mt-4">
+    <div class="card-header bg-white fw-semibold">
+        <i class="fas fa-comments me-2 text-warning"></i>Khieu Nai Tu Nhan Vien
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ma</th>
+                        <th>Nhan vien</th>
+                        <th>Tieu de</th>
+                        <th>Trang thai</th>
+                        <th>Ngay gui</th>
+                        <th>Hanh dong</th>
+                    </tr>
+                </thead>
+                <tbody id="complaintsTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center py-3 text-muted">Dang tai...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chi Tiet Phieu Luong</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailModalBody">
+                <div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dong</button>
+                <button type="button" class="btn btn-success d-none" id="btnConfirmSalary">
+                    <i class="fas fa-check me-1"></i>Xac nhan & Gui len HR
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Complaint Handle Modal -->
+<div class="modal fade" id="complaintHandleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Xu Ly Khieu Nai</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="handleComplaintId">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Quyet dinh</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="complaintAction"
+                                id="actionApprove" value="approve">
+                            <label class="form-check-label text-success fw-semibold" for="actionApprove">
+                                Chap nhan khieu nai
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="complaintAction"
+                                id="actionReject" value="reject">
+                            <label class="form-check-label text-danger fw-semibold" for="actionReject">
+                                Tu choi khieu nai
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Ly do / Ghi chu <span class="text-danger">*</span></label>
+                    <textarea id="complaintNote" class="form-control" rows="4"
+                        placeholder="Nhap ly do quyet dinh..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button>
+                <button type="button" class="btn btn-primary" id="btnHandleComplaint">
+                    <i class="fas fa-gavel me-1"></i>Xac nhan quyet dinh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/manager_approval.js') }}"></script>
+{% endblock %}

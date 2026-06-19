@@ -1,0 +1,205 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Tài khoản nhân viên — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">
+            <i class="fa-solid fa-circle-user"></i> Tài khoản nhân viên
+        </h1>
+        <div class="admin-breadcrumb">
+            <a href="#">Dashboard</a> / Tài khoản
+        </div>
+    </div>
+</div>
+
+<!-- Tab nav -->
+<ul class="nav nav-tabs mb-4" id="accountTab">
+    <li class="nav-item">
+        <button class="nav-link active" data-tab="pending">
+            <i class="fa-solid fa-hourglass-half me-1"></i> Chờ tạo tài khoản
+            <span class="badge bg-danger ms-1" id="pendingCount">0</span>
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" data-tab="active">
+            <i class="fa-solid fa-users me-1"></i> Tài khoản đang hoạt động
+        </button>
+    </li>
+</ul>
+
+<!-- ─── Pending tab ─── -->
+<div id="tab-pending">
+    <div class="admin-panel">
+        <div class="admin-panel-header">
+            <h2 class="admin-panel-title">
+                <i class="fa-solid fa-hourglass-half text-warning"></i>
+                Nhân viên chờ cấp tài khoản
+            </h2>
+        </div>
+
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th>Phòng ban</th>
+                        <th>Chức danh</th>
+                        <th>Ngày vào làm</th>
+                        <th style="text-align:right;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="pendingBody">
+                    <tr><td colspan="5" class="admin-loading">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Đang tải...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Active accounts tab ─── -->
+<div id="tab-active" style="display:none;">
+    <div class="admin-panel">
+        <div class="admin-panel-header">
+            <h2 class="admin-panel-title">
+                <i class="fa-solid fa-users"></i> Tài khoản đang hoạt động
+            </h2>
+            <div class="admin-filter-bar">
+                <input type="search" id="userSearch" class="form-control"
+                       placeholder="Tìm username, email..." style="min-width:220px;">
+                <select id="roleFilter" class="form-select" style="min-width:140px;">
+                    <option value="">Tất cả vai trò</option>
+                </select>
+            </div>
+        </div>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th>Tài khoản</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th style="text-align:right;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="activeBody">
+                    <tr><td colspan="5" class="admin-loading">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Đang tải...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Modal: Tạo tài khoản ════════════════════════════ -->
+<div class="modal fade" id="createAccountModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-user-plus text-primary me-2"></i> Tạo tài khoản
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center gap-3 p-3 mb-3"
+                     style="background:#f8fafc;border-radius:8px;border:1px solid var(--admin-border);">
+                    <div class="avatar-circle" id="caAvatar">?</div>
+                    <div>
+                        <div class="fw-semibold" id="caName">—</div>
+                        <div class="text-muted" style="font-size:.78rem;">
+                            <span id="caDept">—</span> / <span id="caPos">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tên đăng nhập <span class="text-danger">*</span></label>
+                        <input type="text" id="caUsername" class="form-control" placeholder="vd: nva2024">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="caEmail" class="form-control" placeholder="email@company.vn">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Mật khẩu tạm thời <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="password" id="caPassword" class="form-control" placeholder="Tối thiểu 8 ký tự">
+                            <button class="btn btn-outline-secondary" type="button" id="btnToggleCaPass">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-strength-bar mt-1">
+                            <div class="password-strength-fill strength-0" id="caStrengthBar"></div>
+                        </div>
+                        <div class="text-muted mt-1" style="font-size:.75rem;" id="caStrengthLabel"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Vai trò <span class="text-danger">*</span></label>
+                        <select id="caRoleId" class="form-select">
+                            <option value="">-- Chọn vai trò --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                <button id="btnCreateAccount" class="btn-admin-primary">
+                    <i class="fa-solid fa-user-check me-1"></i> Tạo tài khoản
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Modal: Đổi vai trò ══════════════════════════════ -->
+<div class="modal fade" id="roleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-shield-halved text-primary me-2"></i> Đổi vai trò
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">
+                    Tài khoản: <strong id="roleTargetName">—</strong>
+                </p>
+                <select id="roleSelect" class="form-select">
+                    <option value="EMPLOYEE">Employee</option>
+                    <option value="HR">HR</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="ADMIN">Admin</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                <button id="btnRoleSave" class="btn-admin-primary">
+                    <i class="fa-solid fa-check me-1"></i> Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/admin/user_account.js') }}"></script>
+{% endblock %}

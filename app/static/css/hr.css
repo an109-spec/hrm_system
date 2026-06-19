@@ -1,0 +1,188 @@
+/* ============================================================
+   hr.css  –  Styles cho tất cả trang HR (analytics / reports / settings)
+   Kế thừa design-token từ main.css, không override Bootstrap global
+   ============================================================ */
+
+/* ── Page header ──────────────────────────────────────────── */
+.hr-page-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.hr-page-subtitle {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+/* ── KPI Cards ────────────────────────────────────────────── */
+.hr-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.05);
+    border-left: 4px solid transparent;
+    transition: transform .15s, box-shadow .15s;
+}
+
+.hr-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+}
+
+.hr-kpi-primary  { border-left-color: #4f46e5; }
+.hr-kpi-success  { border-left-color: #16a34a; }
+.hr-kpi-warning  { border-left-color: #d97706; }
+.hr-kpi-danger   { border-left-color: #dc2626; }
+
+.hr-kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.hr-kpi-primary  .hr-kpi-icon { background: #ede9fe; color: #4f46e5; }
+.hr-kpi-success  .hr-kpi-icon { background: #dcfce7; color: #16a34a; }
+.hr-kpi-warning  .hr-kpi-icon { background: #fef3c7; color: #d97706; }
+.hr-kpi-danger   .hr-kpi-icon { background: #fee2e2; color: #dc2626; }
+
+.hr-kpi-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #111827;
+}
+
+.hr-kpi-label {
+    font-size: 0.8125rem;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+/* ── Chart cards ──────────────────────────────────────────── */
+.hr-chart-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.05);
+}
+
+.hr-chart-card .card-header {
+    padding: 16px 20px 0;
+}
+
+.hr-chart-wrap {
+    position: relative;
+    height: 240px;
+}
+
+.hr-donut-wrap {
+    position: relative;
+    width: 220px;
+    height: 220px;
+}
+
+/* ── Custom legend ────────────────────────────────────────── */
+.hr-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+
+.hr-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+    color: #374151;
+}
+
+.hr-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Settings tabs ────────────────────────────────────────── */
+.hr-settings-tabs {
+    border-bottom: 2px solid #e5e7eb;
+    gap: 4px;
+}
+
+.hr-settings-tabs .nav-link {
+    color: #6b7280;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: -2px;
+    transition: color .15s, border-color .15s;
+}
+
+.hr-settings-tabs .nav-link:hover {
+    color: #1f2937;
+}
+
+.hr-settings-tabs .nav-link.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+    background: transparent;
+}
+
+/* ── Status / type badges ─────────────────────────────────── */
+.hr-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.hr-badge-active      { background: #dcfce7; color: #15803d; }
+.hr-badge-probation   { background: #fef3c7; color: #b45309; }
+.hr-badge-resigned    { background: #fee2e2; color: #b91c1c; }
+.hr-badge-full_time   { background: #e0e7ff; color: #4338ca; }
+.hr-badge-part_time   { background: #f3f4f6; color: #374151; }
+
+/* ── Period select ────────────────────────────────────────── */
+.hr-period-select {
+    font-size: 0.875rem;
+    border-radius: 8px;
+}
+
+/* ── Dept table bar ───────────────────────────────────────── */
+.hr-dept-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.hr-dept-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #4f46e5;
+    min-width: 4px;
+    flex-shrink: 0;
+}
+
+.hr-dept-bar-label {
+    font-size: 0.8rem;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 576px) {
+    .hr-kpi-value { font-size: 1.4rem; }
+    .hr-chart-wrap { height: 180px; }
+}

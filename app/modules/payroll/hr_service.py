@@ -1,13 +1,11 @@
-import csv
-from datetime import datetime, time
+
 from decimal import Decimal, ROUND_HALF_UP
-import io
 from operator import or_
 
 from sqlalchemy import and_, asc, desc, or_
 from sqlalchemy.orm import joinedload
 from app.constants.attendance import AttendanceConstants, WorkConfig, AttendanceStatus
-from app.constants.payroll import ConfigLockStatus, SalaryComplaintStatus, SalarySettings, SalaryStatus
+from app.constants.payroll import ConfigLockStatus, SalaryComplaintStatus, SalarySettings, SalaryStatus, PayrollConfig
 from app.extensions.db import db
 from app.constants.common import RoleName
 from app.models.allowance import EmployeeAllowance
@@ -396,7 +394,7 @@ class HR_payroll_service(PersonalPayrollService):
         """
         # Giả sử bạn có hàm kiểm tra trạng thái khóa từ PayrollPolicyService
         # Nếu đang khóa, không cho phép tính lương mới
-        current_lock_status = PayrollPolicyService.get_setting("config_edit_locked") # Hàm này tùy thuộc vào cách bạn get setting
+        current_lock_status = PayrollPolicyService.get_setting_value("config_edit_locked",ConfigLockStatus.UNLOCKED)
         if current_lock_status == ConfigLockStatus.LOCKED:
             raise ValueError("Hệ thống đang khóa cấu hình lương, không thể tính lương mới.")
         query = Employee.query.filter_by(is_deleted=False)

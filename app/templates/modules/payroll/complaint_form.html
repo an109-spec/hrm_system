@@ -1,0 +1,185 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Gửi Khiếu Nại Lương — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex align-items-center mb-4">
+            <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary me-3">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div>
+                <h4 class="fw-bold mb-0">
+                    <i class="fas fa-exclamation-circle me-2 text-danger"></i>Gui Khieu Nai Luong
+                </h4>
+                <small class="text-muted">Phan anh sai sot trong phieu luong cua ban</small>
+            </div>
+        </div>
+
+        <!-- Alert Info -->
+        <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Luu y:</strong> Don khieu nai se duoc gui toi <strong>Quan ly truc tiep</strong> cua ban.
+            Vui long mo ta cu the de duoc xu ly nhanh chong.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <!-- My Complaints Summary -->
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-list me-2 text-primary"></i>Don Khieu Nai Cua Toi
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ma don</th>
+                                <th>Ky luong</th>
+                                <th>Tieu de</th>
+                                <th>Trang thai</th>
+                                <th>Ngay gui</th>
+                                <th>Hanh dong</th>
+                            </tr>
+                        </thead>
+                        <tbody id="complaintListBody">
+                            <tr>
+                                <td colspan="6" class="text-center py-3 text-muted">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Dang tai...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Complaint Form -->
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-plus-circle me-2 text-danger"></i>Tao Don Khieu Nai Moi
+            </div>
+            <div class="card-body">
+                <form id="newComplaintForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phieu luong lien quan <span class="text-danger">*</span></label>
+                        <select id="selectSalary" name="salary_id" class="form-select" required>
+                            <option value="">-- Chon ky luong --</option>
+                        </select>
+                        <div class="form-text">Chi co the khieu nai phieu luong chua thanh toan hoac dang xu ly.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Loai van de <span class="text-danger">*</span></label>
+                        <select name="issue_type" class="form-select" required>
+                            <option value="">-- Chon loai van de --</option>
+                            <option value="missing_hours">Thieu gio cong / ngay cong</option>
+                            <option value="wrong_basic">Sai luong co ban</option>
+                            <option value="wrong_allowance">Sai phu cap</option>
+                            <option value="wrong_overtime">Sai tien tang ca</option>
+                            <option value="wrong_insurance">Sai bao hiem xa hoi / y te</option>
+                            <option value="wrong_tax">Sai thue TNCN</option>
+                            <option value="wrong_deduction">Tru nham / khau tru sai</option>
+                            <option value="other">Ly do khac</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Noi dung khieu nai <span class="text-danger">*</span></label>
+                        <textarea name="description" class="form-control" rows="6"
+                            placeholder="Mieu ta cu the van de ban phat hien. Vi du: Thang 5/2026, toi lam them 8 gio ngay 20/05 nhung khong thay tien tang ca trong phieu luong..." required></textarea>
+                        <div class="form-text text-end">
+                            <span id="charCount">0</span>/1000 ky tu
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Tai lieu minh chung (khong bat buoc)</label>
+                        <div id="dropzone" class="border border-dashed rounded p-4 text-center"
+                            style="cursor:pointer; border-color: #6b7280 !important">
+                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-1">Keo tha file vao day hoac bam de chon</p>
+                            <small class="text-muted">PDF, JPG, PNG, Excel, Word — Toi da 5 file, 5MB/file</small>
+                            <input type="file" name="attachments" id="fileInput" class="d-none" multiple
+                                accept=".pdf,.jpg,.jpeg,.png,.xlsx,.docx">
+                        </div>
+                        <div id="filePreview" class="mt-2"></div>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="reset" class="btn btn-outline-secondary">
+                            <i class="fas fa-undo me-1"></i>Dat lai
+                        </button>
+                        <button type="submit" class="btn btn-danger" id="btnSubmit">
+                            <i class="fas fa-paper-plane me-1"></i>Gui khieu nai
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Info -->
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-question-circle me-2 text-info"></i>Quy trinh xu ly
+            </div>
+            <div class="card-body">
+                <div class="audit-timeline">
+                    <div class="audit-item audit-warning">
+                        <div class="fw-semibold">Nhan vien gui don</div>
+                        <div class="small text-muted">Don duoc gui toi Quan ly truc tiep</div>
+                    </div>
+                    <div class="audit-item">
+                        <div class="fw-semibold">Quan ly xem xet</div>
+                        <div class="small text-muted">Quan ly xac nhan hoac tu choi khieu nai</div>
+                    </div>
+                    <div class="audit-item">
+                        <div class="fw-semibold">HR xu ly</div>
+                        <div class="small text-muted">HR dieu chinh du lieu neu can thiet</div>
+                    </div>
+                    <div class="audit-item audit-success">
+                        <div class="fw-semibold">Giai quyet</div>
+                        <div class="small text-muted">Thong bao ket qua gui toi ban</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Complaint Detail Modal -->
+<div class="modal fade" id="complaintDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chi Tiet Khieu Nai</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="complaintDetailBody">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dong</button>
+                <button type="button" class="btn btn-warning d-none" id="btnCloseComplaint">
+                    <i class="fas fa-times me-1"></i>Huy khieu nai
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/complaint_form.js') }}"></script>
+{% endblock %}

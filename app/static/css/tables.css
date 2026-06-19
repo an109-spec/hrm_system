@@ -1,0 +1,21 @@
+
+/*bảng (hàng  cột) dữ liệu*/
+.table{
+    background:white;
+}
+
+.table thead{
+    background:#f8fafc;
+}
+
+.table th{
+    font-weight:600;
+}
+
+.table-hover tbody tr:hover{
+    background:#f1f5f9;
+}
+
+.table-responsive{
+    overflow-x:auto;
+}

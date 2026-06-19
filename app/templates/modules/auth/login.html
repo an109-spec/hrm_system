@@ -1,0 +1,244 @@
+{% extends 'layouts/auth_layout.html' %}
+
+{% block title %}Đăng nhập - HRM System{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    .auth-wrapper {
+        background: linear-gradient(135deg, #1f2937 0%, #374151 50%, #1e3a5f 100%);
+    }
+
+    .auth-container {
+        animation: slideUp 0.4s ease-out;
+    }
+
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(24px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .auth-logo {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+    }
+
+    .auth-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 4px;
+    }
+
+    .auth-subtitle {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-bottom: 28px;
+    }
+
+    .form-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+    }
+
+    .form-control {
+        height: 44px;
+        border: 1.5px solid #e5e7eb;
+        font-size: 0.9rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: #f9fafb;
+    }
+
+    .form-control:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        background: #fff;
+    }
+
+    .input-group .form-control {
+        border-right: none;
+    }
+
+    .input-group .btn-outline-secondary {
+        border: 1.5px solid #e5e7eb;
+        border-left: none;
+        background: #f9fafb;
+        color: #6b7280;
+        transition: all 0.2s;
+    }
+
+    .input-group .btn-outline-secondary:hover {
+        background: #f3f4f6;
+        color: #374151;
+    }
+
+    .btn-login {
+        height: 46px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        border: none;
+        font-weight: 600;
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
+        transition: all 0.2s;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-login:hover {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-login:active {
+        transform: translateY(0);
+    }
+
+    .btn-login:disabled {
+        opacity: 0.7;
+        transform: none;
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 20px 0;
+        color: #9ca3af;
+        font-size: 0.8rem;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: #e5e7eb;
+    }
+
+    .forgot-link {
+        color: #2563eb;
+        font-size: 0.85rem;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .forgot-link:hover {
+        color: #1d4ed8;
+        text-decoration: underline;
+    }
+
+    .auth-footer-text {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        text-align: center;
+        margin-top: 24px;
+    }
+
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <div class="auth-logo">
+        <i class="fas fa-users text-white" style="font-size:1.4rem;"></i>
+    </div>
+    <div class="auth-title">HRM System</div>
+    <div class="auth-subtitle">Hệ thống Quản ly Nhan su - Vui long dang nhap</div>
+</div>
+
+<form id="loginForm" novalidate>
+    <div class="mb-3">
+        <label for="identifier" class="form-label">Email hoac So dien thoai</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0" style="border:1.5px solid #e5e7eb; border-right:none; border-radius:8px 0 0 8px;">
+                <i class="fas fa-user text-muted" style="font-size:0.85rem;"></i>
+            </span>
+            <input
+                type="text"
+                class="form-control"
+                id="identifier"
+                name="identifier"
+                placeholder="example@company.com hoac 0901234567"
+                autocomplete="username"
+                required
+                style="border-left:none; border-radius:0 8px 8px 0;"
+            >
+        </div>
+        <div class="invalid-feedback" id="identifierError"></div>
+    </div>
+
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <label for="password" class="form-label mb-0">Mat khau</label>
+            <a href="{{ url_for('auth.forgot_password_page') }}" class="forgot-link">Quen mat khau?</a>
+        </div>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0" style="border:1.5px solid #e5e7eb; border-right:none; border-radius:8px 0 0 8px;">
+                <i class="fas fa-lock text-muted" style="font-size:0.85rem;"></i>
+            </span>
+            <input
+                type="password"
+                class="form-control"
+                id="password"
+                name="password"
+                placeholder="Nhap mat khau"
+                autocomplete="current-password"
+                required
+                style="border-left:none; border-right:none; border-radius:0;"
+            >
+            <button class="btn btn-outline-secondary" type="button" id="togglePassword" style="border-radius:0 8px 8px 0;">
+                <i class="fas fa-eye" id="toggleIcon"></i>
+            </button>
+        </div>
+        <div class="invalid-feedback" id="passwordError"></div>
+    </div>
+
+    <div class="mb-4">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="rememberMe">
+            <label class="form-check-label" for="rememberMe" style="font-size:0.875rem; color:#6b7280;">
+                Ghi nho dang nhap
+            </label>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-login w-100" id="loginBtn">
+        <span id="loginBtnText">
+            <i class="fas fa-sign-in-alt me-2"></i>Dang nhap
+        </span>
+        <span id="loginBtnSpinner" class="d-none">
+            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+            Dang xu ly...
+        </span>
+    </button>
+</form>
+
+<div class="auth-footer-text">
+    &copy; {{ current_year }} <strong>{{ system_name }}</strong>. Tat ca cac quyen duoc bao luu.
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/auth.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        Auth.initLogin();
+    });
+</script>
+{% endblock %}

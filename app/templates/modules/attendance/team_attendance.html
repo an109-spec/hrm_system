@@ -1,0 +1,124 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Cham Cong Nhom — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 fw-bold">Cham Cong Nhom</h4>
+            <p class="text-muted mb-0 small">Theo doi cham cong cac thanh vien trong phong ban</p>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="att-filter-bar">
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Ma nhan vien</label>
+            <input type="number" id="team_emp_id" class="form-control form-control-sm"
+                   placeholder="Tat ca" style="width:150px;">
+        </div>
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Tu ngay</label>
+            <input type="date" id="team_from" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Den ngay</label>
+            <input type="date" id="team_to" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+            <button id="btn-team-filter" class="btn btn-primary btn-sm px-4">Loc</button>
+        </div>
+    </div>
+
+    <!-- Summary today -->
+    <div class="row g-3 mb-4" id="team-today-row">
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card success">
+                <div class="stat-label">Co mat hom nay</div>
+                <div class="stat-value text-success" id="team-stat-present">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card danger">
+                <div class="stat-label">Vang mat</div>
+                <div class="stat-value text-danger" id="team-stat-absent">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card warning">
+                <div class="stat-label">Di muon</div>
+                <div class="stat-value text-warning" id="team-stat-late">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card primary">
+                <div class="stat-label">Tang ca</div>
+                <div class="stat-value text-primary" id="team-stat-ot">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table att-table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Ngay</th>
+                            <th>Ho ten</th>
+                            <th>Gio vao</th>
+                            <th>Gio ra</th>
+                            <th>Trang thai</th>
+                            <th>Gio lam</th>
+                            <th>Di muon</th>
+                        </tr>
+                    </thead>
+                    <tbody id="team-table-body">
+                        <tr><td colspan="7" class="text-center py-4">Dang tai...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-transparent d-flex justify-content-end" id="team-pagination"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date();
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('team_from').value = first.toISOString().split('T')[0];
+    document.getElementById('team_to').value   = today.toISOString().split('T')[0];
+
+    // Patch render to populate stat cards
+    const origRender = TeamAttendance.render.bind(TeamAttendance);
+    TeamAttendance.render = function(data) {
+        origRender(data);
+        const rows = data.data || [];
+        let present = 0, absent = 0, late = 0, ot = 0;
+        rows.forEach(r => {
+            const t = (r.attendance_type || '').toLowerCase();
+            if (t === 'absent') absent++;
+            else present++;
+            if (r.late_minutes > 0) late++;
+            if (r.overtime_hours > 0) ot++;
+        });
+        document.getElementById('team-stat-present').textContent = present;
+        document.getElementById('team-stat-absent').textContent  = absent;
+        document.getElementById('team-stat-late').textContent    = late;
+        document.getElementById('team-stat-ot').textContent      = ot;
+    };
+
+    TeamAttendance.init();
+});
+</script>
+{% endblock %}

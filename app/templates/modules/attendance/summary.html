@@ -1,0 +1,104 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Bao Cao Cham Cong — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 fw-bold">Bao Cao Cham Cong Ngay</h4>
+            <p class="text-muted mb-0 small">Tong hop cham cong theo ngay / thang</p>
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="att-filter-bar">
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Ngay xem</label>
+            <input type="date" id="summary_date" class="form-control form-control-sm" style="width:160px;">
+        </div>
+        {% if current_user and current_user.role.name in ['HR', 'ADMIN', 'MANAGER'] %}
+        <div>
+            <label class="form-label small mb-1 fw-semibold">Ma nhan vien</label>
+            <input type="number" id="summary_employee_id" class="form-control form-control-sm"
+                   placeholder="Tat ca" style="width:150px;">
+        </div>
+        {% endif %}
+        <div>
+            <button id="btn-load-summary" class="btn btn-primary btn-sm px-4">Tai du lieu</button>
+        </div>
+    </div>
+
+    <!-- Stats row (aggregate) -->
+    <div class="row g-3 mb-4" id="summary-stats-row">
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card success">
+                <div class="stat-label">Co mat</div>
+                <div class="stat-value text-success" id="stat-present">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card danger">
+                <div class="stat-label">Vang mat</div>
+                <div class="stat-value text-danger" id="stat-absent">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card warning">
+                <div class="stat-label">Di muon</div>
+                <div class="stat-value text-warning" id="stat-late">--</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="att-stat-card primary">
+                <div class="stat-label">Nghi phep</div>
+                <div class="stat-value text-primary" id="stat-leave">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">Chi tiet cham cong</div>
+        <div class="card-body p-0" id="summary-container">
+            <div class="text-center py-5 text-muted small">
+                Chon ngay va nhan "Tai du lieu" de xem bao cao
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Default to today
+    document.getElementById('summary_date').value = new Date().toISOString().split('T')[0];
+
+    // Patch render to also update stat cards
+    const origRender = AttendanceSummary.render.bind(AttendanceSummary);
+    AttendanceSummary.render = function(data) {
+        origRender(data);
+        const rows = data.data || [];
+        let present = 0, absent = 0, late = 0, leave = 0;
+        rows.forEach(r => {
+            const t = (r.attendance_type || '').toLowerCase();
+            if (t === 'leave_approved') { leave++; }
+            else if (t === 'absent')    { absent++; }
+            else { present++; if (r.late_minutes > 0) late++; }
+        });
+        document.getElementById('stat-present').textContent = present;
+        document.getElementById('stat-absent').textContent  = absent;
+        document.getElementById('stat-late').textContent    = late;
+        document.getElementById('stat-leave').textContent   = leave;
+    };
+
+    AttendanceSummary.init();
+});
+</script>
+{% endblock %}

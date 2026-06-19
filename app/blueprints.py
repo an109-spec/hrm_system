@@ -18,21 +18,22 @@ def register_blueprints(app):
     from app.modules.payroll      import payroll_bp
     from app.modules.personnel    import personnel_bp
     from app.modules.resignation  import resignation_bp
-
+    from app.modules.home         import home_bp
     BLUEPRINTS = (
-        auth_bp,
-        personnel_bp,
-        notification_bp,
-        leave_bp,
-        attendance_bp,
-        history_bp,
-        manager_bp,
-        admin_bp,
-        hr_bp,
-        payroll_bp,       # url_prefix="/payroll" → /payroll/analytics/total-fund
-        contract_bp,
-        resignation_bp,
-    )
+            (auth_bp, "/auth"),
+            (personnel_bp, "/personnel"),
+            (notification_bp, "/notification"),
+            (leave_bp, "/leave"),
+            (attendance_bp, "/attendance"),
+            (history_bp, "/history"),
+            (manager_bp, "/manager"),
+            (admin_bp, "/admin"),
+            (hr_bp, "/hr"),
+            (payroll_bp, "/payroll"),
+            (contract_bp, "/contract"),
+            (resignation_bp, "/resignation"),
+            (home_bp, "/")
+        )
 
-    for bp in BLUEPRINTS:
-        app.register_blueprint(bp)
+    for bp, prefix in BLUEPRINTS:
+        app.register_blueprint(bp, url_prefix=prefix)

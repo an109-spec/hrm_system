@@ -1,4 +1,11 @@
 <li class="nav-item">
+    <a class="nav-link" href="{{ url_for('payroll.finalize_page') }}">
+        <i class="fas fa-shield-alt me-2"></i> CHỐT SỔ & DUYỆT LƯƠNG
+    </a>
+</li>
+
+
+<li class="nav-item">
     <a class="nav-link" href="{{ url_for('history.get_audit_logs') }}">
         <i class="fas fa-shield-alt me-2"></i> Nhật ký hệ thống
     </a>
@@ -16,6 +23,8 @@
 
 <li class="nav-item">
     <a class="nav-link" href="{{ url_for('admin.get_employee_summary') }}">
-        <i class="fas fa-file-contract me-2"></i> Danh sách nhân viên
+        <i class="fas fa-users me-2"></i> Danh sách nhân viên
     </a>
 </li>
+
+

@@ -1,0 +1,178 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Nhân viên phòng ban – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manager.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- ── Page header ─────────────────────────────────────────── -->
+<div class="mgr-page-header">
+    <h1 class="mgr-page-title">
+        <span class="title-icon"><i class="bi bi-people-fill"></i></span>
+        Nhân viên phòng ban
+    </h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="TeamPage.exportExcel()">
+            <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
+        </button>
+    </div>
+</div>
+
+<!-- ── Summary cards ───────────────────────────────────────── -->
+<div class="row g-3 mb-4" id="summary-cards">
+    <div class="col-6 col-md-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon blue"><i class="bi bi-people-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="stat-total">—</div>
+                <div class="mgr-stat-label">Tổng nhân viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon green"><i class="bi bi-person-check-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="stat-active">—</div>
+                <div class="mgr-stat-label">Đang làm việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon orange"><i class="bi bi-hourglass-split"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="stat-probation">—</div>
+                <div class="mgr-stat-label">Thử việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mgr-stat-card">
+            <div class="mgr-stat-icon red"><i class="bi bi-calendar-x-fill"></i></div>
+            <div class="mgr-stat-body">
+                <div class="mgr-stat-value" id="stat-expiring">—</div>
+                <div class="mgr-stat-label">HĐ sắp hết hạn</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Filter bar ──────────────────────────────────────────── -->
+<div class="mgr-card mb-4">
+    <div class="mgr-card-body">
+        <div class="mgr-filter-bar">
+            <div>
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Tìm tên</label>
+                <input type="text" id="f-name" class="form-control form-control-sm" placeholder="Nguyễn Văn A…">
+            </div>
+            <div>
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Mã NV</label>
+                <input type="text" id="f-code" class="form-control form-control-sm" placeholder="EMP0001">
+            </div>
+            <div>
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Chức vụ</label>
+                <input type="text" id="f-position" class="form-control form-control-sm" placeholder="Lập trình viên…">
+            </div>
+            <div>
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Trạng thái</label>
+                <select id="f-status" class="form-select form-select-sm">
+                    <option value="">Tất cả</option>
+                    <option value="active">Đang làm</option>
+                    <option value="resigned">Đã nghỉ</option>
+                    <option value="on_leave">Đang nghỉ phép</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label fw-semibold" style="font-size:.8rem;">Loại HĐ</label>
+                <select id="f-contract" class="form-select form-select-sm">
+                    <option value="">Tất cả</option>
+                    <option value="official">Chính thức</option>
+                    <option value="probation">Thử việc</option>
+                    <option value="part_time">Bán thời gian</option>
+                </select>
+            </div>
+            <div class="d-flex gap-2 align-items-end">
+                <button class="btn btn-primary btn-sm" onclick="TeamPage.search()">
+                    <i class="bi bi-search me-1"></i>Tìm
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="TeamPage.reset()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Employee table ───────────────────────────────────────── -->
+<div class="mgr-card">
+    <div class="mgr-card-header">
+        <h2 class="mgr-card-title">
+            <i class="bi bi-table text-primary"></i>
+            Danh sách nhân viên
+        </h2>
+        <span class="text-muted" style="font-size:.83rem;">
+            Tìm thấy <strong id="result-count">—</strong> nhân viên
+        </span>
+    </div>
+
+    <div class="mgr-table-wrapper" id="table-wrapper">
+        <!-- Skeleton rows while loading -->
+        <table class="mgr-table">
+            <thead>
+                <tr>
+                    <th>Nhân viên</th>
+                    <th>Chức vụ</th>
+                    <th>Phòng ban</th>
+                    <th>Ngày vào</th>
+                    <th>Loại HĐ</th>
+                    <th>Trạng thái</th>
+                    <th class="text-center">Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="employee-tbody">
+                <tr>
+                    <td colspan="7">
+                        <div class="mgr-empty">
+                            <div class="mgr-empty-icon"><i class="bi bi-hourglass-split"></i></div>
+                            <div class="mgr-empty-title">Đang tải dữ liệu…</div>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="mgr-pagination" id="pagination-bar" style="display:none;">
+        <span id="page-info" style="font-size:.83rem; color:var(--mgr-muted);"></span>
+        <div class="d-flex gap-1" id="page-buttons"></div>
+    </div>
+</div>
+
+<!-- ── Employee detail modal ────────────────────────────────── -->
+<div class="modal fade" id="empDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border:none; border-radius:12px; overflow:hidden;">
+            <div class="modal-header border-0" style="background:var(--mgr-primary); color:white; padding:18px 24px;">
+                <div>
+                    <h5 class="modal-title mb-1" id="modal-emp-name">Hồ sơ nhân viên</h5>
+                    <small id="modal-emp-code" style="opacity:.8;"></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="modal-detail-body">
+                <div class="text-center p-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/manager/team.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,239 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Tạo Hợp đồng – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .form-card {
+        border-radius: 14px;
+        border: none;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+    }
+    .section-title {
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: #6b7280;
+        margin-bottom: 1rem;
+    }
+    .employee-preview {
+        border-radius: 10px;
+        background: #f0f9ff;
+        border: 1.5px solid #bae6fd;
+        padding: 14px 16px;
+        display: none;
+    }
+    .employee-preview.show { display: flex; }
+    .preview-avatar {
+        width: 44px; height: 44px; border-radius: 50%;
+        background: #3b82f6; color: white;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.1rem; flex-shrink: 0;
+    }
+    .duration-option {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: all .15s;
+        text-align: center;
+    }
+    .duration-option:hover { border-color: #93c5fd; background: #eff6ff; }
+    .duration-option.selected { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+    .duration-option .dur-label { font-weight: 600; font-size: .9rem; }
+    .duration-option .dur-sub { font-size: .75rem; color: #6b7280; }
+    .step-indicator {
+        display: flex; gap: 8px; margin-bottom: 1.5rem;
+    }
+    .step {
+        flex: 1; height: 4px; border-radius: 4px; background: #e5e7eb;
+        transition: background .3s;
+    }
+    .step.active  { background: #3b82f6; }
+    .step.done    { background: #10b981; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{{ url_for('contract.get_all_contracts') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+        <h4 class="fw-bold mb-0"><i class="fas fa-plus-circle text-primary me-2"></i>Tạo Hợp đồng Mới</h4>
+        <p class="text-muted mb-0 small">Tạo hợp đồng lao động cho nhân viên</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Main Form -->
+    <div class="col-lg-8">
+        <!-- Step Indicator -->
+        <div class="step-indicator mb-4">
+            <div class="step active" id="step1bar"></div>
+            <div class="step" id="step2bar"></div>
+            <div class="step" id="step3bar"></div>
+        </div>
+
+        <!-- Step 1: Employee -->
+        <div class="form-card card p-4 mb-4">
+            <p class="section-title"><i class="fas fa-user me-1"></i> Bước 1 – Chọn Nhân viên</p>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Tìm nhân viên <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0">
+                        <i class="fas fa-search text-muted"></i>
+                    </span>
+                    <input type="number" id="empIdInput" class="form-control border-start-0"
+                        placeholder="Nhập ID nhân viên rồi nhấn Enter hoặc nút Tra cứu">
+                    <button class="btn btn-outline-primary" id="btnLookup" type="button">
+                        <i class="fas fa-search me-1"></i> Tra cứu
+                    </button>
+                </div>
+                <div class="form-text">Nhập mã số nhân viên (ID) để tra cứu thông tin</div>
+            </div>
+
+            <div class="employee-preview align-items-center gap-3" id="empPreview">
+                <div class="preview-avatar" id="previewInitial">?</div>
+                <div>
+                    <div class="fw-bold" id="previewName">–</div>
+                    <div class="text-muted small" id="previewDetail">–</div>
+                </div>
+                <div class="ms-auto">
+                    <span class="badge bg-success">✓ Đã chọn</span>
+                </div>
+            </div>
+            <input type="hidden" id="selectedEmpId">
+        </div>
+
+        <!-- Step 2: Contract Terms -->
+        <div class="form-card card p-4 mb-4">
+            <p class="section-title"><i class="fas fa-file-alt me-1"></i> Bước 2 – Điều khoản Hợp đồng</p>
+
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Thời hạn hợp đồng <span class="text-danger">*</span></label>
+                <div class="row g-2" id="durationOptions">
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option" data-value="2m">
+                            <div class="dur-label">2 tháng</div>
+                            <div class="dur-sub">Thử việc</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option" data-value="6m">
+                            <div class="dur-label">6 tháng</div>
+                            <div class="dur-sub">Ngắn hạn</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option selected" data-value="12m">
+                            <div class="dur-label">1 năm</div>
+                            <div class="dur-sub">Tiêu chuẩn</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option" data-value="24m">
+                            <div class="dur-label">2 năm</div>
+                            <div class="dur-sub">Dài hạn</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option" data-value="36m">
+                            <div class="dur-label">3 năm</div>
+                            <div class="dur-sub">Dài hạn</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="duration-option" data-value="permanent">
+                            <div class="dur-label">∞</div>
+                            <div class="dur-sub">Vô hạn</div>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" id="selectedDuration" value="12m">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Loại hợp đồng</label>
+                <select id="contractType" class="form-select">
+                    <option value="probation">Thử việc (Probation)</option>
+                    <option value="official" selected>Chính thức (Official)</option>
+                    <option value="part_time">Bán thời gian (Part-time)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Step 3: Salary & Note -->
+        <div class="form-card card p-4">
+            <p class="section-title"><i class="fas fa-money-bill-wave me-1"></i> Bước 3 – Lương & Ghi chú</p>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Lương cơ bản</label>
+                <div class="input-group">
+                    <input type="number" id="basicSalary" class="form-control"
+                        placeholder="Để trống để tự động tính theo vị trí">
+                    <span class="input-group-text">₫</span>
+                </div>
+                <div class="form-text">Nếu để trống, hệ thống sẽ áp dụng mức lương chuẩn theo vị trí công việc</div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Ghi chú</label>
+                <textarea id="contractNote" class="form-control" rows="3"
+                    placeholder="Các điều khoản bổ sung hoặc ghi chú..."></textarea>
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{{ url_for('contract.get_all_contracts') }}" class="btn btn-outline-secondary">
+                    Hủy
+                </a>
+                <button type="button" class="btn btn-primary px-4" id="btnSubmit">
+                    <i class="fas fa-save me-1"></i>Tạo hợp đồng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Preview -->
+    <div class="col-lg-4">
+        <div class="form-card card p-4 sticky-top" style="top: 80px;">
+            <p class="section-title"><i class="fas fa-eye me-1"></i> Xem trước</p>
+            <div id="previewBox">
+                <div class="info-item d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Nhân viên</span>
+                    <span class="fw-semibold small text-end" id="pvName">Chưa chọn</span>
+                </div>
+                <div class="info-item d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Thời hạn</span>
+                    <span class="fw-semibold small" id="pvDuration">1 năm</span>
+                </div>
+                <div class="info-item d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Loại HĐ</span>
+                    <span class="fw-semibold small" id="pvType">Chính thức</span>
+                </div>
+                <div class="info-item d-flex justify-content-between mb-2">
+                    <span class="text-muted small">Lương</span>
+                    <span class="fw-semibold small text-success" id="pvSalary">Tự động</span>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <div class="text-muted small">Ngày bắt đầu dự kiến</div>
+                    <div class="fw-bold text-primary" id="pvStartDate">
+                        {{ now.strftime('%d/%m/%Y') if now else 'Hôm nay' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_create.js') }}"></script>
+{% endblock %}

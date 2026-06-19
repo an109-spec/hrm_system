@@ -1,0 +1,83 @@
+/*#Nó định nghĩa bố cục của cả ứng dụng:*/
+.app-container {
+    display: flex;
+    min-height: 100vh;
+    overflow-x: hidden; /* Ngăn chặn tràn ngang */
+}
+
+.sidebar-wrapper {
+    width: 260px;
+    flex-shrink: 0; 
+    background: #1f2937;
+    color: white;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header{
+    border-bottom:1px solid rgba(255,255,255,.1);
+}
+
+.sidebar-menu{
+    flex:1;
+    overflow-y:auto;
+}
+
+.sidebar-menu .nav-link{
+    color:#d1d5db;
+    padding:12px 20px;
+    transition:.2s;
+}
+
+.sidebar-menu .nav-link:hover{
+    background:#374151;
+    color:white;
+}
+
+.sidebar-footer{
+    border-top:1px solid rgba(255,255,255,.1);
+}
+
+.main-content {
+    flex-grow: 1; /* Tự động lấp đầy khoảng trống còn lại */
+    min-width: 0; /* Quan trọng: Ngăn nội dung bên trong đẩy vỡ layout */
+    display: flex;
+    flex-direction: column;
+    margin-left: 0; /* Không cần margin-left nữa vì sidebar đã chiếm chỗ */
+}
+
+.content-wrapper{
+    flex:1;
+}
+
+.navbar{
+    z-index:100;
+}
+
+.footer{
+    background:white !important;
+}
+
+.auth-wrapper{
+    min-height:100vh;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    background:#f3f4f6;
+}
+
+.auth-container{
+    width:100%;
+    max-width:450px;
+
+    background:white;
+
+    padding:40px;
+
+    border-radius:12px;
+
+    box-shadow:
+        0 5px 20px rgba(0,0,0,.1);
+}

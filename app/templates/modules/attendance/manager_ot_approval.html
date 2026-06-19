@@ -1,0 +1,71 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Duyet Tang Ca — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 fw-bold">Phe Duyet Tang Ca</h4>
+            <p class="text-muted mb-0 small">Danh sach don tang ca cho dau dua tu nhan vien</p>
+        </div>
+        <button id="btn-refresh" class="btn btn-outline-primary btn-sm">
+            Lam moi
+        </button>
+    </div>
+
+    <!-- Stats row -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+            <div class="att-stat-card warning">
+                <div class="stat-label">Cho duyet</div>
+                <div class="stat-value text-warning" id="stat-pending">--</div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="att-stat-card success">
+                <div class="stat-label">Da duyet (hom nay)</div>
+                <div class="stat-value text-success">--</div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="att-stat-card danger">
+                <div class="stat-label">Da tu choi</div>
+                <div class="stat-value text-danger">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OT Requests List -->
+    <div id="ot-requests-container">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Patch render to update stat counter
+    const origRender = ManagerOTApproval.render.bind(ManagerOTApproval);
+    ManagerOTApproval.render = function(requests) {
+        origRender(requests);
+        document.getElementById('stat-pending').textContent = requests.length;
+    };
+
+    ManagerOTApproval.init();
+
+    document.getElementById('btn-refresh')?.addEventListener('click', () => {
+        ManagerOTApproval.load();
+    });
+});
+</script>
+{% endblock %}

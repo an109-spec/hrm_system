@@ -1,0 +1,161 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Check-in / Check-out — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div data-page="attendance-main">
+    <h4 class="mb-4 fw-bold">Giao dien Cham Cong</h4>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-lg-6">
+
+            <!-- Widget cham cong -->
+            <div class="att-widget mb-4">
+                <div class="att-clock mb-1" id="att-clock">00:00:00</div>
+                <div class="att-date-label small">
+                    {% if current_employee %}
+                        {{ current_employee.full_name }}
+                        &nbsp;|&nbsp;
+                        {{ current_employee.department.name if current_employee.department else '' }}
+                    {% endif %}
+                </div>
+                <div class="my-3" id="att-status-badge">
+                    <span class="att-badge not-started">Dang tai...</span>
+                </div>
+                <p class="text-muted small" id="att-state-message"></p>
+
+                <!-- Buttons -->
+                <div class="d-flex flex-wrap gap-2 justify-content-center mt-3">
+                    <!-- Check-in ca chinh -->
+                    <button id="btn-checkin" class="att-action-btn btn-checkin">
+                        Check-in
+                    </button>
+                    <!-- Check-out ca chinh -->
+                    <button id="btn-checkout" class="att-action-btn btn-checkout">
+                        Check-out
+                    </button>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- OT buttons -->
+                <p class="small text-muted mb-2">Tang ca (OT)</p>
+                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                    <button id="btn-checkin-ot" class="att-action-btn btn-ot" style="min-width:140px;">
+                        Check-in OT
+                    </button>
+                    <button id="btn-checkout-ot" class="att-action-btn btn-neutral" style="min-width:140px;">
+                        Check-out OT
+                    </button>
+                </div>
+
+                <!-- OT decision panel -->
+                <div id="ot-decision-panel" class="d-none mt-4 p-3 bg-light rounded">
+                    <p class="fw-bold mb-2">Ban co muon dang ky tang ca?</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button id="btn-ot-yes" class="btn btn-warning btn-sm">Co, tang ca</button>
+                        <button id="btn-ot-no"  class="btn btn-secondary btn-sm">Khong, ve nha</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Checkin info cards -->
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="att-stat-card success">
+                        <div class="stat-label">Gio vao</div>
+                        <div class="stat-value" id="att-checkin-time">--:--</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="att-stat-card primary">
+                        <div class="stat-label">Gio ra</div>
+                        <div class="stat-value" id="att-checkout-time">--:--</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="att-stat-card warning">
+                        <div class="stat-label">Gio OT</div>
+                        <div class="stat-value" id="att-ot-time">--:--</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="att-stat-card danger">
+                        <div class="stat-label">Tong gio</div>
+                        <div class="stat-value" id="att-working-hours">0.00h</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+(function() {
+    document.body.dataset.page = 'attendance-main';
+    AttendanceUI.startClock('att-clock');
+
+    async function refreshState() {
+        const { ok, data } = await AttendanceAPI.getState();
+        if (!ok || !data) return;
+        const state = data.state || {};
+        const att   = data.attendance || {};
+
+        document.getElementById('att-status-badge').innerHTML = AttendanceUI.renderBadge(state.state);
+        document.getElementById('att-state-message').textContent = state.message || '';
+
+        const ci = att.check_in;
+        const co = att.check_out;
+        const otin  = att.overtime_check_in;
+        const otout = att.overtime_check_out;
+
+        document.getElementById('att-checkin-time').textContent  = ci    ? new Date(ci).toLocaleTimeString('vi-VN') : '--:--';
+        document.getElementById('att-checkout-time').textContent = co    ? new Date(co).toLocaleTimeString('vi-VN') : '--:--';
+        document.getElementById('att-ot-time').textContent       = otin  ? new Date(otin).toLocaleTimeString('vi-VN') + (otout ? ' - ' + new Date(otout).toLocaleTimeString('vi-VN') : '') : '--:--';
+        document.getElementById('att-working-hours').textContent = (att.working_hours || '0.00') + 'h';
+
+        // OT panel
+        if (state.requires_overtime_decision) {
+            document.getElementById('ot-decision-panel').classList.remove('d-none');
+        } else {
+            document.getElementById('ot-decision-panel').classList.add('d-none');
+        }
+    }
+
+    async function doAction(payload) {
+        await AttendanceAPI.action(payload);
+        await refreshState();
+    }
+
+    document.getElementById('btn-checkin')?.addEventListener('click', async () => {
+        await AttendanceAPI.checkIn();
+        await refreshState();
+    });
+    document.getElementById('btn-checkout')?.addEventListener('click', async () => {
+        await AttendanceAPI.checkOut();
+        await refreshState();
+    });
+    document.getElementById('btn-checkin-ot')?.addEventListener('click', async () => {
+        await AttendanceAPI.checkInOT();
+        await refreshState();
+    });
+    document.getElementById('btn-checkout-ot')?.addEventListener('click', async () => {
+        await AttendanceAPI.checkOutOT();
+        await refreshState();
+    });
+    document.getElementById('btn-ot-yes')?.addEventListener('click', () => doAction({ overtime_decision: 'yes' }));
+    document.getElementById('btn-ot-no')?.addEventListener('click',  () => doAction({ overtime_decision: 'no'  }));
+
+    refreshState();
+    setInterval(refreshState, 60000);
+})();
+</script>
+{% endblock %}

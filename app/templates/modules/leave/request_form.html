@@ -1,0 +1,121 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Tạo đơn nghỉ phép{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/leave.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="page-header mb-4">
+            <h4 class="fw-bold mb-1">Tạo đơn xin nghỉ phép</h4>
+            <p class="text-muted mb-0">Điền đầy đủ thông tin, đơn sẽ được gửi tới quản lý của bạn</p>
+        </div>
+
+        <!-- Balance Info -->
+        <div class="leave-balance-bar card border-0 mb-4 p-3 d-flex flex-row align-items-center gap-4" id="balanceBar">
+            <div class="text-muted small"><i class="fas fa-info-circle me-1"></i>Đang tải số dư phép...</div>
+        </div>
+
+        <div class="card border-0">
+            <div class="card-body p-4">
+                <form id="leaveRequestForm" novalidate>
+
+                    <!-- Loại nghỉ -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Loại nghỉ phép <span class="text-danger">*</span></label>
+                        <select class="form-select" id="leaveTypeSelect" name="leave_type_id" required>
+                            <option value="">— Chọn loại nghỉ —</option>
+                        </select>
+                        <div class="invalid-feedback">Vui lòng chọn loại nghỉ.</div>
+                    </div>
+
+                    <!-- Subtype (chỉ hiện khi loại = PERSONAL) -->
+                    <div class="mb-4 d-none" id="subtypeGroup">
+                        <label class="form-label fw-semibold">Mục đích nghỉ việc riêng <span class="text-danger">*</span></label>
+                        <select class="form-select" id="subtypeSelect" name="subtype">
+                            <option value="">— Chọn mục đích —</option>
+                            <option value="MARRIAGE">Kết hôn (3 ngày)</option>
+                            <option value="CHILD_MARRIAGE">Con kết hôn (1 ngày)</option>
+                            <option value="FUNERAL">Tang lễ (3 ngày)</option>
+                        </select>
+                    </div>
+
+                    <!-- Quan hệ (chỉ hiện khi subtype = FUNERAL) -->
+                    <div class="mb-4 d-none" id="relationGroup">
+                        <label class="form-label fw-semibold">Quan hệ với người mất <span class="text-danger">*</span></label>
+                        <select class="form-select" id="relationSelect" name="relation">
+                            <option value="">— Chọn quan hệ —</option>
+                            <option value="cha">Cha</option>
+                            <option value="mẹ">Mẹ</option>
+                            <option value="vợ">Vợ</option>
+                            <option value="chồng">Chồng</option>
+                            <option value="con">Con</option>
+                        </select>
+                    </div>
+
+                    <!-- Ngày nghỉ -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Từ ngày <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="fromDate" name="from_date" required>
+                            <div class="invalid-feedback">Vui lòng chọn ngày bắt đầu.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="toDate" name="to_date" required>
+                            <div class="invalid-feedback">Vui lòng chọn ngày kết thúc.</div>
+                        </div>
+                    </div>
+
+                    <!-- Tính ngày preview -->
+                    <div class="mb-4 d-none" id="daysPreview">
+                        <div class="leave-days-preview">
+                            <i class="fas fa-calendar-day me-2 text-primary"></i>
+                            Số ngày nghỉ thực tế: <strong id="daysCount">—</strong> ngày
+                            <span class="text-muted small ms-2" id="daysNote"></span>
+                        </div>
+                    </div>
+
+                    <!-- Lý do -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Lý do nghỉ <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="reasonInput" name="reason" rows="3"
+                            placeholder="Mô tả ngắn lý do xin nghỉ (tối thiểu 5 ký tự)..." required minlength="5"></textarea>
+                        <div class="invalid-feedback">Vui lòng nhập lý do nghỉ (tối thiểu 5 ký tự).</div>
+                    </div>
+
+                    <!-- Tài liệu đính kèm -->
+                    <div class="mb-4" id="documentGroup">
+                        <label class="form-label fw-semibold">Giấy tờ đính kèm</label>
+                        <input type="file" class="form-control" id="documentFile" name="document"
+                            accept=".pdf,.png,.jpg,.jpeg">
+                        <div class="form-text">Chấp nhận: PDF, JPG, PNG. Tối đa 5MB.</div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex gap-2 justify-content-end pt-2 border-top">
+                        <a href="{{ url_for('leave.my_requests') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Quay lại
+                        </a>
+                        <button type="submit" class="btn btn-primary" id="btnSubmitLeave">
+                            <i class="fas fa-paper-plane me-1"></i>Gửi đơn
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/leave.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        Leave.RequestForm.init();
+    });
+</script>
+{% endblock %}

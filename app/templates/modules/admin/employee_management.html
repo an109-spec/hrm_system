@@ -1,0 +1,158 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Quản lý nhân viên — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<!-- Page header -->
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">
+            <i class="fa-solid fa-users"></i> Danh sách nhân viên
+        </h1>
+        <div class="admin-breadcrumb">
+            <a href="#">Dashboard</a> / Nhân viên
+        </div>
+    </div>
+    <a href="{{ url_for('admin.create_employee_page') }}" class="btn-admin-primary">
+        <i class="fa-solid fa-plus"></i> Thêm nhân viên
+    </a>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4" id="statRow">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+            <div>
+                <div class="stat-value" id="statTotal">—</div>
+                <div class="stat-label">Tổng nhân viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="fa-solid fa-circle-check"></i></div>
+            <div>
+                <div class="stat-value" id="statWorking">—</div>
+                <div class="stat-label">Đang làm việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="fa-solid fa-file-pen"></i></div>
+            <div>
+                <div class="stat-value" id="statProbation">—</div>
+                <div class="stat-label">Thử việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div>
+                <div class="stat-value" id="statExpiring">—</div>
+                <div class="stat-label">HĐ sắp hết hạn</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter & table panel -->
+<div class="admin-panel">
+    <div class="admin-panel-header">
+        <h2 class="admin-panel-title">
+            <i class="fa-solid fa-table-list"></i> Danh sách
+        </h2>
+
+        <div class="admin-filter-bar">
+            <input type="search" id="searchInput" class="form-control"
+                   placeholder="Tìm kiếm tên, SĐT..." style="min-width:200px;">
+
+            <select id="deptFilter" class="form-select" style="min-width:160px;">
+                <option value="">Tất cả phòng ban</option>
+            </select>
+
+            <select id="posFilter" class="form-select" style="min-width:160px;">
+                <option value="">Tất cả chức danh</option>
+            </select>
+
+            <button id="btnSearch" class="btn-admin-primary">
+                <i class="fa-solid fa-magnifying-glass"></i> Lọc
+            </button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="admin-table-wrap">
+        <table class="admin-table" id="employeeTable">
+            <thead>
+                <tr>
+                    <th>Nhân viên</th>
+                    <th>Phòng ban</th>
+                    <th>Chức danh</th>
+                    <th>Loại HĐ</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align:right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="employeeBody">
+                <tr>
+                    <td colspan="6" class="admin-loading">
+                        <span class="spinner-border spinner-border-sm me-2"></span> Đang tải...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Transfer modal -->
+<div class="modal fade" id="transferModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-arrows-left-right-to-line text-primary me-2"></i>
+                    Điều chuyển nhân viên
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Nhân viên: <strong id="transferEmpName">—</strong>
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Phòng ban mới</label>
+                    <select id="transferDept" class="form-select">
+                        <option value="">Giữ nguyên</option>
+                    </select>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label">Chức danh mới</label>
+                    <select id="transferPos" class="form-select">
+                        <option value="">Giữ nguyên</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                <button id="btnTransferSave" class="btn-admin-primary">
+                    <i class="fa-solid fa-check"></i> Xác nhận điều chuyển
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/admin/employee_management.js') }}"></script>
+{% endblock %}

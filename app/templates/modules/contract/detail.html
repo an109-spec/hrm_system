@@ -1,0 +1,151 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Chi tiết Hợp đồng – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/contract.css') }}">
+{% endblock %}
+
+{% block content %}
+{# ── Breadcrumb ── #}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+            <a href="{{ url_for('contract.get_contracts') }}">Hợp đồng</a>
+        </li>
+        <li class="breadcrumb-item active">Chi tiết</li>
+    </ol>
+</nav>
+
+{# ── Loading ── #}
+<div id="loadingState">
+    <div class="contract-loading">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <span>Đang tải thông tin hợp đồng...</span>
+    </div>
+</div>
+
+{# ── Main Content (ẩn ban đầu, JS sẽ hiện sau khi load xong) ── #}
+<div id="mainContent" style="display:none">
+
+    {# Header Card #}
+    <div class="detail-header-card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <p class="mb-1 opacity-75 small text-uppercase fw-semibold">Mã hợp đồng</p>
+                <h3 class="fw-bold mb-2" id="dContractCode">–</h3>
+                <span class="header-status-badge" id="dStatusBadge">–</span>
+            </div>
+            <div class="text-end">
+                <p class="mb-1 opacity-75 small">Số ngày còn lại</p>
+                <div id="dDaysLeft" class="days-left-indicator days-ok">
+                    <i class="fas fa-calendar-check"></i> <span>–</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {# Left Column #}
+        <div class="col-lg-7">
+            <div class="info-section card p-4 mb-4">
+                <h6 class="fw-bold text-primary mb-3">
+                    <i class="fas fa-user me-2"></i>Thông tin Nhân viên
+                </h6>
+                <div class="info-row"><span class="info-label">Họ và tên</span><span class="info-value" id="dEmpName">–</span></div>
+                <div class="info-row"><span class="info-label">Mã nhân viên</span><span class="info-value" id="dEmpCode">–</span></div>
+                <div class="info-row"><span class="info-label">Phòng ban</span><span class="info-value" id="dDepartment">–</span></div>
+                <div class="info-row"><span class="info-label">Chức vụ</span><span class="info-value" id="dPosition">–</span></div>
+                <div class="info-row"><span class="info-label">Loại hình lao động</span><span class="info-value" id="dEmpType">–</span></div>
+            </div>
+
+            <div class="info-section card p-4">
+                <h6 class="fw-bold text-primary mb-3">
+                    <i class="fas fa-file-contract me-2"></i>Thông tin Hợp đồng
+                </h6>
+                <div class="info-row"><span class="info-label">Ngày bắt đầu</span><span class="info-value" id="dStartDate">–</span></div>
+                <div class="info-row"><span class="info-label">Ngày kết thúc</span><span class="info-value" id="dEndDate">–</span></div>
+                <div class="info-row"><span class="info-label">Lương cơ bản</span><span class="info-value text-success" id="dSalary">–</span></div>
+                <div class="info-row"><span class="info-label">Ghi chú</span><span class="info-value text-muted" id="dNote">–</span></div>
+            </div>
+        </div>
+
+        {# Right Column #}
+        <div class="col-lg-5">
+            <div class="info-section card p-4 mb-4">
+                <h6 class="fw-bold text-primary mb-3">
+                    <i class="fas fa-bolt me-2"></i>Thao tác
+                </h6>
+                <div class="d-grid gap-2" id="actionButtons">
+                    {# Rendered by contract_detail.js #}
+                </div>
+            </div>
+
+            <div class="info-section card p-4">
+                <h6 class="fw-bold text-primary mb-3">
+                    <i class="fas fa-history me-2"></i>Tiến trình
+                </h6>
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div class="timeline-dot mt-1"></div>
+                    <div>
+                        <p class="fw-semibold mb-0 small">Bắt đầu hợp đồng</p>
+                        <p class="text-muted small mb-0" id="tStartDate">–</p>
+                    </div>
+                </div>
+                <div class="d-flex align-items-start gap-3">
+                    <div class="timeline-dot mt-1 inactive" id="tEndDot"></div>
+                    <div>
+                        <p class="fw-semibold mb-0 small">Kết thúc hợp đồng</p>
+                        <p class="text-muted small mb-0" id="tEndDate">–</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Terminate Modal (Admin only) ── #}
+{% if current_user.role.name == 'ADMIN' %}
+<div class="modal fade" id="terminateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">
+                    <i class="fas fa-ban me-2"></i>Chấm dứt Hợp đồng
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning small">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Hành động này sẽ <strong>chấm dứt hợp đồng</strong> và
+                    <strong>khóa tài khoản</strong> nhân viên. Không thể hoàn tác.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ngày chấm dứt</label>
+                    <input type="date" id="terminateDate" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Lý do chấm dứt</label>
+                    <textarea id="terminateNote" class="form-control" rows="3" placeholder="Nhập lý do..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmTerminate">
+                    <i class="fas fa-ban me-1"></i>Xác nhận chấm dứt
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+<script src="{{ url_for('static', filename='js/modules/Contract/contract_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_detail.js') }}"></script>
+{% endblock %}

@@ -540,7 +540,7 @@ class Manager_Payroll_Service(PersonalPayrollService):
         """
         Chỉ lấy khiếu nại của nhân viên thuộc phòng ban của Manager.
         """
-        subordinates = BasePayrollService._get_subordinates(manager_id)
+        subordinates = Manager_Payroll_Service._get_subordinates(manager_id)
         if not subordinates:
             return []
         subordinate_ids = [emp.id for emp in subordinates]

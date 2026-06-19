@@ -89,7 +89,7 @@ class AuthService:
     # REQUEST PASSWORD RESET
     # ======================================================
     def request_password_reset(dto: RequestPasswordResetDTO) -> RequestPasswordResetResultDTO:
-        identifier = AuthService._normalize_identifier(dto.identifier)
+        identifier = AuthService.validate_identifier_data(dto.identifier)
         user = AuthService._get_user_by_identifier(identifier)
 
         expires_at = get_otp_expired_at()
@@ -131,7 +131,7 @@ class AuthService:
 
     @staticmethod
     def reset_password(dto: ResetPasswordDTO) -> None:
-        identifier = AuthService._normalize_identifier(dto.identifier)
+        identifier = AuthService.validate_identifier_data(dto.identifier)
         user = AuthService._get_user_by_identifier(identifier)
 
         if not user:

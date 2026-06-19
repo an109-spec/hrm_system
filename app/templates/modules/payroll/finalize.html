@@ -1,0 +1,213 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Chot So Bang Luong — HR{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-lock me-2 text-primary"></i>Chot So & Duyet Bang Luong
+        </h4>
+        <small class="text-muted">Gui duyet, chot so va thanh toan luong cho nhan vien</small>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <input type="month" id="filterMonth" class="form-control form-control-sm" style="width:160px">
+        <button id="btnLoad" class="btn btn-primary btn-sm">
+            <i class="fas fa-search me-1"></i>Tim kiem
+        </button>
+    </div>
+</div>
+
+<!-- Workflow Steps -->
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-3 overflow-auto">
+            <div class="text-center" style="min-width:120px">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center
+                    bg-secondary text-white mb-1" style="width:40px;height:40px;font-size:.85rem">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="small fw-semibold">1. DRAFT</div>
+                <div class="small text-muted">HR tao</div>
+            </div>
+            <div class="flex-fill border-top border-2 border-secondary mx-1"></div>
+            <div class="text-center" style="min-width:120px">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center
+                    bg-warning text-dark mb-1" style="width:40px;height:40px;font-size:.85rem">
+                    <i class="fas fa-paper-plane"></i>
+                </div>
+                <div class="small fw-semibold">2. PENDING</div>
+                <div class="small text-muted">Gui Admin</div>
+            </div>
+            <div class="flex-fill border-top border-2 border-warning mx-1"></div>
+            <div class="text-center" style="min-width:120px">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center
+                    bg-primary text-white mb-1" style="width:40px;height:40px;font-size:.85rem">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="small fw-semibold">3. APPROVED</div>
+                <div class="small text-muted">Admin duyet</div>
+            </div>
+            <div class="flex-fill border-top border-2 border-primary mx-1"></div>
+            <div class="text-center" style="min-width:120px">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center
+                    bg-purple text-white mb-1" style="width:40px;height:40px;font-size:.85rem;background:#6f42c1">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <div class="small fw-semibold">4. LOCKED</div>
+                <div class="small text-muted">Chot so</div>
+            </div>
+            <div class="flex-fill border-top border-2 mx-1" style="border-color:#6f42c1"></div>
+            <div class="text-center" style="min-width:120px">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center
+                    bg-success text-white mb-1" style="width:40px;height:40px;font-size:.85rem">
+                    <i class="fas fa-check-double"></i>
+                </div>
+                <div class="small fw-semibold">5. PAID</div>
+                <div class="small text-muted">Thanh toan</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <div class="summary-card position-relative" style="border-left:4px solid #6c757d">
+            <div class="card-value" id="cntDraft">0</div>
+            <div class="card-label">Nhap</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="summary-card card-orange position-relative">
+            <div class="card-value" id="cntPending">0</div>
+            <div class="card-label">Cho duyet</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="summary-card card-blue position-relative">
+            <div class="card-value" id="cntApproved">0</div>
+            <div class="card-label">Da duyet</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="summary-card position-relative" style="border-left:4px solid #6f42c1">
+            <div class="card-value" id="cntLocked">0</div>
+            <div class="card-label">Da chot</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="summary-card card-green position-relative">
+            <div class="card-value" id="cntPaid">0</div>
+            <div class="card-label">Da thanh toan</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="summary-card card-red position-relative">
+            <div class="card-value" id="cntComplaint">0</div>
+            <div class="card-label">Khieu nai</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter + Table -->
+<div class="card">
+    <div class="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex gap-2 flex-wrap">
+            <select id="statusFilter" class="form-select form-select-sm" style="width:160px">
+                <option value="">Tat ca trang thai</option>
+                <option value="draft">Nhap</option>
+                <option value="pending">Cho duyet (Admin)</option>
+                <option value="approved">Da duyet (Admin)</option>
+                <option value="locked">Da chot</option>
+                <option value="paid">Da thanh toan</option>
+                <option value="rejected">Bi tu choi</option>
+            </select>
+            <input type="text" id="searchInput" class="form-control form-control-sm"
+                placeholder="Tim kiem ten, ma NV..." style="width:200px">
+            <select id="deptFilter" class="form-select form-select-sm" style="width:160px">
+                <option value="">Tat ca phong ban</option>
+            </select>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-warning" id="btnBulkSubmit">
+                <i class="fas fa-paper-plane me-1"></i>Gui duyet (tat ca Draft)
+            </button>
+            <button class="btn btn-sm btn-outline-danger" id="btnNotifyReview">
+                <i class="fas fa-bell me-1"></i>Thong bao NV kiem tra
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table payroll-table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="checkAll"></th>
+                        <th>Ma NV</th>
+                        <th>Ho ten</th>
+                        <th>Phong ban</th>
+                        <th>Vi tri</th>
+                        <th>Luong co ban</th>
+                        <th>Luong rong</th>
+                        <th>Trang thai</th>
+                        <th>Hanh dong</th>
+                    </tr>
+                </thead>
+                <tbody id="finalizeTableBody">
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            <i class="fas fa-search fa-2x mb-2 d-block opacity-25"></i>
+                            Chon thang va bam "Tim kiem" de hien thi du lieu
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="p-3 border-top d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="tableInfo">--</small>
+            <div class="d-flex align-items-center gap-3">
+                <strong class="text-success" id="totalFund">Quy luong: --</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Modal -->
+<div class="modal fade" id="actionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="actionModalTitle">Xu ly bang luong</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="actionSalaryId">
+                <input type="hidden" id="actionType">
+                <div id="actionInfo" class="alert alert-info mb-3"></div>
+                <div class="mb-3" id="noteSection">
+                    <label class="form-label fw-semibold">Ghi chu / Ly do</label>
+                    <textarea id="actionNote" class="form-control" rows="3"
+                        placeholder="Nhap ghi chu..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmAction">
+                    <i class="fas fa-check me-1"></i>Xac nhan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/finalize.js') }}"></script>
+{% endblock %}

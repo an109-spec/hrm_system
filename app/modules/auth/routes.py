@@ -1,5 +1,5 @@
 import logging
-from flask import request, jsonify, redirect, url_for, render_template, make_response
+from flask import request, jsonify, redirect, url_for, render_template, make_response, session
 from flask_jwt_extended import (
     create_access_token, create_refresh_token,
     set_access_cookies, set_refresh_cookies,
@@ -65,49 +65,55 @@ def _swal_warning(title: str, text: str, status: int = 429):
 @auth_bp.route("/login", methods=["GET"])
 def login_page():
     """Hiển thị giao diện đăng nhập."""
-    return render_template("auth/login.html")
+    return render_template("modules/auth/login.html")
 
 
 # ---------------------------------------------------------------------------
 # POST /auth/login
 # ---------------------------------------------------------------------------
-
 @auth_bp.route("/login", methods=["POST"])
 def login():
     """Xác thực thông tin, cấp JWT và chuyển hướng về dashboard phù hợp."""
-    data = request.get_json(silent=True) or request.form
-
-    dto = LoginDTO(
-        identifier=data.get("identifier", ""),
-        password=data.get("password", ""),
-    )
-
+    # 1. Lấy dữ liệu an toàn
+    data = request.get_json(silent=True) or {}
+    identifier = data.get("identifier", "").strip()
+    password = data.get("password", "")
+    
+    dto = LoginDTO(identifier=identifier, password=password)
+    
     try:
+        # 2. Thực hiện đăng nhập
         user = AuthService.login(dto)
+        session["user_id"] = user.id
+        # 3. MỌI XỬ LÝ LIÊN QUAN ĐẾN 'user' PHẢI NẰM TRONG KHỐI TRY NÀY
+        user_id_str = str(user.id)
+        access_token = create_access_token(identity=user_id_str)
+        refresh_token = create_refresh_token(identity=user_id_str)
+        
+        redirect_url = url_for("auth.dashboard_redirect")
+        
+        result = _swal_success(
+            "Đăng nhập thành công",
+            f"Chào mừng trở lại, {user.username}!",
+            redirect_url=redirect_url,
+        )
+        
+        # Chuyển đổi tuple (Response, status) thành response object
+        resp_obj = make_response(result[0])
+        resp_obj.status_code = result[1]
+            
+        set_access_cookies(resp_obj, access_token)
+        set_refresh_cookies(resp_obj, refresh_token)
+        return resp_obj
+
     except ValidationError as exc:
         return _swal_error("Thông tin không hợp lệ", str(exc), 422)
     except UnauthorizedError as exc:
         return _swal_error("Đăng nhập thất bại", str(exc), 401)
     except Exception as exc:
-        logger.exception("Unexpected login error: %s", exc)
+        # Ghi log lỗi thực tế để debug
+        logger.exception("Unexpected login error")
         return _swal_error("Lỗi hệ thống", "Vui lòng thử lại sau.", 500)
-
-    access_token  = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
-
-    redirect_url = url_for("auth.dashboard_redirect")
-    response = _swal_success(
-        "Đăng nhập thành công",
-        f"Chào mừng trở lại, {user.username}!",
-        redirect_url=redirect_url,
-    )
-    # response là tuple (Response, status_code) → lấy phần tử đầu
-    resp_obj = make_response(response[0], response[1])
-    set_access_cookies(resp_obj, access_token)
-    set_refresh_cookies(resp_obj, refresh_token)
-    return resp_obj
-
-
 # ---------------------------------------------------------------------------
 # GET /auth/dashboard
 # ---------------------------------------------------------------------------
@@ -115,26 +121,7 @@ def login():
 @auth_bp.route("/dashboard", methods=["GET"])
 @jwt_required(locations=["headers", "cookies"])
 def dashboard_redirect():
-    """Kiểm tra role, điều hướng về trang chủ phù hợp."""
-    from app.models.user import User
-
-    user_id = get_jwt_identity()
-    user = db.session.get(User, user_id)
-
-    if not user or not user.is_active:
-        return redirect(url_for("auth.login_page"))
-
-    role = user.role.name if user.role else None
-
-    role_map = {
-        RoleName.ADMIN:    "admin.get_employee_summary",
-        RoleName.HR:       "hr.get_all_employee_summary",
-        RoleName.MANAGER:  "manager.get_department_employee_summary",
-        RoleName.EMPLOYEE: "personnel.get_my_profile",
-    }
-
-    target = role_map.get(role, "auth.login_page")
-    return redirect(url_for(target))
+    return redirect(url_for("home.home"))
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +131,7 @@ def dashboard_redirect():
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     """Xóa JWT cookie, hủy phiên làm việc và chuyển hướng về trang đăng nhập."""
+    session.clear()
     response = make_response(
         jsonify({
             "swal": {
@@ -166,7 +154,7 @@ def logout():
 @auth_bp.route("/forgot-password", methods=["GET"])
 def forgot_password_page():
     """Hiển thị form nhập Email / SĐT để yêu cầu khôi phục mật khẩu."""
-    return render_template("auth/forgot_password.html")
+    return render_template("modules/auth/forgot_password.html")
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +200,7 @@ def forgot_password():
 @auth_bp.route("/verify-otp", methods=["GET"])
 def verify_otp_page():
     """Hiển thị form nhập mã OTP và mật khẩu mới."""
-    return render_template("auth/verify_otp.html")
+    return render_template("modules/auth/verify_otp.html")
 
 
 # ---------------------------------------------------------------------------

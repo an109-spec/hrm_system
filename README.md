@@ -78,20 +78,20 @@ HRM_TOTNGHIEP
 │  │  │  ├─ user_service.py
 │  │  │  └─ __init__.py
 │  │  ├─ attendance
-│  │  │  ├─ admin_routes.py
+│  │  │  ├─ attendance_calculation_routes.py
 │  │  │  ├─ attendance_calculation_service.py
+│  │  │  ├─ attendance_query_routes.py
 │  │  │  ├─ attendance_query_service.py
-│  │  │  ├─ attendance_report_routes.py
+│  │  │  ├─ attendance_routes.py
+│  │  │  ├─ attendance_state_routes.py
 │  │  │  ├─ attendance_state_service.py
+│  │  │  ├─ attendance_workflow_routes.py
 │  │  │  ├─ attendance_workflow_service.py
 │  │  │  ├─ constants.py
 │  │  │  ├─ dto.py
-│  │  │  ├─ employee_clock_routes.py
-│  │  │  ├─ employee_scan_state_routes.py
-│  │  │  ├─ manager_overtime_routes.py
-│  │  │  ├─ overtime_pending_routes.py
-│  │  │  ├─ overtime_request_routes.py
+│  │  │  ├─ overtime_routes.py
 │  │  │  ├─ overtime_service.py
+│  │  │  ├─ qr_routes.py
 │  │  │  ├─ qr_service.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
@@ -119,6 +119,9 @@ HRM_TOTNGHIEP
 │  │  ├─ history
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
+│  │  │  └─ __init__.py
+│  │  ├─ home
+│  │  │  ├─ routes.py
 │  │  │  └─ __init__.py
 │  │  ├─ hr
 │  │  │  ├─ routes.py
@@ -173,31 +176,159 @@ HRM_TOTNGHIEP
 │  ├─ scheduler.py
 │  ├─ static
 │  │  ├─ css
-│  │  │  ├─ admin
-│  │  │  ├─ employee
+│  │  │  ├─ admin.css
+│  │  │  ├─ admin_1.css
+│  │  │  ├─ attendance.css
+│  │  │  ├─ contract.css
+│  │  │  ├─ hr.css
+│  │  │  ├─ leave.css
+│  │  │  ├─ manager.css
+│  │  │  ├─ notification.css
+│  │  │  ├─ payroll.css
+│  │  │  ├─ resignation.css
+│  │  │  ├─ layouts.css
 │  │  │  ├─ main.css
-│  │  │  └─ manager
-│  │  ├─ js
-│  │  │  ├─ admin
-│  │  │  ├─ employee
-│  │  │  └─ main.js
-│  │  └─ uploads
-│  │     └─ leave
+│  │  │  ├─ forms.css
+│  │  │  ├─ responsive.css
+│  │  │  └─ tables.css
+│  │  ├─ favicon.ico
+│  │  └─ js
+│  │     ├─ main.js
+│  │     ├─ modules
+│  │     │  ├─ admin
+│  │     │  │  ├─ admin.js
+│  │     │  │  ├─ create_employee.js
+│  │     │  │  ├─ employee_management.js
+│  │     │  │  ├─ lock_unlock.js
+│  │     │  │  ├─ metadata.js
+│  │     │  │  ├─ reset_password.js
+│  │     │  │  ├─ system_setting.js
+│  │     │  │  └─ user_account.js
+│  │     │  ├─ attendance.js
+│  │     │  ├─ auth.js
+│  │     │  ├─ contract
+│  │     │  │  ├─ Contract_api.js
+│  │     │  │  ├─ Contract_create.js
+│  │     │  │  ├─ Contract_detail.js
+│  │     │  │  ├─ Contract_list.js
+│  │     │  │  ├─ Expiration_reminders.js
+│  │     │  │  └─ Renewal_request.js
+│  │     │  ├─ contract.js
+│  │     │  ├─ hr
+│  │     │  │  ├─ company_analytics.js
+│  │     │  │  ├─ reports.js
+│  │     │  │  └─ settings.js
+│  │     │  ├─ leave.js
+│  │     │  ├─ manager
+│  │     │  │  ├─ team.js
+│  │     │  │  ├─ team_analytics.js
+│  │     │  │  └─ team_reports.js
+│  │     │  ├─ notification
+│  │     │  │  ├─ notification.js
+│  │     │  │  └─ notification_detail.js
+│  │     │  ├─ personnel.js
+│  │     │  └─ resignation
+│  │     │     ├─ resignation.js
+│  │     │     └─ resignation_api.js
+│  │     └─ payroll
+│  │        ├─ analytics.js
+│  │        ├─ complaint_form.js
+│  │        ├─ finalize.js
+│  │        ├─ generate.js
+│  │        ├─ manager_approval.js
+│  │        ├─ payroll_api.js
+│  │        ├─ payroll_history.js
+│  │        ├─ reports.js
+│  │        └─ salary_slip.js
 │  ├─ templates
 │  │  ├─ base.html
 │  │  ├─ components
-│  │  │  ├─ _flash.html
-│  │  │  ├─ _navbar.html
-│  │  │  ├─ _pagination.html
-│  │  │  ├─ _sidebar.html
-│  │  │  ├─ _sidebar_common.html
-│  │  │  ├─ _sidebar_employee.html
-│  │  │  ├─ _sidebar_hr_admin.html
-│  │  │  └─ _sidebar_manager.html
+│  │  │  ├─ footer.html
+│  │  │  ├─ sidebar.html
+│  │  │  ├─ sidebars
+│  │  │  │  ├─ _sidebar_admin.html
+│  │  │  │  ├─ _sidebar_common.html
+│  │  │  │  ├─ _sidebar_employee.html
+│  │  │  │  ├─ _sidebar_hr.html
+│  │  │  │  └─ _sidebar_manager.html
+│  │  │  └─ _navbar.html
+│  │  ├─ layouts
+│  │  │  ├─ auth_layout.html
+│  │  │  └─ main_layout.html
 │  │  └─ modules
 │  │     ├─ admin
-│  │     ├─ employee
-│  │     └─ hr
+│  │     │  ├─ create_employee.html
+│  │     │  ├─ employee_management.html
+│  │     │  ├─ lock_unlock.html
+│  │     │  ├─ metadata.html
+│  │     │  ├─ reset_password.html
+│  │     │  ├─ system_settings.html
+│  │     │  └─ user_account.html
+│  │     ├─ attendance
+│  │     │  ├─ attendance.html
+│  │     │  ├─ checkin_interface.html
+│  │     │  ├─ history.html
+│  │     │  ├─ manager_ot_approval.html
+│  │     │  ├─ overtime_request.html
+│  │     │  ├─ qr_scanner.html
+│  │     │  ├─ summary.html
+│  │     │  └─ team_attendance.html
+│  │     ├─ auth
+│  │     │  ├─ forgot_password.html
+│  │     │  ├─ login.html
+│  │     │  ├─ password_reset.html
+│  │     │  └─ verify_otp.html
+│  │     ├─ contract
+│  │     │  ├─ create.html
+│  │     │  ├─ detail.html
+│  │     │  ├─ expiration_reminders.html
+│  │     │  ├─ list.html
+│  │     │  └─ renewal_request.html
+│  │     ├─ home
+│  │     │  └─ home.html
+│  │     ├─ hr
+│  │     │  ├─ company_analytics.html
+│  │     │  ├─ reports.html
+│  │     │  └─ settings.html
+│  │     ├─ leave
+│  │     │  ├─ department_report.html
+│  │     │  ├─ leave_calendar.html
+│  │     │  ├─ manager_approval.html
+│  │     │  ├─ manager_pending.html
+│  │     │  ├─ my_requests.html
+│  │     │  ├─ request_detail.html
+│  │     │  └─ request_form.html
+│  │     ├─ manager
+│  │     │  ├─ team.html
+│  │     │  ├─ team_analytics.html
+│  │     │  └─ team_reports.html
+│  │     ├─ notifications
+│  │     │  ├─ center.html
+│  │     │  └─ detail.html
+│  │     ├─ payroll
+│  │     │  ├─ analytics.html
+│  │     │  ├─ complaint_form.html
+│  │     │  ├─ finalize.html
+│  │     │  ├─ generate.html
+│  │     │  ├─ history.html
+│  │     │  ├─ manager_approval.html
+│  │     │  ├─ reports.html
+│  │     │  └─ salary_slip.html
+│  │     ├─ personnel
+│  │     │  ├─ activity_history.html
+│  │     │  ├─ avatar_upload.html
+│  │     │  ├─ change_password.html
+│  │     │  ├─ dependents_list.html
+│  │     │  ├─ dependent_form.html
+│  │     │  ├─ edit_profile.html
+│  │     │  ├─ employee_list.html
+│  │     │  └─ profile.html
+│  │     └─ resignation
+│  │        ├─ detail.html
+│  │        ├─ list_all.html
+│  │        ├─ my_list.html
+│  │        ├─ propose_form.html
+│  │        └─ submit_form.html
 │  ├─ utils
 │  │  ├─ date_utils.py
 │  │  ├─ holiday.py
@@ -206,6 +337,7 @@ HRM_TOTNGHIEP
 │  │  └─ upload_service.py
 │  └─ __init__.py
 ├─ create_db.py
+├─ CTTM.md
 ├─ docker-compose.yml
 ├─ Dockerfile
 ├─ migrations
@@ -239,13 +371,8 @@ HRM_TOTNGHIEP
 │     ├─ f1a2b3c4d5e6_add_ess_overtime_and_complaint_columns.py
 │     └─ xxxx_add_enterprise_attendance_flow.py
 ├─ postman
-│  ├─ collections
-│  ├─ environments
-│  ├─ flows
-│  ├─ globals
-│  │  └─ workspace.globals.yaml
-│  ├─ mocks
-│  └─ specs
+│  └─ globals
+│     └─ workspace.globals.yaml
 ├─ README.md
 ├─ requirements.txt
 ├─ run.py

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block body %}
+
+<div class="app-container">
+
+    {% include 'components/sidebar.html' %}
+
+    <main class="main-content">
+
+        {% include 'components/_navbar.html' %}
+
+        <div class="content-wrapper p-4">
+            {% block content %}
+            {% endblock %}
+        </div>
+        {% include 'components/footer.html' %}
+
+    </main>
+
+</div>
+
+{% endblock %}

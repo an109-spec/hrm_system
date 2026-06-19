@@ -1,0 +1,141 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Cham Cong — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div data-page="attendance-main">
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 fw-bold">Cham Cong</h4>
+            <p class="text-muted mb-0 small">Quan ly thoi gian lam viec cua ban</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('attendance.history_page') }}" class="btn btn-outline-secondary btn-sm">
+                Lich su
+            </a>
+            <a href="{{ url_for('attendance.qr_scanner_page') }}" class="btn btn-outline-primary btn-sm">
+                Quet QR
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        <!-- Widget chinh -->
+        <div class="col-lg-5">
+            <div class="att-widget">
+                <!-- Clock -->
+                <div class="att-clock mb-1" id="att-clock">00:00:00</div>
+                <div class="att-date-label">
+                    {{ current_employee.full_name if current_employee else '' }}
+                </div>
+
+                <!-- Status Badge -->
+                <div class="mb-3" id="att-status-badge">
+                    <span class="att-badge not-started">Chua bat dau</span>
+                </div>
+
+                <!-- Message -->
+                <p class="text-muted small mb-4" id="att-state-message">Dang tai trang thai...</p>
+
+                <!-- Main action button -->
+                <button id="att-main-btn" class="att-action-btn btn-neutral mb-3" disabled>
+                    XAC THUC CHAM CONG
+                </button>
+
+                <!-- OT Decision Panel (hidden by default) -->
+                <div id="ot-decision-panel" class="d-none mt-2">
+                    <p class="small text-muted mb-2">Ban co muon dang ky tang ca?</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button id="btn-ot-yes" class="att-action-btn btn-ot" style="min-width:110px;padding:8px 16px;font-size:.9rem;">
+                            Co, tang ca
+                        </button>
+                        <button id="btn-ot-no" class="att-action-btn btn-neutral" style="min-width:110px;padding:8px 16px;font-size:.9rem;">
+                            Khong, ve nha
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thong tin cham cong hom nay -->
+        <div class="col-lg-7">
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6">
+                    <div class="att-stat-card success">
+                        <div class="stat-label">Gio vao</div>
+                        <div class="stat-value text-success" id="att-checkin-time">--:--:--</div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="att-stat-card primary">
+                        <div class="stat-label">Gio ra</div>
+                        <div class="stat-value text-primary" id="att-checkout-time">--:--:--</div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="att-stat-card warning">
+                        <div class="stat-label">Tong gio lam</div>
+                        <div class="stat-value text-warning" id="att-working-hours">0.00h</div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="att-stat-card danger">
+                        <div class="stat-label">Di muon</div>
+                        <div class="stat-value text-danger" id="att-late-minutes">0 phut</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title fw-bold mb-3">Thao tac nhanh</h6>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="{{ url_for('attendance.history_page') }}"
+                               class="btn btn-outline-secondary w-100 btn-sm">
+                                Xem lich su
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{{ url_for('attendance.overtime_request_page') }}"
+                               class="btn btn-outline-warning w-100 btn-sm">
+                                Dang ky tang ca
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{{ url_for('attendance.summary_page') }}"
+                               class="btn btn-outline-info w-100 btn-sm">
+                                Bao cao thang
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{{ url_for('attendance.qr_scanner_page') }}"
+                               class="btn btn-outline-dark w-100 btn-sm">
+                                Quet QR
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /row -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.body.dataset.page = 'attendance-main';
+});
+</script>
+{% endblock %}

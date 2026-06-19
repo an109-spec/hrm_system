@@ -1,0 +1,122 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Chi tiết thông báo — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Back bar ── -->
+<div class="noti-back-bar">
+    <a href="{{ url_for('notification.center') }}" class="btn-noti-action">
+        <i class="fa-solid fa-arrow-left"></i> Quay lại
+    </a>
+    <div class="noti-breadcrumb">
+        <a href="#">Dashboard</a> /
+        <a href="{{ url_for('notification.center') }}">Thông báo</a> /
+        Chi tiết
+    </div>
+</div>
+
+<!-- ── Detail card ── -->
+<div class="noti-detail-wrap">
+
+    <!-- Skeleton loading -->
+    <div class="noti-detail-card" id="detailSkeleton">
+        <div class="noti-detail-header">
+            <div class="skeleton skeleton-icon" style="width:52px;height:52px;border-radius:14px;"></div>
+            <div style="flex:1;">
+                <div class="skeleton skeleton-line-1" style="height:18px;width:55%;margin-bottom:.6rem;"></div>
+                <div class="skeleton skeleton-line-3" style="height:12px;width:35%;"></div>
+            </div>
+        </div>
+        <div class="noti-detail-body">
+            <div class="skeleton skeleton-line-2" style="height:13px;margin-bottom:.5rem;"></div>
+            <div class="skeleton skeleton-line-2" style="height:13px;margin-bottom:.5rem;width:90%;"></div>
+            <div class="skeleton skeleton-line-2" style="height:13px;margin-bottom:.5rem;width:75%;"></div>
+            <div class="skeleton skeleton-line-3" style="height:13px;width:50%;"></div>
+        </div>
+        <div class="noti-detail-footer">
+            <div class="skeleton" style="height:32px;width:120px;border-radius:8px;"></div>
+            <div class="skeleton" style="height:32px;width:90px;border-radius:8px;"></div>
+        </div>
+    </div>
+
+    <!-- Populated detail -->
+    <div class="noti-detail-card" id="detailCard" style="display:none;">
+
+        <div class="noti-detail-header">
+            <div class="noti-detail-icon" id="detailIcon">
+                <i class="fa-solid fa-bell"></i>
+            </div>
+            <div>
+                <div class="noti-detail-title" id="detailTitle">—</div>
+                <div class="noti-detail-meta">
+                    <span id="detailTypeBadge"></span>
+                    <span id="detailTime">
+                        <i class="fa-regular fa-clock"></i> —
+                    </span>
+                    <span id="detailReadStatus"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="noti-detail-body" id="detailBody">
+            Đang tải nội dung...
+        </div>
+
+        <div class="noti-detail-footer">
+            <div class="d-flex gap-2 flex-wrap">
+                <!-- Link to related module -->
+                <a id="detailLink" href="#" class="btn-noti-action primary" style="display:none;">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    Xem chi tiết nghiệp vụ
+                </a>
+                <button id="btnDeleteDetail" class="btn-noti-action" style="color:#dc2626;">
+                    <i class="fa-solid fa-trash-can"></i> Xóa thông báo
+                </button>
+            </div>
+            <a href="{{ url_for('notification.center') }}" class="btn-noti-action">
+                <i class="fa-solid fa-list"></i> Về danh sách
+            </a>
+        </div>
+    </div>
+
+    <!-- Error state -->
+    <div class="noti-detail-card" id="detailError" style="display:none;">
+        <div class="noti-empty" style="padding:3.5rem 1rem;">
+            <i class="fa-solid fa-circle-exclamation noti-empty-icon" style="color:#dc2626;"></i>
+            <p class="noti-empty-title" id="detailErrorMsg">Không tìm thấy thông báo</p>
+            <p class="noti-empty-sub">Thông báo này có thể đã bị xóa hoặc không thuộc về bạn.</p>
+            <a href="{{ url_for('notification.center') }}" class="btn-noti-action mt-3">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách
+            </a>
+        </div>
+    </div>
+
+    <!-- Prev / Next navigation -->
+    <div class="noti-nav-card" id="notiNav" style="display:none;">
+        <a id="btnNavPrev" href="#" class="noti-nav-link" style="display:none;">
+            <i class="fa-solid fa-chevron-left"></i> Thông báo trước
+        </a>
+        <span style="font-size:.78rem;color:var(--noti-muted);" id="navPosition"></span>
+        <a id="btnNavNext" href="#" class="noti-nav-link" style="display:none;">
+            Thông báo tiếp <i class="fa-solid fa-chevron-right"></i>
+        </a>
+    </div>
+
+</div>
+
+<!-- Hidden: notification ID injected from Jinja -->
+<span id="notificationId" data-id="{{ notification_id }}"></span>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/notification/notification.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/notification/notification_detail.js') }}"></script>
+{% endblock %}

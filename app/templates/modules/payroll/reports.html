@@ -1,0 +1,211 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Bao Cao Chi Tiet — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-file-chart-line me-2 text-primary"></i>Bao Cao Chi Tiet Luong
+        </h4>
+        <small class="text-muted">Xem va xuat du lieu luong chi tiet toan bo nhan vien</small>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" id="btnExportCSV" disabled>
+            <i class="fas fa-file-csv me-1"></i>Xuat CSV
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="window.print()" id="btnPrint" disabled>
+            <i class="fas fa-print me-1"></i>In bao cao
+        </button>
+    </div>
+</div>
+
+<!-- Filter Panel -->
+<div class="card mb-4">
+    <div class="card-header bg-white fw-semibold">
+        <i class="fas fa-filter me-2 text-primary"></i>Tuy Chon Bao Cao
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small text-uppercase text-muted">Thang</label>
+                <select id="rptMonth" class="form-select form-select-sm">
+                    <option value="1">Thang 1</option><option value="2">Thang 2</option>
+                    <option value="3">Thang 3</option><option value="4">Thang 4</option>
+                    <option value="5">Thang 5</option><option value="6">Thang 6</option>
+                    <option value="7">Thang 7</option><option value="8">Thang 8</option>
+                    <option value="9">Thang 9</option><option value="10">Thang 10</option>
+                    <option value="11">Thang 11</option><option value="12">Thang 12</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small text-uppercase text-muted">Nam</label>
+                <select id="rptYear" class="form-select form-select-sm">
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small text-uppercase text-muted">Phong ban</label>
+                <select id="rptDept" class="form-select form-select-sm">
+                    <option value="">Tat ca</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small text-uppercase text-muted">Trang thai</label>
+                <select id="rptStatus" class="form-select form-select-sm">
+                    <option value="">Tat ca</option>
+                    <option value="draft">Nhap</option>
+                    <option value="pending">Cho duyet</option>
+                    <option value="approved">Da duyet</option>
+                    <option value="locked">Da chot</option>
+                    <option value="paid">Da thanh toan</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small text-uppercase text-muted">Tim kiem</label>
+                <input type="text" id="rptSearch" class="form-control form-control-sm"
+                    placeholder="Ten, ma nhan vien...">
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button class="btn btn-primary btn-sm w-100" id="btnGenReport">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Totals Row -->
+<div class="row g-3 mb-4 no-print" id="reportTotals" style="display:none">
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold" id="rptTotalNet">--</div>
+            <div class="small text-muted">Tong thuc linh</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold text-secondary" id="rptTotalGross">--</div>
+            <div class="small text-muted">Tong gross</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold text-info" id="rptTotalAllowance">--</div>
+            <div class="small text-muted">Tong phu cap</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold text-warning" id="rptTotalInsurance">--</div>
+            <div class="small text-muted">Tong BH NLD</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold text-danger" id="rptTotalTax">--</div>
+            <div class="small text-muted">Tong thue TNCN</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="p-3 bg-white rounded shadow-sm text-center">
+            <div class="fw-bold text-dark" id="rptCount">--</div>
+            <div class="small text-muted">So phieu</div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Table -->
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold" id="rptTableTitle">Bao cao chi tiet</span>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small" id="rptRecordCount">--</span>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary active" id="sortByName">Ten</button>
+                <button class="btn btn-outline-secondary" id="sortByNet">Luong rong</button>
+                <button class="btn btn-outline-secondary" id="sortByDept">Phong ban</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table payroll-table table-hover mb-0" id="reportTable">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Ma NV</th>
+                        <th>Ho va ten</th>
+                        <th>Phong ban</th>
+                        <th>Luong co ban</th>
+                        <th>Phu cap</th>
+                        <th>Tang ca</th>
+                        <th>Bao hiem</th>
+                        <th>Thue TNCN</th>
+                        <th>Khau tru</th>
+                        <th class="text-success">Thuc linh</th>
+                        <th>NPT</th>
+                        <th>Trang thai</th>
+                        <th>Khieu nai</th>
+                        <th class="no-print">Chi tiet</th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody">
+                    <tr>
+                        <td colspan="15" class="text-center py-5 text-muted">
+                            <i class="fas fa-file-search fa-3x mb-3 d-block opacity-25"></i>
+                            Cau hinh tieu chi va bam "Tim kiem" de xem bao cao
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot id="reportTableFoot" style="display:none">
+                    <tr class="table-dark fw-bold">
+                        <td colspan="4" class="text-end">Tong cong:</td>
+                        <td id="ftBasic">--</td>
+                        <td id="ftAllowance">--</td>
+                        <td id="ftOT">--</td>
+                        <td id="ftInsurance">--</td>
+                        <td id="ftTax">--</td>
+                        <td id="ftDeduction">--</td>
+                        <td id="ftNet" class="text-success">--</td>
+                        <td colspan="4"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Salary Slip Detail Modal -->
+<div class="modal fade" id="slipModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chi Tiet Phieu Luong</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="slipModalBody">
+                <div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dong</button>
+                <button class="btn btn-outline-secondary" onclick="window.print()">
+                    <i class="fas fa-print me-1"></i>In phieu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/reports.js') }}"></script>
+{% endblock %}

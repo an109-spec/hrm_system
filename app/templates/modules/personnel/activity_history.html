@@ -1,0 +1,150 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Lịch sử hoạt động – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .history-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.06); padding: 24px; }
+  /* Timeline */
+  .timeline { position: relative; padding-left: 36px; }
+  .timeline::before { content: ''; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; }
+  .tl-item { position: relative; margin-bottom: 24px; }
+  .tl-dot { position: absolute; left: -28px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px #cbd5e1; top: 3px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #fff; }
+  .dot-blue   { background: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+  .dot-green  { background: #22c55e; box-shadow: 0 0 0 2px #bbf7d0; }
+  .dot-amber  { background: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+  .dot-red    { background: #ef4444; box-shadow: 0 0 0 2px #fecaca; }
+  .dot-purple { background: #8b5cf6; box-shadow: 0 0 0 2px #ddd6fe; }
+  .dot-gray   { background: #94a3b8; box-shadow: 0 0 0 2px #e2e8f0; }
+  .tl-content { background: #f8fafc; border-radius: 10px; padding: 12px 16px; border-left: 3px solid transparent; }
+  .tl-content.border-blue   { border-left-color: #3b82f6; }
+  .tl-content.border-green  { border-left-color: #22c55e; }
+  .tl-content.border-amber  { border-left-color: #f59e0b; }
+  .tl-content.border-red    { border-left-color: #ef4444; }
+  .tl-content.border-purple { border-left-color: #8b5cf6; }
+  .tl-content.border-gray   { border-left-color: #cbd5e1; }
+  .tl-action { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .tl-desc   { font-size: .86rem; color: #334155; margin-top: 2px; }
+  .tl-time   { font-size: .76rem; color: #94a3b8; margin-top: 4px; }
+
+  /* Filter pills */
+  .filter-pill { border: 1.5px solid #e2e8f0; border-radius: 20px; padding: 5px 14px; font-size: .8rem; cursor: pointer; color: #64748b; background: #fff; transition: all .2s; }
+  .filter-pill.active { border-color: #3b82f6; background: #eff6ff; color: #2563eb; font-weight: 600; }
+
+  .empty-state { text-align: center; padding: 60px; color: #94a3b8; }
+  .empty-state i { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3" style="font-size:.82rem">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('personnel.get_my_profile') }}">Hồ sơ</a></li>
+    <li class="breadcrumb-item active">Lịch sử hoạt động</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Lịch sử hoạt động</h4>
+    <small class="text-muted">Tất cả các thay đổi và sự kiện liên quan đến tài khoản của bạn</small>
+  </div>
+  <div class="d-flex gap-2">
+    <input type="text" id="searchInput" class="form-control form-control-sm" style="width:200px"
+           placeholder="Tìm kiếm..." oninput="filterLogs()">
+  </div>
+</div>
+
+<!-- Filter pills -->
+<div class="d-flex gap-2 flex-wrap mb-4" id="filterPills">
+  <button class="filter-pill active" data-filter="all" onclick="setFilter(this,'all')">Tất cả</button>
+  <button class="filter-pill" data-filter="profile" onclick="setFilter(this,'profile')">Hồ sơ</button>
+  <button class="filter-pill" data-filter="password" onclick="setFilter(this,'password')">Mật khẩu</button>
+  <button class="filter-pill" data-filter="dependent" onclick="setFilter(this,'dependent')">Người phụ thuộc</button>
+  <button class="filter-pill" data-filter="avatar" onclick="setFilter(this,'avatar')">Ảnh đại diện</button>
+  <button class="filter-pill" data-filter="leave" onclick="setFilter(this,'leave')">Nghỉ phép</button>
+</div>
+
+<div class="history-card">
+  <div id="timelineContainer">
+    <div class="text-center py-5"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải lịch sử...</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const HISTORY_API = "/personnel/profile/me/history";
+let allLogs = [];
+let currentFilter = "all";
+
+// Action → (color, icon, filter group)
+const ACTION_META = {
+  UPDATE_PROFILE:               { color: "blue",   icon: "fa-user-edit",    group: "profile" },
+  UPDATE_AVATAR:                { color: "purple",  icon: "fa-image",       group: "avatar" },
+  EMPLOYEE_DEPENDENT_CREATED:   { color: "green",  icon: "fa-user-plus",    group: "dependent" },
+  EMPLOYEE_DEPENDENT_UPDATED:   { color: "amber",  icon: "fa-user-edit",    group: "dependent" },
+  EMPLOYEE_DEPENDENT_DELETED:   { color: "red",    icon: "fa-user-minus",   group: "dependent" },
+  CHANGE_PASSWORD:              { color: "amber",  icon: "fa-key",          group: "password" },
+  LEAVE_REQUEST_CREATED:        { color: "blue",   icon: "fa-calendar-plus",group: "leave" },
+  LEAVE_REQUEST_APPROVED:       { color: "green",  icon: "fa-calendar-check",group:"leave" },
+  LEAVE_REQUEST_REJECTED:       { color: "red",    icon: "fa-calendar-times",group:"leave" },
+};
+
+function getMeta(action) {
+  return ACTION_META[action] || { color: "gray", icon: "fa-circle", group: "other" };
+}
+
+async function loadHistory() {
+  try {
+    const res  = await fetch(HISTORY_API);
+    const json = await res.json();
+    allLogs = json.data || [];
+    renderLogs();
+  } catch {
+    document.getElementById("timelineContainer").innerHTML =
+      '<p class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-1"></i>Không thể tải lịch sử.</p>';
+  }
+}
+loadHistory();
+
+function setFilter(btn, filter) {
+  document.querySelectorAll(".filter-pill").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentFilter = filter;
+  renderLogs();
+}
+
+function filterLogs() { renderLogs(); }
+
+function renderLogs() {
+  const search = document.getElementById("searchInput").value.toLowerCase();
+  const filtered = allLogs.filter(log => {
+    const meta = getMeta(log.action);
+    const matchFilter = currentFilter === "all" || meta.group === currentFilter;
+    const matchSearch = !search || log.description?.toLowerCase().includes(search) || log.action.toLowerCase().includes(search);
+    return matchFilter && matchSearch;
+  });
+
+  const container = document.getElementById("timelineContainer");
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state"><i class="fas fa-history"></i>Không có hoạt động nào để hiển thị.</div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="timeline">${filtered.map(log => {
+    const m = getMeta(log.action);
+    return `
+      <div class="tl-item">
+        <div class="tl-dot dot-${m.color}"><i class="fas ${m.icon}" style="font-size:7px"></i></div>
+        <div class="tl-content border-${m.color}">
+          <div class="tl-action text-${m.color === 'amber' ? 'warning' : m.color === 'gray' ? 'secondary' : m.color}">${log.action.replace(/_/g,' ')}</div>
+          <div class="tl-desc">${log.description || '—'}</div>
+          <div class="tl-time"><i class="fas fa-clock me-1"></i>${log.time || '—'}</div>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+</script>
+{% endblock %}

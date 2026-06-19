@@ -1,0 +1,184 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Thêm nhân viên — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="admin-page-header">
+    <div>
+        <h1 class="admin-page-title">
+            <i class="fa-solid fa-user-plus"></i> Thêm nhân viên mới
+        </h1>
+        <div class="admin-breadcrumb">
+            <a href="{{ url_for('admin.employee_management_page') }}">Nhân viên</a> / Tạo mới
+        </div>
+    </div>
+    <a href="{{ url_for('admin.employee_management_page') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i> Quay lại
+    </a>
+</div>
+
+<!-- Step wizard -->
+<div class="step-wizard mb-4">
+    <div class="step-item active" id="step1-indicator">
+        <div class="step-num" id="snum1">1</div>
+        <span class="step-label">Thông tin cơ bản</span>
+    </div>
+    <div class="step-item" id="step2-indicator">
+        <div class="step-num" id="snum2">2</div>
+        <span class="step-label">Phòng ban & Chức danh</span>
+    </div>
+    <div class="step-item" id="step3-indicator">
+        <div class="step-num" id="snum3"><i class="fa-solid fa-check" style="font-size:.7rem;"></i></div>
+        <span class="step-label">Hoàn tất</span>
+    </div>
+</div>
+
+<!-- ─── STEP 1: Basic info ─── -->
+<div id="step1" class="admin-panel">
+    <div class="admin-panel-header">
+        <h2 class="admin-panel-title">
+            <i class="fa-solid fa-id-card"></i> Bước 1 — Thông tin cơ bản
+        </h2>
+    </div>
+    <div class="admin-panel-body">
+        <div class="form-section">
+            <div class="form-section-title">Thông tin cá nhân</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Họ và tên <span class="text-danger">*</span></label>
+                    <input type="text" id="fullName" class="form-control" placeholder="VD: Nguyễn Văn An">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Ngày sinh <span class="text-danger">*</span></label>
+                    <input type="date" id="dob" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Giới tính</label>
+                    <select id="gender" class="form-select">
+                        <option value="">Chọn...</option>
+                        <option value="male">Nam</option>
+                        <option value="female">Nữ</option>
+                        <option value="other">Khác</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Số điện thoại</label>
+                    <input type="tel" id="phone" class="form-control" placeholder="0912 345 678">
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Địa chỉ</label>
+                    <input type="text" id="address" class="form-control" placeholder="Địa chỉ thường trú">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-title">Thông tin công việc</div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Ngày vào làm</label>
+                    <input type="date" id="hireDate" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Loại hợp đồng</label>
+                    <select id="employmentType" class="form-select">
+                        <option value="probation">Thử việc</option>
+                        <option value="official">Chính thức</option>
+                        <option value="contract">Hợp đồng có thời hạn</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button id="btnStep1" class="btn-admin-primary">
+                Tiếp tục <i class="fa-solid fa-arrow-right ms-1"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── STEP 2: Dept & Position ─── -->
+<div id="step2" class="admin-panel" style="display:none;">
+    <div class="admin-panel-header">
+        <h2 class="admin-panel-title">
+            <i class="fa-solid fa-sitemap"></i> Bước 2 — Phòng ban & Chức danh
+        </h2>
+    </div>
+    <div class="admin-panel-body">
+
+        <!-- Created employee info card -->
+        <div class="d-flex align-items-center gap-3 p-3 mb-4"
+             style="background:#eff6ff;border-radius:10px;border:1px solid #bfdbfe;">
+            <div class="avatar-circle" id="s2Avatar" style="width:44px;height:44px;font-size:.95rem;">—</div>
+            <div>
+                <div class="fw-bold" id="s2Name">—</div>
+                <div class="text-muted" style="font-size:.8rem;">
+                    ID: <span id="s2Id">—</span> &nbsp;|&nbsp;
+                    Hồ sơ đã tạo, vui lòng gán Phòng ban & Chức danh để tiếp tục.
+                </div>
+            </div>
+            <span class="badge-status badge-active ms-auto">Đã tạo</span>
+        </div>
+
+        <div class="form-section">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Phòng ban <span class="text-danger">*</span></label>
+                    <select id="deptSelect" class="form-select">
+                        <option value="">-- Chọn phòng ban --</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Chức danh <span class="text-danger">*</span></label>
+                    <select id="posSelect" class="form-select">
+                        <option value="">-- Chọn chức danh --</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <button class="btn btn-outline-secondary" id="btnBackStep1">
+                <i class="fa-solid fa-arrow-left me-1"></i> Quay lại
+            </button>
+            <button id="btnStep2" class="btn-admin-primary">
+                Hoàn tất gán <i class="fa-solid fa-check ms-1"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── STEP 3: Done ─── -->
+<div id="step3" class="admin-panel" style="display:none;">
+    <div class="admin-panel-body text-center" style="padding:3rem 1.5rem;">
+        <div style="font-size:3rem;color:var(--admin-success);margin-bottom:1rem;">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <h3 class="fw-bold mb-1" id="doneTitle">Thêm nhân viên thành công!</h3>
+        <p class="text-muted mb-4" id="doneText">Hồ sơ đã được khởi tạo và gán thông tin công việc.</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap">
+            <a href="{{ url_for('admin.employee_management_page') }}" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-list me-1"></i> Xem danh sách
+            </a>
+            <button id="btnCreateAnother" class="btn-admin-primary">
+                <i class="fa-solid fa-plus me-1"></i> Thêm người khác
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/admin/create_employee.js') }}"></script>
+{% endblock %}

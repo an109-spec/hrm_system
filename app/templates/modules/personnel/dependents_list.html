@@ -1,0 +1,261 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Người phụ thuộc – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+<style>
+  .dep-page-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.06); padding: 24px; }
+  .dep-stat { background: #f8fafc; border-radius: 12px; padding: 16px 20px; text-align: center; }
+  .dep-stat .num { font-size: 2rem; font-weight: 700; color: #2563eb; line-height: 1; }
+  .dep-stat .lbl { font-size: .78rem; color: #64748b; margin-top: 4px; }
+  .badge-valid   { background: #dcfce7; color: #16a34a; border-radius: 20px; padding: 3px 10px; font-size: .75rem; font-weight: 600; }
+  .badge-invalid { background: #fee2e2; color: #dc2626; border-radius: 20px; padding: 3px 10px; font-size: .75rem; font-weight: 600; }
+  .action-btn { font-size: .78rem; padding: 4px 10px; border-radius: 6px; }
+  .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+  .empty-state i { font-size: 3rem; margin-bottom: 12px; display: block; }
+  #tableBody tr { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3" style="font-size:.82rem">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('personnel.get_my_profile') }}">Hồ sơ</a></li>
+    <li class="breadcrumb-item active">Người phụ thuộc</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Người phụ thuộc</h4>
+    <small class="text-muted">Khai báo người phụ thuộc để tính giảm trừ gia cảnh thuế TNCN</small>
+  </div>
+  <button class="btn btn-primary" onclick="openAddModal()">
+    <i class="fas fa-plus me-1"></i>Thêm người phụ thuộc
+  </button>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4" id="statsRow">
+  <div class="col-sm-4">
+    <div class="dep-stat"><div class="num" id="statTotal">–</div><div class="lbl">Tổng khai báo</div></div>
+  </div>
+  <div class="col-sm-4">
+    <div class="dep-stat"><div class="num text-success" id="statValid">–</div><div class="lbl">Hợp lệ (tính thuế)</div></div>
+  </div>
+  <div class="col-sm-4">
+    <div class="dep-stat"><div class="num text-danger" id="statInvalid">–</div><div class="lbl">Không hợp lệ</div></div>
+  </div>
+</div>
+
+<div class="dep-page-card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle" id="depTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Họ tên</th>
+          <th>Ngày sinh</th>
+          <th>Mối quan hệ</th>
+          <th>Trạng thái</th>
+          <th>Ghi chú</th>
+          <th class="text-end">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="depModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:14px;border:none">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="depModalTitle">Thêm người phụ thuộc</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <form id="depForm" novalidate>
+          <input type="hidden" id="depId">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.84rem">Họ tên <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="depName" placeholder="Nguyễn Thị B" required maxlength="120">
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold" style="font-size:.84rem">Ngày sinh <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="depDob" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold" style="font-size:.84rem">Mối quan hệ <span class="text-danger">*</span></label>
+              <select class="form-select" id="depRelationship" required>
+                <option value="">-- Chọn --</option>
+                <option value="spouse">Vợ / Chồng</option>
+                <option value="child">Con</option>
+                <option value="parent">Bố / Mẹ</option>
+                <option value="sibling">Anh / Chị / Em</option>
+                <option value="other">Khác</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="depIsValid" checked>
+              <label class="form-check-label fw-medium" for="depIsValid" style="font-size:.84rem">Hợp lệ (được tính giảm trừ)</label>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold" style="font-size:.84rem">Ghi chú</label>
+            <textarea class="form-control" id="depNote" rows="2" maxlength="500" placeholder="Ghi chú thêm (nếu có)"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+        <button class="btn btn-primary" id="btnSaveDep" onclick="saveDependent()">
+          <i class="fas fa-save me-1"></i>Lưu
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const DEP_BASE = "/personnel/profile/me/dependents";
+let depModal;
+
+document.addEventListener("DOMContentLoaded", () => {
+  depModal = new bootstrap.Modal(document.getElementById("depModal"));
+  loadDependents();
+});
+
+async function loadDependents() {
+  try {
+    const res  = await fetch(DEP_BASE);
+    const json = await res.json();
+    const d    = json.data || {};
+    const items = d.items || [];
+
+    document.getElementById("statTotal").textContent   = d.total_records ?? 0;
+    document.getElementById("statValid").textContent   = d.number_of_dependents ?? 0;
+    document.getElementById("statInvalid").textContent = (d.total_records ?? 0) - (d.number_of_dependents ?? 0);
+
+    const tbody = document.getElementById("tableBody");
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="7">
+        <div class="empty-state"><i class="fas fa-users-slash"></i>Chưa có người phụ thuộc nào.<br>
+        <button class="btn btn-primary btn-sm mt-3" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Thêm ngay</button></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map((d,i) => `
+      <tr data-id="${d.id}">
+        <td class="text-muted small">${i+1}</td>
+        <td class="fw-semibold">${d.full_name}</td>
+        <td class="text-muted small">${d.dob || '—'}</td>
+        <td>${d.relationship_label}</td>
+        <td>${d.is_valid
+          ? '<span class="badge-valid"><i class="fas fa-check me-1"></i>Hợp lệ</span>'
+          : '<span class="badge-invalid"><i class="fas fa-times me-1"></i>Không hợp lệ</span>'}</td>
+        <td class="text-muted small">${d.note || '—'}</td>
+        <td class="text-end">
+          <button class="btn btn-outline-primary action-btn me-1" onclick="openEditModal(${JSON.stringify(d).replace(/"/g,'&quot;')})">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn btn-outline-danger action-btn" onclick="deleteDependent(${d.id}, '${d.full_name}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    document.getElementById("tableBody").innerHTML =
+      '<tr><td colspan="7" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-1"></i>Không thể tải dữ liệu.</td></tr>';
+  }
+}
+
+function openAddModal() {
+  document.getElementById("depModalTitle").textContent = "Thêm người phụ thuộc";
+  document.getElementById("depForm").reset();
+  document.getElementById("depId").value = "";
+  document.getElementById("depIsValid").checked = true;
+  depModal.show();
+}
+
+function openEditModal(d) {
+  document.getElementById("depModalTitle").textContent = "Chỉnh sửa người phụ thuộc";
+  document.getElementById("depId").value           = d.id;
+  document.getElementById("depName").value         = d.full_name;
+  document.getElementById("depDob").value          = d.dob;
+  document.getElementById("depRelationship").value = d.relationship;
+  document.getElementById("depIsValid").checked    = d.is_valid;
+  document.getElementById("depNote").value         = d.note || "";
+  depModal.show();
+}
+
+async function saveDependent() {
+  const id   = document.getElementById("depId").value;
+  const btn  = document.getElementById("btnSaveDep");
+  const isEdit = !!id;
+
+  const payload = {
+    full_name:    document.getElementById("depName").value.trim(),
+    dob:          document.getElementById("depDob").value,
+    relationship: document.getElementById("depRelationship").value,
+    is_valid:     document.getElementById("depIsValid").checked,
+    note:         document.getElementById("depNote").value.trim(),
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+
+  try {
+    const url    = isEdit ? `${DEP_BASE}/${id}` : DEP_BASE;
+    const method = isEdit ? "PUT" : "POST";
+    const res    = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      depModal.hide();
+      loadDependents();
+      showNotification("success", data.swal?.title || "Lưu thành công");
+    } else {
+      Swal.fire({ icon: data.swal?.icon || "warning", title: data.swal?.title, text: data.swal?.text });
+    }
+  } catch {
+    Swal.fire("Lỗi", "Không thể kết nối máy chủ.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i>Lưu';
+  }
+}
+
+function deleteDependent(id, name) {
+  confirmAction(`Bạn có chắc muốn xóa người phụ thuộc "${name}"?`, async () => {
+    try {
+      const res  = await fetch(`${DEP_BASE}/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        loadDependents();
+        showNotification("success", data.swal?.title || "Đã xóa");
+      } else {
+        Swal.fire({ icon: "warning", title: data.swal?.title, text: data.swal?.text });
+      }
+    } catch {
+      Swal.fire("Lỗi", "Không thể kết nối máy chủ.", "error");
+    }
+  });
+}
+</script>
+{% endblock %}

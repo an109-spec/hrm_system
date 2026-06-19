@@ -1,0 +1,429 @@
+/* ============================================================
+   contract.css – Styles dùng chung cho toàn bộ module Contract
+   Đặt tại: app/static/css/contract/contract.css
+   Nhúng vào base.html hoặc qua {% block styles %} trong từng trang
+   ============================================================ */
+
+
+/* ─── 1. STATUS BADGES ────────────────────────────────────────
+   Dùng trên tất cả trang: list, detail, reminders
+   ─────────────────────────────────────────────────────────── */
+.contract-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.badge-active     { background: #d1fae5; color: #065f46; }
+.badge-expiring   { background: #fef3c7; color: #92400e; }
+.badge-expired    { background: #fee2e2; color: #991b1b; }
+.badge-terminated { background: #f3f4f6; color: #374151; }
+.badge-pending    { background: #ede9fe; color: #5b21b6; }
+
+
+/* ─── 2. SUMMARY CARDS ────────────────────────────────────────
+   Trang: list, expiration_reminders
+   ─────────────────────────────────────────────────────────── */
+.summary-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: default;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
+.summary-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+/* Summary strip (reminders page) */
+.summary-strip {
+    border-radius: 14px;
+    padding: 20px 24px;
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    flex-wrap: wrap;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.strip-stat { text-align: center; }
+.strip-stat .num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.strip-stat .lbl { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+
+.num-critical { color: #ef4444; }
+.num-warning  { color: #f59e0b; }
+.num-info     { color: #3b82f6; }
+
+
+/* ─── 3. FILTER BAR ───────────────────────────────────────────
+   Trang: list
+   ─────────────────────────────────────────────────────────── */
+.contract-filter-bar {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    padding: 16px 20px;
+}
+
+
+/* ─── 4. DATA TABLE ───────────────────────────────────────────
+   Trang: list
+   ─────────────────────────────────────────────────────────── */
+.contract-table tbody tr {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.contract-table tbody tr:hover td {
+    background: #f0f9ff;
+}
+
+.contract-table .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+
+/* ─── 5. DETAIL PAGE ──────────────────────────────────────────
+   Trang: detail
+   ─────────────────────────────────────────────────────────── */
+.detail-header-card {
+    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+    border-radius: 16px;
+    color: white;
+}
+
+.detail-header-card .header-status-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    padding: 4px 14px;
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+}
+.detail-header-card .header-status-badge.expiring   { background: rgba(251, 191, 36, 0.3); }
+.detail-header-card .header-status-badge.expired    { background: rgba(239, 68, 68, 0.3); }
+.detail-header-card .header-status-badge.terminated { background: rgba(107, 114, 128, 0.3); }
+
+.days-left-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.days-ok     { background: #d1fae5; color: #065f46; }
+.days-warn   { background: #fef3c7; color: #92400e; }
+.days-danger { background: #fee2e2; color: #991b1b; }
+
+/* Info section card */
+.info-section {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row .info-label { color: #6b7280; font-size: 0.85rem; }
+.info-row .info-value { font-weight: 600; color: #111827; }
+
+/* Timeline */
+.timeline-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3b82f6;
+    border: 2px solid white;
+    box-shadow: 0 0 0 3px #dbeafe;
+    flex-shrink: 0;
+}
+.timeline-dot.inactive {
+    background: #9ca3af;
+    box-shadow: 0 0 0 3px #f3f4f6;
+}
+
+.action-btn {
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
+}
+
+
+/* ─── 6. CREATE PAGE ──────────────────────────────────────────
+   Trang: create
+   ─────────────────────────────────────────────────────────── */
+.step-bar-wrapper {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.step-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 4px;
+    background: #e5e7eb;
+    transition: background 0.3s;
+}
+.step-bar.active { background: #3b82f6; }
+.step-bar.done   { background: #10b981; }
+
+.employee-preview {
+    border-radius: 10px;
+    background: #f0f9ff;
+    border: 1.5px solid #bae6fd;
+    padding: 14px 16px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+}
+.employee-preview.show { display: flex; }
+
+.preview-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+/* Duration option buttons */
+.duration-option {
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: center;
+    user-select: none;
+}
+.duration-option:hover    { border-color: #93c5fd; background: #eff6ff; }
+.duration-option.selected { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+.duration-option .dur-label { font-weight: 600; font-size: 0.9rem; }
+.duration-option .dur-sub   { font-size: 0.75rem; color: #6b7280; }
+.duration-option.selected .dur-sub { color: #3b82f6; }
+
+
+/* ─── 7. RENEWAL REQUEST PAGE ─────────────────────────────────
+   Trang: renewal_request
+   ─────────────────────────────────────────────────────────── */
+.contract-info-highlight {
+    border-radius: 14px;
+    border: 2px solid #e0f2fe;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.contract-info-highlight .contract-code-large {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0c4a6e;
+}
+
+.info-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: white;
+    border: 1px solid #bae6fd;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #0369a1;
+}
+
+/* Month buttons */
+.month-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-size: 0.85rem;
+    padding: 0;
+}
+.month-btn:hover    { border-color: #3b82f6; color: #1d4ed8; background: #eff6ff; }
+.month-btn.selected { border-color: #3b82f6; background: #3b82f6; color: white; }
+.month-btn .sub     { font-size: 0.62rem; font-weight: 400; opacity: 0.8; }
+.month-btn.selected .sub { opacity: 0.9; }
+
+.char-counter { font-size: 0.75rem; color: #9ca3af; }
+
+/* Approval process steps */
+.process-step-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+.process-step-circle.pending {
+    background: #e5e7eb;
+    color: #6b7280;
+}
+.process-step-line {
+    width: 2px;
+    flex: 1;
+    background: #e5e7eb;
+    margin: 4px 0;
+}
+
+
+/* ─── 8. EXPIRATION REMINDERS PAGE ───────────────────────────
+   Trang: expiration_reminders
+   ─────────────────────────────────────────────────────────── */
+.reminder-card {
+    border-radius: 14px;
+    border: none;
+    border-left: 4px solid transparent;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.reminder-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+}
+
+.reminder-card.level-critical { border-left-color: #ef4444; }
+.reminder-card.level-warning  { border-left-color: #f59e0b; }
+.reminder-card.level-info     { border-left-color: #3b82f6; }
+
+.reminder-level-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.level-critical .reminder-level-icon { background: #fee2e2; color: #dc2626; }
+.level-warning  .reminder-level-icon { background: #fef3c7; color: #d97706; }
+.level-info     .reminder-level-icon { background: #dbeafe; color: #2563eb; }
+
+.days-badge {
+    font-size: 0.73rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+.days-badge-critical { background: #fee2e2; color: #991b1b; }
+.days-badge-warning  { background: #fef3c7; color: #92400e; }
+.days-badge-info     { background: #dbeafe; color: #1e40af; }
+.days-badge-none     { background: #f3f4f6; color: #374151; }
+
+.quick-action-btn {
+    border-radius: 8px;
+    font-size: 0.8rem;
+    padding: 4px 12px;
+}
+
+/* Level filter tabs */
+.level-filter-tabs .nav-link {
+    border-radius: 8px;
+    color: #6b7280;
+    font-size: 0.875rem;
+    padding: 6px 14px;
+    font-weight: 500;
+    transition: background 0.15s;
+}
+.level-filter-tabs .nav-link.active { background: #eff6ff; color: #1d4ed8; }
+.level-filter-tabs .nav-link:hover  { background: #f3f4f6; }
+
+
+/* ─── 9. SHARED FORM CARD ─────────────────────────────────────
+   Tất cả trang có form
+   ─────────────────────────────────────────────────────────── */
+.contract-form-card {
+    border-radius: 14px;
+    border: none;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+    margin-bottom: 1rem;
+}
+
+
+/* ─── 10. LOADING / EMPTY STATES ──────────────────────────────
+   ─────────────────────────────────────────────────────────── */
+.contract-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+    gap: 12px;
+}
+
+.contract-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+    gap: 8px;
+}

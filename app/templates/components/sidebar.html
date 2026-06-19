@@ -1,0 +1,47 @@
+<aside class="sidebar-wrapper">
+    <div class="sidebar-header p-3 text-center">
+        <h5>{{ system_name }}</h5>
+    </div>
+
+    <ul class="nav flex-column sidebar-menu">
+
+        {# Menu dùng chung #}
+        {% include 'components/sidebars/_sidebar_common.html' %}
+
+        {# Chỉ hiển thị menu theo quyền khi đã đăng nhập #}
+        {% if current_user and current_user.role %}
+
+            {% if current_user.role.name == 'EMPLOYEE' %}
+                {% include 'components/sidebars/_sidebar_employee.html' %}
+
+            {% elif current_user.role.name == 'MANAGER' %}
+                {% include 'components/sidebars/_sidebar_manager.html' %}
+
+            {% elif current_user.role.name == 'HR' %}
+                {% include 'components/sidebars/_sidebar_hr.html' %}
+
+            {% elif current_user.role.name == 'ADMIN' %}
+                {% include 'components/sidebars/_sidebar_admin.html' %}
+
+            {% endif %}
+
+        {% endif %}
+
+    </ul>
+
+    <div class="sidebar-footer p-3">
+
+        {% if current_user %}
+            <a href="{{ url_for('auth.logout') }}"
+               class="btn btn-sm btn-danger w-100">
+                Đăng xuất
+            </a>
+        {% else %}
+            <a href="{{ url_for('auth.login_page') }}"
+               class="btn btn-sm btn-primary w-100">
+                Đăng nhập
+            </a>
+        {% endif %}
+
+    </div>
+</aside>

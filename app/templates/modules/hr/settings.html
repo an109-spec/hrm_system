@@ -1,0 +1,248 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Cài đặt HR – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="hr-page-header mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h4 class="hr-page-title mb-1">Cài đặt nhân sự</h4>
+            <p class="hr-page-subtitle mb-0">Quản lý phòng ban, chức danh và các thông số hệ thống nhân sự</p>
+        </div>
+    </div>
+</div>
+
+<!-- Tab nav -->
+<ul class="nav hr-settings-tabs mb-4" id="settingsTabs">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tabDept">
+            <i class="bi bi-building me-1"></i>Phòng ban
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabPos">
+            <i class="bi bi-person-badge me-1"></i>Chức danh
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabGeneral">
+            <i class="bi bi-sliders me-1"></i>Tham số chung
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content">
+
+    <!-- ── Tab: Phòng ban ───────────────────────────────────────── -->
+    <div class="tab-pane fade show active" id="tabDept">
+        <div class="row g-3">
+            <!-- List -->
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header bg-transparent border-0 pb-0 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-semibold">Danh sách phòng ban</h6>
+                        <input type="search" class="form-control form-control-sm"
+                               id="deptSearch" placeholder="Tìm nhanh…" style="max-width:180px">
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Tên phòng ban</th>
+                                        <th class="text-center">Nhân viên</th>
+                                        <th class="text-center">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="deptListBody">
+                                    <tr><td colspan="4" class="text-center text-muted py-4">Đang tải…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form add/edit -->
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header bg-transparent border-0 pb-0">
+                        <h6 class="mb-0 fw-semibold" id="deptFormTitle">Thêm phòng ban mới</h6>
+                    </div>
+                    <div class="card-body">
+                        <input type="hidden" id="deptId">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small">Tên phòng ban <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="deptName" placeholder="VD: Phòng Kỹ thuật">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small">Mô tả</label>
+                            <textarea class="form-control" id="deptDesc" rows="3"
+                                      placeholder="Mô tả ngắn về phòng ban…"></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary flex-grow-1" id="btnSaveDept">
+                                <i class="bi bi-floppy me-1"></i>Lưu
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btnCancelDept" style="display:none">
+                                Hủy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /tabDept -->
+
+    <!-- ── Tab: Chức danh ──────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tabPos">
+        <div class="row g-3">
+            <!-- List -->
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header bg-transparent border-0 pb-0 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-semibold">Danh sách chức danh</h6>
+                        <input type="search" class="form-control form-control-sm"
+                               id="posSearch" placeholder="Tìm nhanh…" style="max-width:180px">
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Chức danh</th>
+                                        <th class="text-center">Nhân viên</th>
+                                        <th class="text-center">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="posListBody">
+                                    <tr><td colspan="4" class="text-center text-muted py-4">Đang tải…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header bg-transparent border-0 pb-0">
+                        <h6 class="mb-0 fw-semibold" id="posFormTitle">Thêm chức danh mới</h6>
+                    </div>
+                    <div class="card-body">
+                        <input type="hidden" id="posId">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small">Tên chức danh <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="posName" placeholder="VD: Kỹ sư phần mềm">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small">Mô tả</label>
+                            <textarea class="form-control" id="posDesc" rows="3"
+                                      placeholder="Mô tả ngắn về chức danh…"></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary flex-grow-1" id="btnSavePos">
+                                <i class="bi bi-floppy me-1"></i>Lưu
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btnCancelPos" style="display:none">
+                                Hủy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /tabPos -->
+
+    <!-- ── Tab: Tham số chung ──────────────────────────────────── -->
+    <div class="tab-pane fade" id="tabGeneral">
+        <div class="card" style="max-width:640px">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3">Thông số hợp đồng &amp; cảnh báo</h6>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-7 form-label fw-semibold small mb-0">
+                        Cảnh báo hợp đồng hết hạn (ngày)
+                    </label>
+                    <div class="col-sm-5">
+                        <input type="number" class="form-control" id="settingContractWarningDays"
+                               min="1" max="180" value="30">
+                    </div>
+                </div>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-7 form-label fw-semibold small mb-0">
+                        Tự động nhắc nhở qua email
+                    </label>
+                    <div class="col-sm-5">
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" id="settingAutoEmail" checked>
+                            <label class="form-check-label small" for="settingAutoEmail">Bật</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-7 form-label fw-semibold small mb-0">
+                        Tần suất gửi email nhắc nhở
+                    </label>
+                    <div class="col-sm-5">
+                        <select class="form-select" id="settingEmailFreq">
+                            <option value="daily">Hàng ngày</option>
+                            <option value="weekly" selected>Hàng tuần</option>
+                            <option value="biweekly">2 tuần/lần</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr>
+                <h6 class="fw-semibold mb-3 mt-3">Hiển thị &amp; báo cáo</h6>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-7 form-label fw-semibold small mb-0">
+                        Số dòng mặc định mỗi trang
+                    </label>
+                    <div class="col-sm-5">
+                        <select class="form-select" id="settingPageSize">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3 row align-items-center">
+                    <label class="col-sm-7 form-label fw-semibold small mb-0">
+                        Định dạng xuất mặc định
+                    </label>
+                    <div class="col-sm-5">
+                        <select class="form-select" id="settingExportFormat">
+                            <option value="csv" selected>CSV</option>
+                            <option value="xlsx">Excel (XLSX)</option>
+                            <option value="pdf">PDF</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button class="btn btn-primary" id="btnSaveGeneral">
+                        <i class="bi bi-floppy me-1"></i>Lưu cài đặt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div><!-- /tabGeneral -->
+
+</div><!-- /tab-content -->
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/modules/hr/settings.js') }}"></script>
+{% endblock %}

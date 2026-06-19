@@ -1,0 +1,471 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Cài đặt hệ thống – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_1.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h4 class="page-title mb-1">Cài đặt hệ thống</h4>
+            <p class="page-subtitle mb-0">Quản lý cấu hình vận hành, bảo mật và thông báo toàn hệ thống</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnSaveAll">
+            <i class="bi bi-floppy me-1"></i>Lưu tất cả thay đổi
+        </button>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- LEFT COLUMN -->
+    <div class="col-12 col-lg-4">
+
+        <!-- Nav pills -->
+        <div class="card settings-nav-card">
+            <div class="card-body p-2">
+                <nav class="settings-nav" id="settingsNav">
+                    <a class="settings-nav-item active" data-section="general">
+                        <i class="bi bi-gear"></i>
+                        <span>Thông tin chung</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="security">
+                        <i class="bi bi-shield-lock"></i>
+                        <span>Bảo mật & Đăng nhập</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="hr">
+                        <i class="bi bi-people"></i>
+                        <span>Nhân sự & Nghỉ phép</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="payroll">
+                        <i class="bi bi-cash-coin"></i>
+                        <span>Lương & Thuế</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="attendance">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Chấm công</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="notification">
+                        <i class="bi bi-bell"></i>
+                        <span>Thông báo</span>
+                    </a>
+                    <a class="settings-nav-item" data-section="maintenance">
+                        <i class="bi bi-tools"></i>
+                        <span>Bảo trì hệ thống</span>
+                    </a>
+                </nav>
+            </div>
+        </div>
+
+        <!-- System info summary -->
+        <div class="card mt-3">
+            <div class="card-body">
+                <h6 class="card-title-sm mb-3">Thông tin hệ thống</h6>
+                <div class="sys-info-row">
+                    <span class="sys-info-label">Phiên bản</span>
+                    <span class="sys-info-val badge bg-primary-subtle text-primary">v1.0.0</span>
+                </div>
+                <div class="sys-info-row">
+                    <span class="sys-info-label">Môi trường</span>
+                    <span class="sys-info-val badge bg-success-subtle text-success">Production</span>
+                </div>
+                <div class="sys-info-row">
+                    <span class="sys-info-label">Database</span>
+                    <span class="sys-info-val text-muted" id="sysDb">–</span>
+                </div>
+                <div class="sys-info-row">
+                    <span class="sys-info-label">Cập nhật lần cuối</span>
+                    <span class="sys-info-val text-muted" id="sysLastUpdate">–</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Sections -->
+    <div class="col-12 col-lg-8">
+
+        <!-- ── GENERAL ── -->
+        <div class="settings-section" id="section-general">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-gear me-2 text-primary"></i>Thông tin chung
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Tên hệ thống</label>
+                            <input type="text" class="form-control" id="cfgSystemName"
+                                   placeholder="VD: HRM System">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Email quản trị</label>
+                            <input type="email" class="form-control" id="cfgAdminEmail"
+                                   placeholder="admin@company.com">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Múi giờ</label>
+                            <select class="form-select" id="cfgTimezone">
+                                <option value="Asia/Ho_Chi_Minh" selected>Asia/Ho_Chi_Minh (GMT+7)</option>
+                                <option value="UTC">UTC</option>
+                                <option value="Asia/Bangkok">Asia/Bangkok</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Ngôn ngữ mặc định</label>
+                            <select class="form-select" id="cfgLanguage">
+                                <option value="vi" selected>Tiếng Việt</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Định dạng ngày</label>
+                            <select class="form-select" id="cfgDateFormat">
+                                <option value="DD/MM/YYYY" selected>DD/MM/YYYY</option>
+                                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SECURITY ── -->
+        <div class="settings-section d-none" id="section-security">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-shield-lock me-2 text-warning"></i>Bảo mật & Đăng nhập
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Số lần sai tối đa</label>
+                            <input type="number" class="form-control" id="cfgMaxLoginFail"
+                                   min="1" max="20" value="5">
+                            <div class="form-text">Tài khoản bị khóa sau N lần nhập sai.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Thời gian khóa (phút)</label>
+                            <input type="number" class="form-control" id="cfgLockDuration"
+                                   min="1" value="30">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Phiên đăng nhập hết hạn sau (giờ)</label>
+                            <input type="number" class="form-control" id="cfgSessionExpiry"
+                                   min="1" max="720" value="24">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Độ dài mật khẩu tối thiểu</label>
+                            <input type="number" class="form-control" id="cfgMinPasswordLen"
+                                   min="6" max="32" value="8">
+                        </div>
+                        <div class="col-12">
+                            <div class="settings-toggle-group">
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Yêu cầu ký tự đặc biệt</div>
+                                        <div class="text-muted small">Mật khẩu phải có ít nhất 1 ký tự đặc biệt</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgSpecialChar" checked>
+                                    </div>
+                                </div>
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Bảo vệ CSRF cho cookie JWT</div>
+                                        <div class="text-muted small">Bật để tăng bảo mật phiên đăng nhập</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgCsrfProtect" checked>
+                                    </div>
+                                </div>
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Cho phép đăng nhập nhiều thiết bị</div>
+                                        <div class="text-muted small">Một tài khoản có thể đăng nhập đồng thời</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgMultiDevice">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── HR ── -->
+        <div class="settings-section d-none" id="section-hr">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-people me-2 text-info"></i>Nhân sự & Nghỉ phép
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Số ngày phép năm</label>
+                            <input type="number" class="form-control" id="cfgAnnualLeave"
+                                   min="0" value="12">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Số ngày phép ốm</label>
+                            <input type="number" class="form-control" id="cfgSickLeave"
+                                   min="0" value="5">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Số ngày thử việc mặc định</label>
+                            <input type="number" class="form-control" id="cfgProbationDays"
+                                   min="0" value="60">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Cảnh báo hợp đồng sắp hết hạn (ngày)</label>
+                            <input type="number" class="form-control" id="cfgContractWarnDays"
+                                   min="1" value="30">
+                        </div>
+                        <div class="col-12">
+                            <div class="settings-toggle-group">
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Tự động tính ngày phép tích lũy</div>
+                                        <div class="text-muted small">Hệ thống tự cộng phép theo tháng</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgAutoLeave" checked>
+                                    </div>
+                                </div>
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Cho phép chuyển phép sang năm mới</div>
+                                        <div class="text-muted small">Số ngày phép dư được chuyển sang năm sau</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgCarryoverLeave">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PAYROLL ── -->
+        <div class="settings-section d-none" id="section-payroll">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-cash-coin me-2 text-success"></i>Lương & Thuế
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Ngày chốt lương hàng tháng</label>
+                            <input type="number" class="form-control" id="cfgPayrollDay"
+                                   min="1" max="31" value="25">
+                            <div class="form-text">Ngày trong tháng để tính toán bảng lương.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Lương tối thiểu vùng (VNĐ)</label>
+                            <input type="number" class="form-control" id="cfgMinWage"
+                                   min="0" value="4960000">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Mức giảm trừ bản thân (VNĐ)</label>
+                            <input type="number" class="form-control" id="cfgPersonalDeduct"
+                                   value="11000000">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Mức giảm trừ người phụ thuộc (VNĐ)</label>
+                            <input type="number" class="form-control" id="cfgDependantDeduct"
+                                   value="4400000">
+                        </div>
+                        <div class="col-12">
+                            <div class="settings-toggle-group">
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Áp dụng BHXH / BHYT / BHTN</div>
+                                        <div class="text-muted small">Trừ các khoản bảo hiểm xã hội theo luật</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgSocialInsurance" checked>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ATTENDANCE ── -->
+        <div class="settings-section d-none" id="section-attendance">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-clock-history me-2 text-secondary"></i>Cấu hình chấm công
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Giờ bắt đầu ca làm việc</label>
+                            <input type="time" class="form-control" id="cfgWorkStart" value="08:00">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Giờ kết thúc ca làm việc</label>
+                            <input type="time" class="form-control" id="cfgWorkEnd" value="17:30">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Thời gian nghỉ trưa (phút)</label>
+                            <input type="number" class="form-control" id="cfgBreakTime"
+                                   min="0" max="120" value="60">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Hệ số lương tăng ca</label>
+                            <input type="number" class="form-control" id="cfgOTRate"
+                                   min="1" max="3" step="0.1" value="1.5">
+                        </div>
+                        <div class="col-12">
+                            <div class="settings-toggle-group">
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Cho phép check-in muộn</div>
+                                        <div class="text-muted small">Ghi nhận check-in dù đã qua giờ làm</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgAllowLate" checked>
+                                    </div>
+                                </div>
+                                <div class="settings-toggle-item">
+                                    <div>
+                                        <div class="fw-medium">Bắt buộc check-in bằng QR</div>
+                                        <div class="text-muted small">Chỉ chấp nhận điểm danh qua mã QR</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="cfgQrOnly">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── NOTIFICATION ── -->
+        <div class="settings-section d-none" id="section-notification">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-bell me-2 text-warning"></i>Cấu hình thông báo
+                </div>
+                <div class="card-body">
+                    <div class="settings-toggle-group">
+                        <div class="settings-toggle-item">
+                            <div>
+                                <div class="fw-medium">Thông báo hết hạn hợp đồng</div>
+                                <div class="text-muted small">Gửi nhắc nhở khi hợp đồng sắp hết hạn</div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgNotifContract" checked>
+                            </div>
+                        </div>
+                        <div class="settings-toggle-item">
+                            <div>
+                                <div class="fw-medium">Thông báo duyệt nghỉ phép</div>
+                                <div class="text-muted small">Nhân viên nhận thông báo khi đơn phép được xử lý</div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgNotifLeave" checked>
+                            </div>
+                        </div>
+                        <div class="settings-toggle-item">
+                            <div>
+                                <div class="fw-medium">Thông báo bảng lương</div>
+                                <div class="text-muted small">Gửi khi bảng lương tháng được phát hành</div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgNotifPayroll" checked>
+                            </div>
+                        </div>
+                        <div class="settings-toggle-item">
+                            <div>
+                                <div class="fw-medium">Thông báo khóa tài khoản</div>
+                                <div class="text-muted small">Admin nhận cảnh báo khi có tài khoản bị khóa</div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgNotifLock" checked>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label">Email gửi thông báo hệ thống</label>
+                        <input type="email" class="form-control" id="cfgMailFrom"
+                               placeholder="noreply@company.com">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── MAINTENANCE ── -->
+        <div class="settings-section d-none" id="section-maintenance">
+            <div class="card">
+                <div class="card-header settings-section-header">
+                    <i class="bi bi-tools me-2 text-danger"></i>Bảo trì hệ thống
+                </div>
+                <div class="card-body">
+                    <div class="settings-toggle-group mb-4">
+                        <div class="settings-toggle-item">
+                            <div>
+                                <div class="fw-medium">Chế độ bảo trì</div>
+                                <div class="text-muted small">Khi bật, chỉ Admin có thể truy cập hệ thống</div>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cfgMaintenance">
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="card-title-sm mb-3">Tác vụ hệ thống</h6>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="maint-action-row">
+                            <div>
+                                <div class="fw-medium">Xóa cache hệ thống</div>
+                                <div class="text-muted small">Xóa dữ liệu cache để tải lại cấu hình mới nhất</div>
+                            </div>
+                            <button class="btn btn-outline-secondary btn-sm" id="btnClearCache">
+                                <i class="bi bi-trash me-1"></i>Xóa cache
+                            </button>
+                        </div>
+                        <div class="maint-action-row">
+                            <div>
+                                <div class="fw-medium">Xuất log hệ thống</div>
+                                <div class="text-muted small">Tải về file log 30 ngày gần nhất</div>
+                            </div>
+                            <button class="btn btn-outline-primary btn-sm" id="btnExportLog">
+                                <i class="bi bi-download me-1"></i>Xuất log
+                            </button>
+                        </div>
+                        <div class="maint-action-row">
+                            <div>
+                                <div class="fw-medium text-danger">Đặt lại toàn bộ cài đặt</div>
+                                <div class="text-muted small">Khôi phục tất cả cài đặt về mặc định gốc</div>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm" id="btnResetAll">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /col right -->
+</div><!-- /row -->
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="{{ url_for('static', filename='js/modules/admin/system_settings.js') }}"></script>
+{% endblock %}

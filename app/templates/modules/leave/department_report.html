@@ -1,0 +1,161 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Báo cáo nghỉ phép{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/leave.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">Báo cáo nghỉ phép phòng ban</h4>
+        <p class="text-muted mb-0">Thống kê và phân tích tình hình nghỉ phép toàn đội</p>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" id="btnExport">
+        <i class="fas fa-file-excel me-1"></i>Xuất Excel
+    </button>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4" id="summaryCards">
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-warning" id="sPending">—</div>
+                <div class="stat-label">Chờ duyệt</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-success" id="sApproved">—</div>
+                <div class="stat-label">Đã duyệt</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-danger" id="sRejected">—</div>
+                <div class="stat-label">Từ chối</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-primary" id="sToday">—</div>
+                <div class="stat-label">Nghỉ hôm nay</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-danger" id="sEmergency">—</div>
+                <div class="stat-label">Khẩn cấp</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4">
+        <div class="card border-0 leave-stat-card">
+            <div class="card-body text-center py-3">
+                <div class="stat-value text-secondary" id="sSupplement">—</div>
+                <div class="stat-label">Chờ bổ sung</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 mb-4">
+    <div class="card-body p-3">
+        <form id="reportFilterForm" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Trạng thái</label>
+                <select class="form-select form-select-sm" name="status" id="fStatus">
+                    <option value="">Tất cả</option>
+                    <option value="pending">Chờ duyệt</option>
+                    <option value="approved">Đã duyệt</option>
+                    <option value="rejected">Từ chối</option>
+                    <option value="cancelled">Đã hủy</option>
+                    <option value="supplement_requested">Chờ bổ sung</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Từ ngày</label>
+                <input type="date" class="form-control form-control-sm" name="from_date" id="fFromDate">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Đến ngày</label>
+                <input type="date" class="form-control form-control-sm" name="to_date" id="fToDate">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Loại nghỉ</label>
+                <input type="text" class="form-control form-control-sm" name="leave_type" id="fLeaveType"
+                    placeholder="VD: Nghỉ ốm">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Nhân viên</label>
+                <input type="text" class="form-control form-control-sm" name="employee_name" id="fEmployeeName"
+                    placeholder="Tên hoặc mã NV">
+            </div>
+            <div class="col-md-1">
+                <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" id="fEmergencyOnly" name="emergency_only">
+                    <label class="form-check-label small" for="fEmergencyOnly">Khẩn</label>
+                </div>
+            </div>
+            <div class="col-md-1 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="fas fa-filter me-1"></i>Lọc
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="reportTable">
+                <thead>
+                    <tr>
+                        <th>Nhân viên</th>
+                        <th>Phòng ban</th>
+                        <th>Vị trí</th>
+                        <th>Loại nghỉ</th>
+                        <th>Từ</th>
+                        <th>Đến</th>
+                        <th>Số ngày</th>
+                        <th>Lương</th>
+                        <th>Trạng thái</th>
+                        <th>Khẩn</th>
+                        <th>Tài liệu</th>
+                    </tr>
+                </thead>
+                <tbody id="reportBody">
+                    <tr><td colspan="11" class="text-center py-5 text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Đang tải...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="p-3 border-top d-flex justify-content-between align-items-center">
+            <span class="text-muted small" id="reportCountLabel">—</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/leave.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        Leave.DeptReport.init();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,267 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Danh mục hệ thống – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_1.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h4 class="page-title mb-1">Danh mục hệ thống</h4>
+            <p class="page-subtitle mb-0">Quản lý phòng ban, chức danh và phân quyền vai trò</p>
+        </div>
+    </div>
+</div>
+
+<!-- Tab navigation -->
+<ul class="nav nav-tabs admin-tabs mb-4" id="metadataTabs">
+    <li class="nav-item">
+        <a class="nav-link active" data-tab="departments" href="#">
+            <i class="bi bi-building me-2"></i>Phòng ban
+            <span class="badge bg-secondary ms-1" id="deptCount">0</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-tab="positions" href="#">
+            <i class="bi bi-person-badge me-2"></i>Chức danh
+            <span class="badge bg-secondary ms-1" id="posCount">0</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-tab="roles" href="#">
+            <i class="bi bi-shield-check me-2"></i>Vai trò
+            <span class="badge bg-secondary ms-1" id="roleCount">0</span>
+        </a>
+    </li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<!--  TAB: PHÒNG BAN                            -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="tab-departments" class="tab-pane-custom">
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-5">
+                    <input type="text" id="deptSearch" class="form-control form-control-sm"
+                           placeholder="Tìm kiếm phòng ban…">
+                </div>
+                <div class="col-6 col-md-3">
+                    <select id="deptStatusFilter" class="form-select form-select-sm">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="active">Đang hoạt động</option>
+                        <option value="inactive">Ngừng hoạt động</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 d-flex justify-content-md-end gap-2">
+                    <button class="btn btn-primary btn-sm" id="btnAddDept">
+                        <i class="bi bi-plus-lg me-1"></i>Thêm phòng ban
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:48px">#</th>
+                            <th>Tên phòng ban</th>
+                            <th>Trưởng phòng</th>
+                            <th>Mô tả</th>
+                            <th>Trạng thái</th>
+                            <th class="text-center" style="width:110px">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deptTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm me-2"></div>
+                                Đang tải…
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!--  TAB: CHỨC DANH                            -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="tab-positions" class="tab-pane-custom d-none">
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-5">
+                    <input type="text" id="posSearch" class="form-control form-control-sm"
+                           placeholder="Tìm kiếm chức danh…">
+                </div>
+                <div class="col-6 col-md-3">
+                    <select id="posStatusFilter" class="form-select form-select-sm">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="active">Đang hoạt động</option>
+                        <option value="inactive">Ngừng hoạt động</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 d-flex justify-content-md-end gap-2">
+                    <button class="btn btn-primary btn-sm" id="btnAddPos">
+                        <i class="bi bi-plus-lg me-1"></i>Thêm chức danh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:48px">#</th>
+                            <th>Tên chức danh</th>
+                            <th>Yêu cầu / Mô tả</th>
+                            <th>Trạng thái</th>
+                            <th class="text-center" style="width:110px">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="posTableBody">
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm me-2"></div>
+                                Đang tải…
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!--  TAB: VAI TRÒ                              -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="tab-roles" class="tab-pane-custom d-none">
+    <div class="row g-3" id="rolesGrid">
+        <div class="col-12 text-center py-5 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>
+            Đang tải…
+        </div>
+    </div>
+
+    <!-- Transfer employee section -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Gán vai trò cho người dùng</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">Mã / Tên người dùng</label>
+                    <input type="number" id="assignUserId" class="form-control form-control-sm"
+                           placeholder="Nhập User ID…">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label form-label-sm">Vai trò mới</label>
+                    <select id="assignRoleName" class="form-select form-select-sm">
+                        <option value="">-- Chọn vai trò --</option>
+                        <option value="ADMIN">Admin</option>
+                        <option value="HR">HR</option>
+                        <option value="MANAGER">Manager</option>
+                        <option value="EMPLOYEE">Employee</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <button class="btn btn-primary btn-sm w-100" id="btnAssignRole">
+                        <i class="bi bi-person-check me-1"></i>Gán vai trò
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!--  MODAL: Thêm / Sửa Phòng ban               -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalDept" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deptModalTitle">Thêm phòng ban</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="deptId">
+                <div class="mb-3">
+                    <label class="form-label">Tên phòng ban <span class="text-danger">*</span></label>
+                    <input type="text" id="deptName" class="form-control" placeholder="VD: Phòng Kế toán">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mô tả</label>
+                    <textarea id="deptDesc" class="form-control" rows="2"
+                              placeholder="Mô tả ngắn về phòng ban…"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Trưởng phòng <span class="text-muted">(tùy chọn)</span></label>
+                    <input type="number" id="deptManagerId" class="form-control"
+                           placeholder="Employee ID của trưởng phòng">
+                    <div class="form-text">Nhân viên sẽ được nâng cấp lên vai trò Manager.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary" id="btnSaveDept">
+                    <i class="bi bi-check-lg me-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!--  MODAL: Thêm / Sửa Chức danh               -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalPos" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="posModalTitle">Thêm chức danh</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="posId">
+                <div class="mb-3">
+                    <label class="form-label">Tên chức danh <span class="text-danger">*</span></label>
+                    <input type="text" id="posTitle" class="form-control" placeholder="VD: Kế toán viên">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Yêu cầu / Mô tả</label>
+                    <textarea id="posRequirements" class="form-control" rows="2"
+                              placeholder="Yêu cầu chuyên môn, kinh nghiệm…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary" id="btnSavePos">
+                    <i class="bi bi-check-lg me-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="{{ url_for('static', filename='js/modules/admin/metadata.js') }}"></script>
+{% endblock %}

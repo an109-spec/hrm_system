@@ -1,0 +1,313 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Danh sách nhân viên – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+<style>
+  .page-header-card { background: linear-gradient(135deg,#1e3a5f,#2563eb); border-radius: 16px; padding: 28px 32px; color: #fff; margin-bottom: 24px; }
+  .stat-mini { background: rgba(255,255,255,.15); border-radius: 10px; padding: 14px 20px; text-align: center; }
+  .stat-mini .n { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+  .stat-mini .l { font-size: .75rem; opacity: .85; margin-top: 3px; }
+
+  .filter-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.05); padding: 16px 20px; margin-bottom: 20px; }
+
+  .table-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.05); overflow: hidden; }
+  .table thead th { background: #f8fafc; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: #64748b; font-weight: 700; padding: 12px 16px; border: none; white-space: nowrap; }
+  .table td { padding: 12px 16px; vertical-align: middle; border-color: #f1f5f9; font-size: .87rem; }
+
+  .emp-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; }
+  .emp-name   { font-weight: 600; color: #1e293b; }
+  .emp-email  { font-size: .77rem; color: #94a3b8; }
+
+  .ws-badge { padding: 3px 10px; border-radius: 20px; font-size: .73rem; font-weight: 600; white-space: nowrap; }
+  .ws-active      { background: #dcfce7; color: #16a34a; }
+  .ws-probation   { background: #fef9c3; color: #a16207; }
+  .ws-on_leave    { background: #dbeafe; color: #1d4ed8; }
+  .ws-resigned, .ws-terminated { background: #fee2e2; color: #dc2626; }
+  .ws-inactive    { background: #f1f5f9; color: #64748b; }
+  .ws-pending_resignation { background: #fef3c7; color: #b45309; }
+
+  .action-btn { padding: 4px 9px; font-size: .77rem; border-radius: 6px; }
+
+  .pagination-wrap { padding: 14px 20px; border-top: 1px solid #f1f5f9; }
+
+  /* Selected row highlight */
+  .table tbody tr.selected { background: #eff6ff !important; }
+
+  /* Bulk bar */
+  #bulkBar { background: #2563eb; color: #fff; border-radius: 10px; padding: 10px 20px; font-size: .85rem; display: none; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="page-header-card">
+  <div class="row align-items-center">
+    <div class="col-md-6 mb-3 mb-md-0">
+      <h4 class="fw-bold mb-1">Danh sách nhân viên</h4>
+      <p class="mb-0 opacity-75 small">Quản lý toàn bộ hồ sơ nhân sự trong hệ thống</p>
+    </div>
+    <div class="col-md-6">
+      <div class="row g-2">
+        <div class="col-3"><div class="stat-mini"><div class="n" id="statAll">–</div><div class="l">Tổng</div></div></div>
+        <div class="col-3"><div class="stat-mini"><div class="n" id="statActive">–</div><div class="l">Đang làm</div></div></div>
+        <div class="col-3"><div class="stat-mini"><div class="n" id="statProb">–</div><div class="l">Thử việc</div></div></div>
+        <div class="col-3"><div class="stat-mini"><div class="n" id="statOther">–</div><div class="l">Khác</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-card">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label mb-1" style="font-size:.8rem;font-weight:600;color:#64748b">Tìm kiếm</label>
+      <div class="input-group input-group-sm">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" class="form-control" id="searchInput" placeholder="Tên, email, số điện thoại..." oninput="applyFilters()">
+      </div>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label mb-1" style="font-size:.8rem;font-weight:600;color:#64748b">Phòng ban</label>
+      <select class="form-select form-select-sm" id="filterDept" onchange="applyFilters()">
+        <option value="">Tất cả</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label mb-1" style="font-size:.8rem;font-weight:600;color:#64748b">Trạng thái</label>
+      <select class="form-select form-select-sm" id="filterStatus" onchange="applyFilters()">
+        <option value="">Tất cả</option>
+        <option value="active">Đang làm</option>
+        <option value="probation">Thử việc</option>
+        <option value="on_leave">Đang nghỉ phép</option>
+        <option value="resigned">Đã nghỉ việc</option>
+        <option value="inactive">Không hoạt động</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label mb-1" style="font-size:.8rem;font-weight:600;color:#64748b">Loại hình</label>
+      <select class="form-select form-select-sm" id="filterEmpType" onchange="applyFilters()">
+        <option value="">Tất cả</option>
+        <option value="permanent">Chính thức</option>
+        <option value="probation">Thử việc</option>
+        <option value="intern">Thực tập</option>
+        <option value="contract">Hợp đồng</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="resetFilters()"><i class="fas fa-rotate-left me-1"></i>Đặt lại</button>
+      <button class="btn btn-sm btn-success flex-fill" onclick="exportCSV()"><i class="fas fa-download me-1"></i>Xuất</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk action bar -->
+<div id="bulkBar">
+  <i class="fas fa-check-circle me-2"></i>
+  Đã chọn <strong id="selectedCount">0</strong> nhân viên —
+  <button class="btn btn-sm btn-light ms-2" onclick="bulkExport()"><i class="fas fa-file-export me-1"></i>Xuất danh sách</button>
+</div>
+
+<!-- Table -->
+<div class="table-card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" id="empTable">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+          <th>Nhân viên</th>
+          <th>Phòng ban</th>
+          <th>Chức danh</th>
+          <th>Trạng thái</th>
+          <th>Loại hình</th>
+          <th>Ngày vào</th>
+          <th class="text-end">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="8" class="text-center py-5">
+          <span class="spinner-border spinner-border-sm me-2"></span>Đang tải dữ liệu...
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-wrap d-flex justify-content-between align-items-center" id="paginationWrap" style="display:none!important">
+    <small class="text-muted" id="pageInfo"></small>
+    <nav><ul class="pagination pagination-sm mb-0" id="paginator"></ul></nav>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+// Endpoint – HR gets all, Admin gets all; adjust based on role if needed
+const EMP_API = "{{ url_for('hr.get_all_employee_summary') if current_user.role.name == 'HR' else url_for('admin.get_employee_summary') }}";
+
+let allEmployees = [];
+let filteredEmployees = [];
+let currentPage = 1;
+const PAGE_SIZE = 15;
+
+const statusLabel = { active:'Đang làm', probation:'Thử việc', on_leave:'Nghỉ phép', resigned:'Đã nghỉ', terminated:'Đã chấm dứt', inactive:'Không hoạt động', pending_resignation:'Chờ nghỉ', retired:'Đã về hưu' };
+const empTypeLabel = { permanent:'Chính thức', probation:'Thử việc', intern:'Thực tập', contract:'Hợp đồng' };
+
+async function loadEmployees() {
+  try {
+    const res  = await fetch(EMP_API);
+    const json = await res.json();
+    // Support both {data:[...]} and {items:[...]}
+    allEmployees = json.data || json.items || [];
+    populateDeptFilter();
+    updateStats();
+    applyFilters();
+  } catch(e) {
+    document.getElementById("tableBody").innerHTML =
+      '<tr><td colspan="8" class="text-center text-danger py-5"><i class="fas fa-exclamation-circle me-1"></i>Không thể tải dữ liệu nhân viên.</td></tr>';
+  }
+}
+loadEmployees();
+
+function populateDeptFilter() {
+  const depts = [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort();
+  const sel   = document.getElementById("filterDept");
+  depts.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; sel.appendChild(o); });
+}
+
+function updateStats() {
+  document.getElementById("statAll").textContent    = allEmployees.length;
+  document.getElementById("statActive").textContent = allEmployees.filter(e => e.working_status === 'active').length;
+  document.getElementById("statProb").textContent   = allEmployees.filter(e => e.working_status === 'probation').length;
+  document.getElementById("statOther").textContent  = allEmployees.filter(e => !['active','probation'].includes(e.working_status)).length;
+}
+
+function applyFilters() {
+  const search = document.getElementById("searchInput").value.toLowerCase();
+  const dept   = document.getElementById("filterDept").value;
+  const status = document.getElementById("filterStatus").value;
+  const empType= document.getElementById("filterEmpType").value;
+
+  filteredEmployees = allEmployees.filter(e => {
+    const matchSearch = !search || [e.full_name, e.email, e.phone].some(v => (v||'').toLowerCase().includes(search));
+    const matchDept   = !dept   || e.department === dept;
+    const matchStatus = !status || e.working_status === status;
+    const matchType   = !empType|| e.employment_type === empType;
+    return matchSearch && matchDept && matchStatus && matchType;
+  });
+  currentPage = 1;
+  renderPage();
+}
+
+function resetFilters() {
+  document.getElementById("searchInput").value = "";
+  document.getElementById("filterDept").value  = "";
+  document.getElementById("filterStatus").value= "";
+  document.getElementById("filterEmpType").value="";
+  applyFilters();
+}
+
+function renderPage() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredEmployees.slice(start, start + PAGE_SIZE);
+  const tbody = document.getElementById("tableBody");
+
+  if (!page.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="fas fa-search me-1"></i>Không tìm thấy kết quả phù hợp.</td></tr>';
+    document.getElementById("paginationWrap").style.display = "none";
+    return;
+  }
+
+  tbody.innerHTML = page.map(e => {
+    const avatar = e.avatar || "/static/img/default_avatar.png";
+    const ws     = e.working_status || "inactive";
+    return `<tr>
+      <td><input type="checkbox" class="row-check" data-id="${e.id}" onchange="updateBulkBar()"></td>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${avatar}" class="emp-avatar" alt="${e.full_name}" onerror="this.src='/static/img/default_avatar.png'">
+          <div><div class="emp-name">${e.full_name}</div><div class="emp-email">${e.email || '—'}</div></div>
+        </div>
+      </td>
+      <td>${e.department || '—'}</td>
+      <td>${e.position || '—'}</td>
+      <td><span class="ws-badge ws-${ws}">${statusLabel[ws] || ws}</span></td>
+      <td>${empTypeLabel[e.employment_type] || e.employment_type || '—'}</td>
+      <td class="text-muted small">${e.hire_date || '—'}</td>
+      <td class="text-end">
+        <a href="/personnel/profile/${e.id}" class="btn btn-outline-primary action-btn me-1" title="Xem hồ sơ"><i class="fas fa-eye"></i></a>
+        <a href="/personnel/profile/${e.id}/edit" class="btn btn-outline-secondary action-btn" title="Chỉnh sửa"><i class="fas fa-pen"></i></a>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination();
+  document.getElementById("paginationWrap").style.display = "flex";
+}
+
+function renderPagination() {
+  const total = Math.ceil(filteredEmployees.length / PAGE_SIZE);
+  const info  = document.getElementById("pageInfo");
+  const ul    = document.getElementById("paginator");
+  const start = (currentPage-1)*PAGE_SIZE + 1;
+  const end   = Math.min(currentPage*PAGE_SIZE, filteredEmployees.length);
+  info.textContent = `Hiển thị ${start}–${end} / ${filteredEmployees.length} nhân viên`;
+
+  ul.innerHTML = "";
+  const mkLi = (label, page, disabled=false, active=false) => {
+    const li = document.createElement("li");
+    li.className = `page-item${disabled?' disabled':''}${active?' active':''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="goPage(${page});return false">${label}</a>`;
+    ul.appendChild(li);
+  };
+  mkLi("‹", currentPage-1, currentPage===1);
+  for (let p=1; p<=total; p++) {
+    if (total > 7 && p>2 && p<total-1 && Math.abs(p-currentPage)>1) {
+      if (p===3||p===total-2) { const li=document.createElement("li"); li.className="page-item disabled"; li.innerHTML='<span class="page-link">…</span>'; ul.appendChild(li); }
+      continue;
+    }
+    mkLi(p, p, false, p===currentPage);
+  }
+  mkLi("›", currentPage+1, currentPage===total);
+}
+
+function goPage(p) {
+  const total = Math.ceil(filteredEmployees.length / PAGE_SIZE);
+  if (p < 1 || p > total) return;
+  currentPage = p;
+  renderPage();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll(".row-check").forEach(c => c.checked = cb.checked);
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll(".row-check:checked").length;
+  const bar     = document.getElementById("bulkBar");
+  document.getElementById("selectedCount").textContent = checked;
+  bar.style.display = checked > 0 ? "flex" : "none";
+}
+
+function exportCSV() {
+  const rows = filteredEmployees;
+  if (!rows.length) return Swal.fire("Không có dữ liệu", "Không có nhân viên để xuất.", "info");
+  const header = ["ID","Họ tên","Phòng ban","Chức danh","Trạng thái","Loại hình","Ngày vào"];
+  const lines  = [header.join(","), ...rows.map(e =>
+    [e.id, `"${e.full_name}"`, e.department||'', e.position||'', e.working_status||'', e.employment_type||'', e.hire_date||''].join(",")
+  )];
+  const blob = new Blob(["\uFEFF"+lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = "nhan_vien_" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
+
+function bulkExport() { exportCSV(); }
+</script>
+{% endblock %}

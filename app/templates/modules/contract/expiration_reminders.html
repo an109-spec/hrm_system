@@ -1,0 +1,147 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Cảnh báo Hợp đồng – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .reminder-card {
+        border-radius: 14px;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,.06);
+        transition: transform .15s, box-shadow .15s;
+    }
+    .reminder-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.10); }
+
+    /* Level indicator strip on left */
+    .reminder-card.level-critical { border-left: 4px solid #ef4444; }
+    .reminder-card.level-warning  { border-left: 4px solid #f59e0b; }
+    .reminder-card.level-info     { border-left: 4px solid #3b82f6; }
+
+    .level-icon {
+        width: 40px; height: 40px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem; flex-shrink: 0;
+    }
+    .level-critical .level-icon { background: #fee2e2; color: #dc2626; }
+    .level-warning  .level-icon { background: #fef3c7; color: #d97706; }
+    .level-info     .level-icon { background: #dbeafe; color: #2563eb; }
+
+    .summary-strip {
+        border-radius: 14px;
+        padding: 20px 24px;
+        display: flex; gap: 32px; align-items: center; flex-wrap: wrap;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
+        margin-bottom: 1.5rem;
+    }
+    .strip-stat { text-align: center; }
+    .strip-stat .num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+    .strip-stat .lbl { font-size: .75rem; color: #6b7280; margin-top: 2px; }
+    .num-critical { color: #ef4444; }
+    .num-warning  { color: #f59e0b; }
+    .num-info     { color: #3b82f6; }
+
+    .filter-tabs .nav-link {
+        border-radius: 8px; color: #6b7280; font-size: .875rem;
+        padding: 6px 14px; font-weight: 500;
+    }
+    .filter-tabs .nav-link.active { background: #eff6ff; color: #1d4ed8; }
+    .filter-tabs .nav-link:hover  { background: #f3f4f6; }
+
+    .days-badge {
+        font-size: .75rem; font-weight: 600;
+        padding: 3px 10px; border-radius: 20px;
+    }
+    .days-critical { background: #fee2e2; color: #991b1b; }
+    .days-warning  { background: #fef3c7; color: #92400e; }
+    .days-info     { background: #dbeafe; color: #1e40af; }
+    .days-none     { background: #f3f4f6; color: #374151; }
+
+    .quick-action-btn { border-radius: 8px; font-size: .8rem; padding: 4px 12px; }
+    #reminderList { min-height: 200px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-bell text-warning me-2"></i>Cảnh báo Hợp đồng
+        </h4>
+        <p class="text-muted mb-0 small">Theo dõi trạng thái hợp đồng toàn hệ thống – Cập nhật theo thời gian thực</p>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="btnRefresh">
+        <i class="fas fa-sync-alt me-1"></i>Làm mới
+    </button>
+</div>
+
+<!-- Summary Strip -->
+<div class="summary-strip" id="summaryStrip">
+    <div class="d-flex align-items-center gap-2 me-auto">
+        <i class="fas fa-chart-pie text-muted"></i>
+        <span class="text-muted small fw-semibold">TỔNG QUAN</span>
+    </div>
+    <div class="strip-stat">
+        <div class="num num-critical" id="sumCritical">–</div>
+        <div class="lbl">Cần xử lý ngay</div>
+    </div>
+    <div class="strip-stat">
+        <div class="num num-warning" id="sumWarning">–</div>
+        <div class="lbl">Cảnh báo</div>
+    </div>
+    <div class="strip-stat">
+        <div class="num num-info" id="sumInfo">–</div>
+        <div class="lbl">Bình thường</div>
+    </div>
+</div>
+
+<!-- Filter Tabs + Search -->
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <ul class="nav filter-tabs" id="levelFilter">
+        <li class="nav-item">
+            <a class="nav-link active" href="#" data-level="all">Tất cả</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#" data-level="critical">
+                <i class="fas fa-exclamation-circle text-danger me-1"></i>Cần xử lý
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#" data-level="warning">
+                <i class="fas fa-clock text-warning me-1"></i>Cảnh báo
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#" data-level="info">
+                <i class="fas fa-check-circle text-primary me-1"></i>Bình thường
+            </a>
+        </li>
+    </ul>
+    <input type="text" id="searchInput" class="form-control form-control-sm" 
+           style="max-width:220px" placeholder="Tìm theo tên nhân viên...">
+</div>
+
+<!-- Reminder List -->
+<div id="reminderLoading" class="text-center py-5 text-muted">
+    <i class="fas fa-spinner fa-spin fa-2x d-block mb-2"></i>
+    Đang tải cảnh báo hợp đồng...
+</div>
+
+<div id="reminderList" style="display:none">
+    <!-- Rendered by JS -->
+</div>
+
+<div id="emptyState" class="text-center py-5 text-muted" style="display:none">
+    <i class="fas fa-check-circle fa-3x text-success d-block mb-3"></i>
+    <h6 class="fw-bold text-success">Không có cảnh báo nào</h6>
+    <p class="small">Tất cả hợp đồng đang trong trạng thái tốt</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/contract/Expiration_reminders.js') }}"></script>
+{% endblock %}

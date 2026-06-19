@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask
+from flask import Flask, redirect,request, url_for
 from flask_migrate import Migrate
 
 from app.config import config_by_name
@@ -10,7 +10,13 @@ migrate = Migrate()
 
 
 def create_app():
-    app = Flask(__name__)
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 2. Trỏ template_folder vào thư mục 'templates' nằm trong 'app'
+    template_dir = os.path.join(app_dir, 'templates')
+    
+    # 3. Khởi tạo app với template_folder đã xác định
+    app = Flask(__name__, template_folder=template_dir)
 
     # ── Config ────────────────────────────────────────────────────────────
     env          = os.getenv("FLASK_ENV", "development")
@@ -59,5 +65,14 @@ def create_app():
     # ── APScheduler ───────────────────────────────────────────────────────
     from app.scheduler import init_scheduler
     init_scheduler(app)
-
+    @app.route("/")
+    def index():
+        """Tự động chuyển hướng về trang đăng nhập."""
+        return redirect(url_for("auth.login_page"))
+    @app.after_request
+    def add_header(response):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     return app

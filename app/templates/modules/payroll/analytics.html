@@ -1,0 +1,196 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Phan Tich Luong — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-chart-bar me-2 text-primary"></i>Phan Tich Quy Luong
+        </h4>
+        <small class="text-muted">Tong hop chi phi nhan su theo ky</small>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <select id="periodType" class="form-select form-select-sm" style="width:130px">
+            <option value="month">Theo thang</option>
+            <option value="quarter">Theo quy</option>
+            <option value="year">Theo nam</option>
+        </select>
+        <select id="yearSelect" class="form-select form-select-sm" style="width:100px">
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+        </select>
+        <select id="monthSelect" class="form-select form-select-sm" style="width:120px">
+            <option value="1">Thang 1</option>
+            <option value="2">Thang 2</option>
+            <option value="3">Thang 3</option>
+            <option value="4">Thang 4</option>
+            <option value="5">Thang 5</option>
+            <option value="6">Thang 6</option>
+            <option value="7">Thang 7</option>
+            <option value="8">Thang 8</option>
+            <option value="9">Thang 9</option>
+            <option value="10">Thang 10</option>
+            <option value="11">Thang 11</option>
+            <option value="12">Thang 12</option>
+        </select>
+        <select id="quarterSelect" class="form-select form-select-sm d-none" style="width:100px">
+            <option value="1">Quy 1</option>
+            <option value="2">Quy 2</option>
+            <option value="3">Quy 3</option>
+            <option value="4">Quy 4</option>
+        </select>
+        <button id="btnAnalyze" class="btn btn-primary btn-sm">
+            <i class="fas fa-chart-bar me-1"></i>Phan tich
+        </button>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4" id="kpiSection" style="display:none">
+    <div class="col-md-3">
+        <div class="summary-card card-blue position-relative">
+            <div class="card-value" id="kpiLaborCost">--</div>
+            <div class="card-label">Tong chi phi nhan su</div>
+            <i class="fas fa-building card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-green position-relative">
+            <div class="card-value" id="kpiNetPaid">--</div>
+            <div class="card-label">Tong luong thuc nhan</div>
+            <i class="fas fa-hand-holding-usd card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-orange position-relative">
+            <div class="card-value" id="kpiInsuranceEmployer">--</div>
+            <div class="card-label">BH NSDLD dong them</div>
+            <i class="fas fa-shield-alt card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-purple position-relative">
+            <div class="card-value" id="kpiTax">--</div>
+            <div class="card-label">Tong thue TNCN</div>
+            <i class="fas fa-percentage card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card position-relative" style="border-left:4px solid #20c997">
+            <div class="card-value" id="kpiAllowance">--</div>
+            <div class="card-label">Tong phu cap</div>
+            <i class="fas fa-gift card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card card-red position-relative">
+            <div class="card-value" id="kpiPenalty">--</div>
+            <div class="card-label">Tong tien phat (thu ve)</div>
+            <i class="fas fa-gavel card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card position-relative" style="border-left:4px solid #0dcaf0">
+            <div class="card-value" id="kpiEmployeeCount">--</div>
+            <div class="card-label">So nhan vien</div>
+            <i class="fas fa-users card-icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="summary-card position-relative" style="border-left:4px solid #6c757d">
+            <div class="card-value" id="kpiSalaryCount">--</div>
+            <div class="card-label">So phieu luong</div>
+            <i class="fas fa-file-invoice card-icon"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-4 mb-4" id="chartsSection" style="display:none">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-title">Chi Phi Nhan Su Theo Thang</div>
+            <canvas id="trendChart" height="120"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="chart-card h-100">
+            <div class="chart-title">Phan Bo Chi Phi</div>
+            <canvas id="costPieChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- By Department & Role -->
+<div class="row g-4 mb-4" id="breakdownSection" style="display:none">
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-title">Quy Luong Theo Phong Ban</div>
+            <canvas id="deptChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-title">Quy Luong Theo Role</div>
+            <canvas id="roleChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Department Table -->
+<div class="card" id="tableSection" style="display:none">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+            <i class="fas fa-table me-2 text-primary"></i>Chi Tiet Theo Phong Ban
+        </span>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-primary active" id="viewByDept">Phong ban</button>
+            <button class="btn btn-outline-primary" id="viewByRole">Role</button>
+            <button class="btn btn-outline-primary" id="viewByMonth">Theo thang</button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table payroll-table table-hover mb-0">
+                <thead id="analyticsTableHead">
+                    <tr>
+                        <th>Don vi</th>
+                        <th>So NV</th>
+                        <th>Gross</th>
+                        <th>Phu cap</th>
+                        <th>BH NLĐ</th>
+                        <th>Thue</th>
+                        <th>Net</th>
+                        <th>BH NSDLD</th>
+                        <th>Tong CP</th>
+                    </tr>
+                </thead>
+                <tbody id="analyticsTableBody">
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">Chua co du lieu</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Empty state -->
+<div id="emptyState" class="text-center py-5">
+    <i class="fas fa-chart-bar fa-4x mb-3 text-muted opacity-25"></i>
+    <p class="text-muted fs-5">Chon ky va bam "Phan tich" de xem bao cao</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/analytics.js') }}"></script>
+{% endblock %}

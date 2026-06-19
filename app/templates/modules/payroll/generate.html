@@ -1,0 +1,191 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Tao Bang Luong — HR{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-cogs me-2 text-primary"></i>Tao Bang Luong Hang Thang
+        </h4>
+        <small class="text-muted">Chay tinh luong hang loat cho toan bo nhan vien</small>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Generate Form -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-play-circle me-2 text-success"></i>Cau Hinh Tinh Luong
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Thang tinh luong <span class="text-danger">*</span></label>
+                    <input type="month" id="payrollMonth" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Phong ban (bo trong = tat ca)</label>
+                    <select id="departmentSelect" class="form-select">
+                        <option value="">Tat ca phong ban</option>
+                    </select>
+                </div>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Luu y:</strong> He thong se bo qua nhan vien da co ban ghi luong trong thang nay.
+                    Kiem tra ky truoc khi chay.
+                </div>
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="confirmCheck">
+                        <label class="form-check-label" for="confirmCheck">
+                            Toi da kiem tra du lieu va xac nhan chay tinh luong
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn-success w-100" id="btnGenerate" disabled>
+                    <i class="fas fa-calculator me-2"></i>Chay Tinh Luong
+                </button>
+            </div>
+        </div>
+
+        <!-- Policy Status -->
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-shield-alt me-2 text-info"></i>Chinh Sach Luong Hien Tai
+                <span class="badge bg-info ms-2 float-end" id="lockStatusBadge">Dang tai...</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-2" id="policyInfo">
+                    <div class="text-center py-3 text-muted">
+                        <i class="fas fa-spinner fa-spin"></i> Dang tai chinh sach...
+                    </div>
+                </div>
+                <hr>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-danger flex-fill" id="btnLockPolicy">
+                        <i class="fas fa-lock me-1"></i>Khoa cau hinh
+                    </button>
+                    <button class="btn btn-sm btn-outline-success flex-fill" id="btnUnlockPolicy">
+                        <i class="fas fa-lock-open me-1"></i>Mo khoa
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="col-lg-7">
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">
+                <i class="fas fa-list-check me-2 text-primary"></i>Ket Qua Tinh Luong
+            </div>
+            <div class="card-body">
+                <!-- Progress bar -->
+                <div id="progressSection" style="display:none" class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Dang xu ly...</small>
+                        <small class="text-muted" id="progressText">0%</small>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                            id="progressBar" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <!-- Result summary -->
+                <div id="resultSummary" style="display:none" class="mb-3">
+                    <div class="row g-2 text-center">
+                        <div class="col-4">
+                            <div class="p-3 rounded bg-success bg-opacity-10">
+                                <div class="h3 fw-bold text-success" id="resProcessed">0</div>
+                                <div class="small text-muted">Thanh cong</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-3 rounded bg-danger bg-opacity-10">
+                                <div class="h3 fw-bold text-danger" id="resFailed">0</div>
+                                <div class="small text-muted">That bai</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-3 rounded bg-primary bg-opacity-10">
+                                <div class="h3 fw-bold text-primary" id="resTotal">0</div>
+                                <div class="small text-muted">Tong</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error list -->
+                <div id="errorSection" style="display:none">
+                    <div class="alert alert-danger">
+                        <strong><i class="fas fa-times-circle me-1"></i>Danh sach loi:</strong>
+                        <div class="mt-2" id="errorList"></div>
+                    </div>
+                </div>
+
+                <!-- Initial state -->
+                <div id="initState" class="text-center py-5 text-muted">
+                    <i class="fas fa-calculator fa-3x mb-3 d-block opacity-25"></i>
+                    <p>Cau hinh va bam "Chay Tinh Luong" de bat dau</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payroll List for Month -->
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">
+                    <i class="fas fa-table me-2 text-primary"></i>Danh Sach Bang Luong
+                </span>
+                <div class="d-flex gap-2">
+                    <select id="listStatusFilter" class="form-select form-select-sm" style="width:140px">
+                        <option value="">Tat ca</option>
+                        <option value="draft">Nhap</option>
+                        <option value="pending">Cho duyet</option>
+                        <option value="approved">Da duyet</option>
+                        <option value="paid">Da thanh toan</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary" id="btnLoadList">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:400px; overflow-y:auto">
+                    <table class="table payroll-table table-hover mb-0">
+                        <thead style="position:sticky; top:0">
+                            <tr>
+                                <th>Ma NV</th>
+                                <th>Ho ten</th>
+                                <th>Phong ban</th>
+                                <th>Luong rong</th>
+                                <th>Trang thai</th>
+                                <th>Hanh dong</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payrollListBody">
+                            <tr>
+                                <td colspan="6" class="text-center py-3 text-muted">
+                                    Chua co du lieu
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/generate.js') }}"></script>
+{% endblock %}

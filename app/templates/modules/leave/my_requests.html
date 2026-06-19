@@ -1,0 +1,145 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Lịch sử nghỉ phép{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/leave.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">Lịch sử nghỉ phép</h4>
+        <p class="text-muted mb-0">Tất cả các đơn xin nghỉ của bạn</p>
+    </div>
+    <button class="btn btn-primary" id="btnOpenCreateModal">
+        <i class="fas fa-plus me-2"></i>Tạo đơn mới
+    </button>
+</div>
+
+<!-- Balance Card -->
+<div class="row g-3 mb-4" id="leaveBalanceArea">
+    <div class="col-md-3">
+        <div class="card leave-stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-primary-soft"><i class="fas fa-calendar-check text-primary"></i></div>
+                    <div>
+                        <div class="stat-label">Tổng phép năm</div>
+                        <div class="stat-value" id="statTotal">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card leave-stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-success-soft"><i class="fas fa-check-circle text-success"></i></div>
+                    <div>
+                        <div class="stat-label">Đã sử dụng</div>
+                        <div class="stat-value" id="statUsed">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card leave-stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-warning-soft"><i class="fas fa-hourglass-half text-warning"></i></div>
+                    <div>
+                        <div class="stat-label">Còn lại</div>
+                        <div class="stat-value" id="statRemaining">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card leave-stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-danger-soft"><i class="fas fa-clock text-danger"></i></div>
+                    <div>
+                        <div class="stat-label">Chờ duyệt</div>
+                        <div class="stat-value" id="statPending">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="myRequestsTable">
+                <thead>
+                    <tr>
+                        <th>Loại nghỉ</th>
+                        <th>Từ ngày</th>
+                        <th>Đến ngày</th>
+                        <th>Số ngày</th>
+                        <th>Trạng thái</th>
+                        <th>Người duyệt</th>
+                        <th>Ngày tạo</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="myRequestsBody">
+                    <tr><td colspan="8" class="text-center py-5 text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Đang tải dữ liệu...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal tạo đơn (embed form) -->
+<div class="modal fade" id="createLeaveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Tạo đơn xin nghỉ phép</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="createModalBody">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin text-primary me-2"></i>Đang tải form...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal chi tiết đơn -->
+<div class="modal fade" id="detailLeaveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Chi tiết đơn nghỉ phép</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailModalBody">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin text-primary me-2"></i>Đang tải...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/leave.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        Leave.MyRequests.init();
+    });
+</script>
+{% endblock %}

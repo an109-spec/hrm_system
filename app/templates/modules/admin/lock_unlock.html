@@ -1,0 +1,215 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Khóa / Mở khóa tài khoản – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_1.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h4 class="page-title mb-1">Quản lý khóa tài khoản</h4>
+            <p class="page-subtitle mb-0">Khóa hoặc mở khóa tài khoản nhân viên trong hệ thống</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="btnRefresh">
+                <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Stats row -->
+<div class="row g-3 mb-4" id="statsRow">
+    <div class="col-6 col-md-3">
+        <div class="stat-card stat-card--total">
+            <div class="stat-label">Tổng tài khoản</div>
+            <div class="stat-value" id="statTotal">–</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card stat-card--active">
+            <div class="stat-label">Đang hoạt động</div>
+            <div class="stat-value" id="statActive">–</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card stat-card--locked">
+            <div class="stat-label">Đang bị khóa</div>
+            <div class="stat-value" id="statLocked">–</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card stat-card--pending">
+            <div class="stat-label">Chờ kích hoạt</div>
+            <div class="stat-value" id="statPending">–</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter & Search -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label form-label-sm">Tìm kiếm</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control"
+                           placeholder="Tên, email, username…">
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label form-label-sm">Trạng thái</label>
+                <select id="filterStatus" class="form-select form-select-sm">
+                    <option value="">Tất cả</option>
+                    <option value="active">Đang hoạt động</option>
+                    <option value="locked">Đang bị khóa</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label form-label-sm">Vai trò</label>
+                <select id="filterRole" class="form-select form-select-sm">
+                    <option value="">Tất cả</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-2">
+                <button class="btn btn-primary btn-sm w-100" id="btnFilter">
+                    <i class="bi bi-funnel me-1"></i>Lọc
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" id="btnClearFilter" title="Xóa bộ lọc">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="usersTable">
+                <thead>
+                    <tr>
+                        <th style="width:48px">#</th>
+                        <th>Nhân viên</th>
+                        <th>Tài khoản</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th>Lý do khóa</th>
+                        <th style="width:140px" class="text-center">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Đang tải dữ liệu…
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Lock -->
+<div class="modal fade" id="modalLock" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <div class="modal-icon modal-icon--danger">
+                    <i class="bi bi-lock-fill"></i>
+                </div>
+            </div>
+            <div class="modal-body text-center pt-2">
+                <h5 class="fw-semibold mb-1">Khóa tài khoản</h5>
+                <p class="text-muted mb-3">
+                    Bạn sắp khóa tài khoản của <strong id="lockUserName">–</strong>.
+                    Người dùng sẽ không thể đăng nhập cho đến khi được mở khóa.
+                </p>
+                <div class="text-start">
+                    <label class="form-label">Lý do khóa <span class="text-muted">(tùy chọn)</span></label>
+                    <textarea id="lockReason" class="form-control" rows="2"
+                              placeholder="VD: Vi phạm nội quy, nghỉ việc…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0 justify-content-center gap-2">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-danger" id="btnConfirmLock">
+                    <i class="bi bi-lock me-1"></i>Khóa tài khoản
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Unlock -->
+<div class="modal fade" id="modalUnlock" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <div class="modal-icon modal-icon--success">
+                    <i class="bi bi-unlock-fill"></i>
+                </div>
+            </div>
+            <div class="modal-body text-center pt-2">
+                <h5 class="fw-semibold mb-1">Mở khóa tài khoản</h5>
+                <p class="text-muted mb-0">
+                    Bạn sắp mở khóa tài khoản của <strong id="unlockUserName">–</strong>.
+                    Người dùng sẽ có thể đăng nhập trở lại ngay lập tức.
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0 justify-content-center gap-2">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-success" id="btnConfirmUnlock">
+                    <i class="bi bi-unlock me-1"></i>Mở khóa
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Reset Password -->
+<div class="modal fade" id="modalReset" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-key me-2"></i>Đặt lại mật khẩu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Đặt mật khẩu mới cho <strong id="resetUserName">–</strong>.
+                    Trạng thái khóa (nếu có) sẽ được gỡ đồng thời.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Mật khẩu mới <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="password" id="newPassword" class="form-control"
+                               placeholder="Tối thiểu 8 ký tự">
+                        <button class="btn btn-outline-secondary" type="button" id="togglePwd">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Tối thiểu 8 ký tự.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-warning" id="btnConfirmReset">
+                    <i class="bi bi-key me-1"></i>Đặt lại mật khẩu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="{{ url_for('static', filename='js/modules/admin/lock_unlock.js') }}"></script>
+{% endblock %}

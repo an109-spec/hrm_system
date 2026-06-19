@@ -1,0 +1,221 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Phiếu Lương — HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="fas fa-file-invoice-dollar me-2 text-primary"></i>Chi Tiết Phiếu Lương
+        </h4>
+        <small class="text-muted">Xem chi tiết thu nhập và các khoản khấu trừ</small>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+            <i class="fas fa-print me-1"></i>In phiếu
+        </button>
+        <button class="btn btn-outline-danger btn-sm" id="btnOpenComplaint" style="display:none">
+            <i class="fas fa-exclamation-circle me-1"></i>Gửi khiếu nại
+        </button>
+        <a href="{{ url_for('payroll.get_my_payroll_history') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Quay lại
+        </a>
+    </div>
+</div>
+
+<!-- Loading state -->
+<div id="slipLoading" class="text-center py-5">
+    <i class="fas fa-spinner fa-spin fa-2x text-primary mb-3"></i>
+    <p class="text-muted">Đang tải phiếu lương...</p>
+</div>
+
+<!-- Salary Slip -->
+<div class="salary-slip" id="salarySlip" style="display:none">
+    <!-- Header -->
+    <div class="salary-slip-header">
+        <div class="row align-items-center">
+            <div class="col-8">
+                <div class="salary-slip-title">PHIEU LUONG / PAYSLIP</div>
+                <div class="text-muted mt-1" id="slipPeriod"></div>
+            </div>
+            <div class="col-4 text-end">
+                <div class="fw-bold text-uppercase" style="font-size:.85rem; color:#6b7280">HRM System</div>
+                <span class="badge mt-1" id="slipStatusBadge"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employee Info -->
+    <div class="row mb-4">
+        <div class="col-6">
+            <div class="salary-section-title">Thong tin nhan vien</div>
+            <table class="table table-sm table-borderless mb-0">
+                <tr>
+                    <td class="text-muted pe-3" style="width:140px">Ho va ten:</td>
+                    <td class="fw-semibold" id="empName">--</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Nguoi phu thuoc:</td>
+                    <td id="empDependents">--</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Ngay cong TC:</td>
+                    <td id="empStdDays">--</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Ngay cong TT:</td>
+                    <td id="empActDays">--</td>
+                </tr>
+            </table>
+        </div>
+        <div class="col-6">
+            <div class="salary-section-title">Thong tin ky luong</div>
+            <table class="table table-sm table-borderless mb-0">
+                <tr>
+                    <td class="text-muted pe-3" style="width:140px">Ky luong:</td>
+                    <td class="fw-semibold" id="slipPeriod2">--</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Trang thai:</td>
+                    <td id="slipStatusText">--</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Ghi chu:</td>
+                    <td id="slipNote" class="text-muted fst-italic">--</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Earnings -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="salary-section-title">Cac khoan thu nhap (+)</div>
+            <div class="salary-row">
+                <span class="label">Luong co ban</span>
+                <span class="value text-success" id="slipBasic">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Phu cap an trua</span>
+                <span class="value text-success" id="slipLunch">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Phu cap trach nhiem</span>
+                <span class="value text-success" id="slipResp">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Tang ca</span>
+                <span class="value text-success" id="slipOT">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Thuong</span>
+                <span class="value text-success" id="slipBonus">--</span>
+            </div>
+            <div class="salary-row fw-bold">
+                <span class="label fw-bold">Tong thu nhap</span>
+                <span class="value text-success" id="slipGross">--</span>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="salary-section-title">Cac khoan khau tru (-)</div>
+            <div class="salary-row">
+                <span class="label">Bao hiem xa hoi, y te, TN</span>
+                <span class="value text-danger" id="slipInsurance">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Giam tru gia canh ca nhan</span>
+                <span class="value text-secondary" id="slipPersonalDed">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Giam tru nguoi phu thuoc</span>
+                <span class="value text-secondary" id="slipFamilyDed">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Thue TNCN</span>
+                <span class="value text-danger" id="slipTax">--</span>
+            </div>
+            <div class="salary-row">
+                <span class="label">Tru khat (di muon)</span>
+                <span class="value text-danger" id="slipDeduction">--</span>
+            </div>
+            <div class="salary-row fw-bold">
+                <span class="label fw-bold">Tong khau tru</span>
+                <span class="value text-danger" id="slipTotalDed">--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Net Salary -->
+    <div class="salary-total-row d-flex justify-content-between align-items-center mt-3">
+        <span class="label">THUC LINH (NET SALARY)</span>
+        <span class="value" id="slipNet">--</span>
+    </div>
+
+    <!-- Complaint Section -->
+    <div id="complaintSection" class="mt-4 p-3 rounded" style="background:#fff3cd; display:none">
+        <div class="fw-bold text-warning-emphasis mb-1">
+            <i class="fas fa-exclamation-triangle me-1"></i>Co khieu nai dang xu ly
+        </div>
+        <div class="small text-muted" id="complaintInfo">--</div>
+    </div>
+</div>
+
+<!-- Complaint Modal -->
+<div class="modal fade" id="complaintModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-circle me-2 text-danger"></i>Gui Khieu Nai Luong
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="complaintForm" enctype="multipart/form-data">
+                    <input type="hidden" id="complaintSalaryId" name="salary_id">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Loai khieu nai <span class="text-danger">*</span></label>
+                        <select name="issue_type" class="form-select" required>
+                            <option value="">-- Chon loai --</option>
+                            <option value="missing_hours">Thieu gio cong</option>
+                            <option value="wrong_basic">Sai luong co ban</option>
+                            <option value="wrong_allowance">Sai phu cap</option>
+                            <option value="wrong_insurance">Sai bao hiem</option>
+                            <option value="wrong_tax">Sai thue TNCN</option>
+                            <option value="other">Ly do khac</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mo ta chi tiet <span class="text-danger">*</span></label>
+                        <textarea name="description" class="form-control" rows="5"
+                            placeholder="Neu ro van de ban gap phai..." required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">File dinh kem (neu co)</label>
+                        <input type="file" name="attachments" class="form-control" multiple
+                            accept=".pdf,.jpg,.jpeg,.png,.xlsx,.docx">
+                        <div class="form-text">Cho phep nhieu file. Max 5MB/file.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button>
+                <button type="button" class="btn btn-danger" id="btnSubmitComplaint">
+                    <i class="fas fa-paper-plane me-1"></i>Gui khieu nai
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/salary_slip.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,247 @@
+/* ============================================================
+   attendance.css — Styles riêng cho module chấm công
+   Kế thừa từ main.css / forms.css / tables.css
+   ============================================================ */
+
+/* ── Variables ─────────────────────────────────────────────── */
+:root {
+    --att-primary:   #0d6efd;
+    --att-success:   #198754;
+    --att-warning:   #ffc107;
+    --att-danger:    #dc3545;
+    --att-info:      #0dcaf0;
+    --att-secondary: #6c757d;
+    --att-light:     #f8f9fa;
+    --att-dark:      #1f2937;
+    --att-radius:    12px;
+    --att-shadow:    0 4px 16px rgba(0,0,0,.08);
+}
+
+/* ── Status Badge ───────────────────────────────────────────── */
+.att-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.att-badge.working      { background: #d1fae5; color: #065f46; }
+.att-badge.completed    { background: #dbeafe; color: #1e40af; }
+.att-badge.absent       { background: #fee2e2; color: #991b1b; }
+.att-badge.leave        { background: #fef3c7; color: #92400e; }
+.att-badge.holiday      { background: #ede9fe; color: #5b21b6; }
+.att-badge.weekend      { background: #f3f4f6; color: #374151; }
+.att-badge.overtime     { background: #fce7f3; color: #9d174d; }
+.att-badge.pending      { background: #fff7ed; color: #9a3412; }
+.att-badge.not-started  { background: #f1f5f9; color: #475569; }
+
+/* ── Checkin Widget Card ────────────────────────────────────── */
+.att-widget {
+    background: #fff;
+    border-radius: var(--att-radius);
+    box-shadow: var(--att-shadow);
+    padding: 28px;
+    text-align: center;
+    transition: box-shadow .2s;
+}
+.att-widget:hover { box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+
+.att-widget .att-clock {
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--att-dark);
+    letter-spacing: .03em;
+    font-family: 'Courier New', monospace;
+}
+
+.att-widget .att-date-label {
+    color: var(--att-secondary);
+    font-size: .9rem;
+    margin-bottom: 20px;
+}
+
+.att-action-btn {
+    min-width: 220px;
+    padding: 12px 28px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.att-action-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,.15);
+}
+.att-action-btn:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+.att-action-btn.btn-checkin  { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
+.att-action-btn.btn-checkout { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+.att-action-btn.btn-ot       { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; }
+.att-action-btn.btn-neutral  { background: linear-gradient(135deg, #6b7280, #4b5563); color: #fff; }
+
+/* ── Summary Cards ──────────────────────────────────────────── */
+.att-stat-card {
+    background: #fff;
+    border-radius: var(--att-radius);
+    box-shadow: var(--att-shadow);
+    padding: 20px 24px;
+    border-left: 4px solid transparent;
+}
+.att-stat-card.primary { border-color: var(--att-primary); }
+.att-stat-card.success { border-color: var(--att-success); }
+.att-stat-card.warning { border-color: var(--att-warning); }
+.att-stat-card.danger  { border-color: var(--att-danger);  }
+
+.att-stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.att-stat-card .stat-label {
+    color: var(--att-secondary);
+    font-size: .82rem;
+    margin-top: 4px;
+}
+
+/* ── Timeline / History Row ─────────────────────────────────── */
+.att-timeline-item {
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background .15s;
+}
+.att-timeline-item:last-child { border-bottom: none; }
+.att-timeline-item:hover { background: #f8fafc; }
+
+.att-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.att-dot.green  { background: var(--att-success); }
+.att-dot.blue   { background: var(--att-primary); }
+.att-dot.orange { background: var(--att-warning); }
+.att-dot.red    { background: var(--att-danger);  }
+.att-dot.gray   { background: var(--att-secondary); }
+.att-dot.purple { background: #7c3aed; }
+
+/* ── QR Scanner ─────────────────────────────────────────────── */
+.qr-container {
+    background: #000;
+    border-radius: var(--att-radius);
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 1;
+    max-width: 380px;
+    margin: 0 auto;
+}
+.qr-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.qr-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.qr-frame {
+    width: 60%;
+    height: 60%;
+    border: 3px solid #00ff88;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.45);
+    animation: qr-scan 2s linear infinite;
+}
+@keyframes qr-scan {
+    0%,100% { border-color: #00ff88; }
+    50%      { border-color: #00d4ff; }
+}
+
+/* ── OT Approval Cards ──────────────────────────────────────── */
+.ot-request-card {
+    background: #fff;
+    border-radius: var(--att-radius);
+    box-shadow: var(--att-shadow);
+    padding: 20px;
+    border: 1px solid #e5e7eb;
+    transition: border-color .2s, box-shadow .2s;
+}
+.ot-request-card:hover {
+    border-color: var(--att-primary);
+    box-shadow: 0 6px 20px rgba(13,110,253,.1);
+}
+.ot-request-card .ot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+
+/* ── Filter Bar ─────────────────────────────────────────────── */
+.att-filter-bar {
+    background: #fff;
+    border-radius: var(--att-radius);
+    box-shadow: var(--att-shadow);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+/* ── Table Enhancements ─────────────────────────────────────── */
+.att-table th {
+    background: #f0f4ff;
+    font-size: .82rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #374151;
+    border: none;
+}
+.att-table td { vertical-align: middle; font-size: .9rem; }
+.att-table .check-time {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #1d4ed8;
+}
+.att-table .no-data {
+    color: var(--att-secondary);
+    font-style: italic;
+}
+
+/* ── Loading Spinner ────────────────────────────────────────── */
+.att-spinner-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .att-widget .att-clock { font-size: 2rem; }
+    .att-action-btn        { min-width: 160px; font-size: .9rem; }
+    .att-filter-bar        { flex-direction: column; }
+    .att-timeline-item     { grid-template-columns: 70px 1fr; }
+}

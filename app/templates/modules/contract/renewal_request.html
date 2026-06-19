@@ -1,0 +1,193 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Yêu cầu Gia hạn Hợp đồng – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .contract-info-card {
+        border-radius: 14px;
+        border: 2px solid #e0f2fe;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    }
+    .contract-info-card .contract-code {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #0c4a6e;
+    }
+    .info-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 12px; border-radius: 20px;
+        background: white; border: 1px solid #bae6fd;
+        font-size: .8rem; font-weight: 500; color: #0369a1;
+    }
+    .form-card {
+        border-radius: 14px;
+        border: none;
+        box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    }
+    .month-btn {
+        width: 52px; height: 52px;
+        border-radius: 10px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .15s;
+        display: flex; align-items: center; justify-content: center;
+        flex-direction: column;
+        font-size: .85rem;
+    }
+    .month-btn:hover { border-color: #3b82f6; color: #1d4ed8; background: #eff6ff; }
+    .month-btn.selected { border-color: #3b82f6; background: #3b82f6; color: white; }
+    .month-btn .sub { font-size: .65rem; font-weight: 400; opacity: .75; }
+    .char-counter { font-size: .75rem; color: #6b7280; }
+    .status-badge-active { background: #d1fae5; color: #065f46; border-radius: 20px; padding: 3px 10px; font-size: .75rem; font-weight: 600; }
+    .status-badge-expiring { background: #fef3c7; color: #92400e; border-radius: 20px; padding: 3px 10px; font-size: .75rem; font-weight: 600; }
+    .status-badge-expired { background: #fee2e2; color: #991b1b; border-radius: 20px; padding: 3px 10px; font-size: .75rem; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{{ url_for('contract.manager_get_contracts') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+        <h4 class="fw-bold mb-0"><i class="fas fa-paper-plane text-warning me-2"></i>Yêu cầu Gia hạn Hợp đồng</h4>
+        <p class="text-muted mb-0 small">Gửi đề xuất gia hạn đến bộ phận Nhân sự (HR) để phê duyệt</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <!-- Contract Info (loaded from API) -->
+        <div id="contractInfoLoading" class="text-center py-4 text-muted">
+            <i class="fas fa-spinner fa-spin"></i> Đang tải thông tin hợp đồng...
+        </div>
+
+        <div id="contractInfoCard" class="contract-info-card p-4 mb-4" style="display:none">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <p class="text-muted small mb-1">Hợp đồng cần gia hạn</p>
+                    <div class="contract-code" id="ciCode">–</div>
+                </div>
+                <span id="ciStatus" class="status-badge-active">–</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <span class="info-pill"><i class="fas fa-user"></i><span id="ciName">–</span></span>
+                <span class="info-pill"><i class="fas fa-calendar-alt"></i> Bắt đầu: <span id="ciStart">–</span></span>
+                <span class="info-pill"><i class="fas fa-calendar-times"></i> Kết thúc: <span id="ciEnd">–</span></span>
+                <span class="info-pill" id="ciDaysLeftPill"><i class="fas fa-hourglass-half"></i> <span id="ciDays">–</span></span>
+            </div>
+        </div>
+
+        <!-- Renewal Form -->
+        <div class="form-card card p-4 mb-4">
+            <p style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:1rem">
+                <i class="fas fa-calendar-plus me-1"></i>Thời gian đề xuất gia hạn
+            </p>
+
+            <label class="form-label fw-semibold mb-2">Số tháng gia hạn <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button class="month-btn" data-months="3">3<span class="sub">tháng</span></button>
+                <button class="month-btn selected" data-months="6">6<span class="sub">tháng</span></button>
+                <button class="month-btn" data-months="9">9<span class="sub">tháng</span></button>
+                <button class="month-btn" data-months="12">12<span class="sub">tháng</span></button>
+                <button class="month-btn" data-months="18">18<span class="sub">tháng</span></button>
+                <button class="month-btn" data-months="24">24<span class="sub">tháng</span></button>
+            </div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="text-muted small">Hoặc nhập tùy chỉnh:</span>
+                <input type="number" id="customMonths" class="form-control form-control-sm" 
+                       style="width:90px" min="1" max="60" placeholder="Số tháng">
+            </div>
+            <input type="hidden" id="selectedMonths" value="6">
+        </div>
+
+        <div class="form-card card p-4 mb-4">
+            <p style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:1rem">
+                <i class="fas fa-comment-alt me-1"></i>Nội dung đề xuất
+            </p>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Lý do gia hạn <span class="text-danger">*</span></label>
+                <textarea id="reason" class="form-control" rows="4" maxlength="500"
+                    placeholder="Mô tả lý do cần gia hạn hợp đồng. Ví dụ: Nhân viên có hiệu suất tốt, dự án đang triển khai cần nhân lực..."></textarea>
+                <div class="d-flex justify-content-end mt-1">
+                    <span class="char-counter"><span id="reasonCount">0</span>/500</span>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-semibold">Ghi chú chuyên môn</label>
+                <textarea id="professionalNote" class="form-control" rows="3" maxlength="300"
+                    placeholder="Đánh giá chuyên môn, kỹ năng đặc biệt, đóng góp nổi bật... (tùy chọn)"></textarea>
+                <div class="d-flex justify-content-end mt-1">
+                    <span class="char-counter"><span id="noteCount">0</span>/300</span>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{{ url_for('contract.manager_get_contracts') }}" class="btn btn-outline-secondary">
+                    Hủy
+                </a>
+                <button type="button" class="btn btn-warning px-4" id="btnSubmitRenewal">
+                    <i class="fas fa-paper-plane me-1"></i>Gửi yêu cầu gia hạn
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <div class="form-card card p-4 mb-3 sticky-top" style="top:80px">
+            <p style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:1rem">
+                <i class="fas fa-info-circle me-1"></i>Quy trình phê duyệt
+            </p>
+            <div class="d-flex gap-3 mb-3">
+                <div class="d-flex flex-column align-items-center">
+                    <div style="width:32px;height:32px;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">1</div>
+                    <div style="width:2px;flex:1;background:#e5e7eb;margin:4px 0"></div>
+                </div>
+                <div class="pb-3">
+                    <div class="fw-semibold small">Manager gửi yêu cầu</div>
+                    <div class="text-muted" style="font-size:.78rem">Điền thông tin và gửi lên HR</div>
+                </div>
+            </div>
+            <div class="d-flex gap-3 mb-3">
+                <div class="d-flex flex-column align-items-center">
+                    <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;color:#6b7280;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">2</div>
+                    <div style="width:2px;flex:1;background:#e5e7eb;margin:4px 0"></div>
+                </div>
+                <div class="pb-3">
+                    <div class="fw-semibold small text-muted">HR xem xét</div>
+                    <div class="text-muted" style="font-size:.78rem">Nhân sự phân tích và quyết định</div>
+                </div>
+            </div>
+            <div class="d-flex gap-3">
+                <div>
+                    <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;color:#6b7280;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">3</div>
+                </div>
+                <div>
+                    <div class="fw-semibold small text-muted">Thông báo kết quả</div>
+                    <div class="text-muted" style="font-size:.78rem">Manager và nhân viên nhận thông báo</div>
+                </div>
+            </div>
+
+            <hr class="my-3">
+            <div class="alert alert-info p-2 small mb-0">
+                <i class="fas fa-lightbulb me-1"></i>
+                Yêu cầu sẽ được HR xử lý trong vòng <strong>1–3 ngày làm việc</strong>.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+<script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/contract/Renewal_request.js') }}"></script>
+{% endblock %}

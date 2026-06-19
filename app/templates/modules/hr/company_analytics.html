@@ -1,0 +1,138 @@
+{% extends 'layouts/main_layout.html' %}
+
+{% block title %}Phân tích tổng quan công ty – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/hr.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="hr-page-header mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h4 class="hr-page-title mb-1">Phân tích tổng quan công ty</h4>
+            <p class="hr-page-subtitle mb-0">Nhìn toàn cảnh lực lượng lao động theo thời gian thực</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm hr-period-select" id="analyticsPeriod" style="width:160px">
+                <option value="this_month">Tháng này</option>
+                <option value="last_month">Tháng trước</option>
+                <option value="this_quarter">Quý này</option>
+                <option value="this_year" selected>Năm nay</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary" id="btnExportAnalytics">
+                <i class="bi bi-download me-1"></i>Xuất báo cáo
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4" id="kpiCards">
+    <div class="col-sm-6 col-xl-3">
+        <div class="hr-kpi-card hr-kpi-primary">
+            <div class="hr-kpi-icon"><i class="bi bi-people-fill"></i></div>
+            <div class="hr-kpi-body">
+                <div class="hr-kpi-value" id="kpiTotal">–</div>
+                <div class="hr-kpi-label">Tổng nhân viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hr-kpi-card hr-kpi-success">
+            <div class="hr-kpi-icon"><i class="bi bi-person-check-fill"></i></div>
+            <div class="hr-kpi-body">
+                <div class="hr-kpi-value" id="kpiActive">–</div>
+                <div class="hr-kpi-label">Đang làm việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hr-kpi-card hr-kpi-warning">
+            <div class="hr-kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+            <div class="hr-kpi-body">
+                <div class="hr-kpi-value" id="kpiProbation">–</div>
+                <div class="hr-kpi-label">Thử việc</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hr-kpi-card hr-kpi-danger">
+            <div class="hr-kpi-icon"><i class="bi bi-calendar-x-fill"></i></div>
+            <div class="hr-kpi-body">
+                <div class="hr-kpi-value" id="kpiExpiring">–</div>
+                <div class="hr-kpi-label">HĐ hết hạn &lt; 30 ngày</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-3 mb-4">
+    <!-- Dept breakdown -->
+    <div class="col-lg-7">
+        <div class="card hr-chart-card h-100">
+            <div class="card-header bg-transparent border-0 pb-0 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold">Phân bố theo phòng ban</h6>
+                <span class="badge bg-light text-secondary" id="deptTotalBadge">0 phòng ban</span>
+            </div>
+            <div class="card-body">
+                <div class="hr-chart-wrap">
+                    <canvas id="deptChart"></canvas>
+                </div>
+                <div id="deptLegend" class="hr-legend mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Position breakdown -->
+    <div class="col-lg-5">
+        <div class="card hr-chart-card h-100">
+            <div class="card-header bg-transparent border-0 pb-0 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold">Phân bố theo chức danh</h6>
+                <span class="badge bg-light text-secondary" id="posTotalBadge">0 chức danh</span>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <div class="hr-donut-wrap">
+                    <canvas id="posChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Department detail table -->
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-transparent border-0 pb-0 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold">Chi tiết theo phòng ban</h6>
+                <input type="search" class="form-control form-control-sm" id="deptTableSearch"
+                       placeholder="Tìm phòng ban…" style="max-width:220px">
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="deptTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Phòng ban</th>
+                                <th class="text-center">Số nhân viên</th>
+                                <th>Tỉ trọng</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptTableBody">
+                            <tr><td colspan="4" class="text-center text-muted py-4">Đang tải…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/modules/hr/company_analytics.js') }}"></script>
+{% endblock %}

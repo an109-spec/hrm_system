@@ -1,0 +1,178 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Hồ sơ cá nhân – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  /* ── Avatar card ── */
+  .avatar-card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,.07); }
+  .avatar-wrap { position: relative; width: 110px; height: 110px; margin: 0 auto; }
+  .avatar-wrap img { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .avatar-badge { position: absolute; bottom: 4px; right: 4px; background: #3b82f6; color: #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer; border: 2px solid #fff; }
+  .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: .78rem; font-weight: 600; letter-spacing: .4px; }
+  .status-active   { background: #dcfce7; color: #16a34a; }
+  .status-inactive { background: #fee2e2; color: #dc2626; }
+  .status-probation{ background: #fef9c3; color: #ca8a04; }
+
+  /* ── Info grid ── */
+  .info-section { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.05); padding: 24px; margin-bottom: 20px; }
+  .info-section h6 { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 14px; font-weight: 700; }
+  .info-row { display: flex; gap: 8px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; align-items: flex-start; }
+  .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .info-label { min-width: 160px; font-size: .83rem; color: #64748b; font-weight: 500; }
+  .info-value { font-size: .88rem; color: #1e293b; font-weight: 500; flex: 1; }
+
+  /* ── Quick action pills ── */
+  .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .action-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; font-size: .82rem; font-weight: 500; text-decoration: none; transition: all .2s; }
+  .action-pill-blue  { background: #eff6ff; color: #2563eb; } .action-pill-blue:hover  { background: #2563eb; color: #fff; }
+  .action-pill-green { background: #f0fdf4; color: #16a34a; } .action-pill-green:hover { background: #16a34a; color: #fff; }
+  .action-pill-amber { background: #fffbeb; color: #d97706; } .action-pill-amber:hover { background: #d97706; color: #fff; }
+  .action-pill-red   { background: #fef2f2; color: #dc2626; } .action-pill-red:hover   { background: #dc2626; color: #fff; }
+
+  /* ── Dependent mini list ── */
+  .dep-chip { display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; padding: 4px 12px; font-size: .8rem; color: #334155; margin: 3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Hồ sơ cá nhân</h4>
+    <small class="text-muted">Thông tin chi tiết tài khoản và công việc</small>
+  </div>
+  <div class="quick-actions">
+    <a href="{{ url_for('personnel.edit_my_profile') }}" class="action-pill action-pill-blue"><i class="fas fa-pen"></i> Chỉnh sửa</a>
+    <a href="{{ url_for('personnel.change_password_page') }}" class="action-pill action-pill-amber"><i class="fas fa-key"></i> Đổi mật khẩu</a>
+    <a href="{{ url_for('personnel.my_dependents_page') }}" class="action-pill action-pill-green"><i class="fas fa-users"></i> Người phụ thuộc</a>
+    <a href="{{ url_for('personnel.my_activity_history') }}" class="action-pill action-pill-red"><i class="fas fa-history"></i> Lịch sử</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Left: avatar + quick info -->
+  <div class="col-lg-3">
+    <div class="avatar-card card p-4 text-center mb-3">
+      <div class="avatar-wrap mx-auto mb-3">
+        <img src="{{ profile.basic.avatar or url_for('static', filename='img/default_avatar.png') }}"
+             alt="Avatar" id="avatarImg">
+        <span class="avatar-badge" onclick="document.getElementById('avatarInput').click()" title="Thay ảnh">
+          <i class="fas fa-camera"></i>
+        </span>
+        <input type="file" id="avatarInput" accept="image/*" style="display:none"
+               onchange="uploadAvatar(this)">
+      </div>
+      <h6 class="fw-bold mb-1" id="profileFullName">{{ profile.basic.full_name }}</h6>
+      <small class="text-muted d-block mb-2">{{ profile.job.position or '—' }}</small>
+      <span class="status-badge status-{{ profile.job.working_status.value }}">
+        {{ profile.job.working_status.label }}
+      </span>
+    </div>
+
+    <div class="info-section">
+      <h6><i class="fas fa-briefcase me-1"></i>Công việc</h6>
+      <div class="info-row"><span class="info-label">Phòng ban</span><span class="info-value">{{ profile.job.department or '—' }}</span></div>
+      <div class="info-row"><span class="info-label">Quản lý trực tiếp</span><span class="info-value">{{ profile.job.manager or '—' }}</span></div>
+      <div class="info-row"><span class="info-label">Loại hình</span><span class="info-value">{{ profile.job.employment_type.label }}</span></div>
+      <div class="info-row"><span class="info-label">Ngày vào làm</span><span class="info-value">{{ profile.job.hire_date or '—' }}</span></div>
+    </div>
+  </div>
+
+  <!-- Right: detail panels -->
+  <div class="col-lg-9">
+    <!-- Personal -->
+    <div class="info-section">
+      <h6><i class="fas fa-user me-1"></i>Thông tin cá nhân</h6>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="info-row"><span class="info-label">Họ và tên</span><span class="info-value fw-semibold">{{ profile.basic.full_name }}</span></div>
+          <div class="info-row"><span class="info-label">Giới tính</span><span class="info-value">{{ profile.basic.gender.label }}</span></div>
+          <div class="info-row"><span class="info-label">Ngày sinh</span><span class="info-value">{{ profile.basic.dob or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Tuổi</span><span class="info-value">{{ profile.basic.age or '—' }}</span></div>
+        </div>
+        <div class="col-md-6">
+          <div class="info-row"><span class="info-label">Số điện thoại</span><span class="info-value">{{ profile.basic.phone or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Email</span><span class="info-value">{{ profile.basic.email or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Địa chỉ</span><span class="info-value">{{ profile.basic.address or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Số nhà / Đường</span><span class="info-value">{{ profile.basic.address_detail.street or '—' }}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System -->
+    <div class="info-section">
+      <h6><i class="fas fa-cog me-1"></i>Thông tin hệ thống</h6>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="info-row"><span class="info-label">Tên đăng nhập</span><span class="info-value font-monospace">{{ profile.system.username or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Ngày tạo</span><span class="info-value">{{ profile.system.created_at or '—' }}</span></div>
+        </div>
+        <div class="col-md-6">
+          <div class="info-row"><span class="info-label">Cập nhật lần cuối</span><span class="info-value">{{ profile.system.updated_at or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">Chấm công bắt buộc</span>
+            <span class="info-value">
+              {% if profile.job.is_attendance_required %}
+                <span class="text-success"><i class="fas fa-check-circle me-1"></i>Có</span>
+              {% else %}
+                <span class="text-muted"><i class="fas fa-times-circle me-1"></i>Không</span>
+              {% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dependents quick view -->
+    <div class="info-section" id="dependentsQuickView">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0"><i class="fas fa-users me-1"></i>Người phụ thuộc</h6>
+        <a href="{{ url_for('personnel.my_dependents_page') }}" class="btn btn-sm btn-outline-primary">Quản lý</a>
+      </div>
+      <div id="depChipsContainer"><small class="text-muted">Đang tải...</small></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const PROFILE_API = "/personnel/profile/me";
+const DEPENDENT_API = "/personnel/profile/me/dependents";
+const AVATAR_API   = "/personnel/profile/me/avatar";
+
+// Load dependent chips
+fetch(DEPENDENT_API)
+  .then(r => r.json())
+  .then(resp => {
+    const container = document.getElementById("depChipsContainer");
+    const items = resp.data?.items || [];
+    if (!items.length) {
+      container.innerHTML = '<small class="text-muted">Chưa có người phụ thuộc nào được khai báo.</small>';
+      return;
+    }
+    container.innerHTML = items.map(d =>
+      `<span class="dep-chip"><i class="fas fa-user-friends"></i>${d.full_name} <span class="text-muted ms-1">(${d.relationship_label})</span></span>`
+    ).join('');
+  }).catch(() => {
+    document.getElementById("depChipsContainer").innerHTML = '<small class="text-danger">Không thể tải danh sách.</small>';
+  });
+
+// Upload avatar
+function uploadAvatar(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append("avatar", input.files[0]);
+  fetch(AVATAR_API, { method: "POST", body: fd })
+    .then(r => r.json())
+    .then(resp => {
+      if (resp.success) {
+        document.getElementById("avatarImg").src = resp.data?.avatar + "?t=" + Date.now();
+        showNotification("success", resp.swal?.title || "Cập nhật thành công");
+      } else {
+        showNotification("error", resp.swal?.text || "Có lỗi xảy ra");
+      }
+    });
+}
+</script>
+{% endblock %}

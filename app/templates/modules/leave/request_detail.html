@@ -1,0 +1,152 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}Chi tiết đơn nghỉ phép{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/leave.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <a href="{{ url_for('leave.my_requests') }}" class="btn btn-sm btn-outline-secondary mb-2">
+            <i class="fas fa-arrow-left me-1"></i>Quay lại danh sách
+        </a>
+        <h4 class="fw-bold mb-1">Chi tiết đơn nghỉ phép</h4>
+    </div>
+    <div id="detailActions"></div>
+</div>
+
+<!-- Loading skeleton -->
+<div id="detailSkeleton">
+    <div class="card border-0 mb-3">
+        <div class="card-body">
+            <div class="skeleton-line w-25 mb-3"></div>
+            <div class="skeleton-line w-50 mb-2"></div>
+            <div class="skeleton-line w-75"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Detail content -->
+<div id="detailContent" class="d-none">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-4">
+                        <div>
+                            <h5 class="fw-bold mb-1" id="dLeaveType">—</h5>
+                            <span class="text-muted small" id="dCreatedAt">—</span>
+                        </div>
+                        <span id="dStatusBadge" class="badge fs-6 px-3 py-2"></span>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6">
+                            <div class="detail-field">
+                                <div class="detail-label"><i class="fas fa-calendar-day me-1"></i>Từ ngày</div>
+                                <div class="detail-value fw-semibold" id="dFromDate">—</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="detail-field">
+                                <div class="detail-label"><i class="fas fa-calendar-check me-1"></i>Đến ngày</div>
+                                <div class="detail-value fw-semibold" id="dToDate">—</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="detail-field">
+                                <div class="detail-label"><i class="fas fa-sun me-1"></i>Số ngày nghỉ</div>
+                                <div class="detail-value fw-semibold" id="dDays">—</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="detail-field">
+                                <div class="detail-label"><i class="fas fa-coins me-1"></i>Hưởng lương</div>
+                                <div class="detail-value" id="dIsPaid">—</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="detail-label mb-1"><i class="fas fa-comment-alt me-1"></i>Lý do nghỉ</div>
+                        <div class="detail-reason p-3 rounded" id="dReason">—</div>
+                    </div>
+
+                    <div id="dDocumentRow" class="mb-3 d-none">
+                        <div class="detail-label mb-1"><i class="fas fa-paperclip me-1"></i>Tài liệu đính kèm</div>
+                        <a id="dDocumentLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-file-download me-1"></i>Xem tài liệu
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Approver Info -->
+            <div class="card border-0 mb-3">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3 text-muted text-uppercase small">Thông tin duyệt</h6>
+                    <div class="detail-field mb-3">
+                        <div class="detail-label">Người duyệt</div>
+                        <div class="detail-value" id="dApprover">Chưa có</div>
+                    </div>
+                    <div class="detail-field" id="dSubtypeRow">
+                        <div class="detail-label">Loại cụ thể</div>
+                        <div class="detail-value" id="dSubtype">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="card border-0">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3 text-muted text-uppercase small">Lịch sử trạng thái</h6>
+                    <div id="dTimeline">
+                        <div class="timeline-item">
+                            <div class="timeline-dot bg-primary"></div>
+                            <div class="timeline-content">
+                                <div class="fw-semibold small">Đã gửi đơn</div>
+                                <div class="text-muted small" id="dSentAt">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">Xác nhận hủy đơn</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Bạn có chắc muốn hủy đơn nghỉ phép này không? Hành động này không thể hoàn tác.
+            </div>
+            <div class="modal-footer border-0">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Không</button>
+                <button class="btn btn-danger" id="btnConfirmCancel">
+                    <i class="fas fa-times me-1"></i>Hủy đơn
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/modules/leave.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const leaveId = {{ request.view_args.id | tojson }};
+        Leave.RequestDetail.init(leaveId);
+    });
+</script>
+{% endblock %}

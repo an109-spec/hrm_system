@@ -1,0 +1,143 @@
+{% extends 'layouts/main_layout.html' %}
+{% block title %}{{ 'Sửa' if dependent else 'Thêm' }} người phụ thuộc – HRM{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+<style>
+  .dep-form-card { max-width: 580px; margin: 0 auto; background: #fff; border-radius: 16px; box-shadow: 0 2px 14px rgba(0,0,0,.07); padding: 36px; }
+  .dep-form-icon { width: 50px; height: 50px; background: linear-gradient(135deg,#10b981,#059669); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.2rem; margin-bottom: 18px; }
+  .form-label { font-size: .84rem; font-weight: 600; color: #374151; }
+  .required-star { color: #ef4444; }
+  .tip-box { background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 12px 16px; font-size: .82rem; color: #1d4ed8; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set is_edit = dependent is defined and dependent %}
+{% set emp_id  = employee_id if employee_id is defined else None %}
+
+<nav aria-label="breadcrumb" class="mb-3" style="font-size:.82rem">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('personnel.get_my_profile') }}">Hồ sơ</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('personnel.my_dependents_page') }}">Người phụ thuộc</a></li>
+    <li class="breadcrumb-item active">{{ 'Chỉnh sửa' if is_edit else 'Thêm mới' }}</li>
+  </ol>
+</nav>
+
+<div class="dep-form-card">
+  <div class="dep-form-icon"><i class="fas fa-user-plus"></i></div>
+  <h5 class="fw-bold mb-1">{{ 'Chỉnh sửa' if is_edit else 'Thêm' }} người phụ thuộc</h5>
+  <p class="text-muted small mb-4">Thông tin sẽ được dùng để tính giảm trừ gia cảnh thuế TNCN.</p>
+
+  <div class="tip-box mb-4">
+    <i class="fas fa-info-circle me-1"></i>
+    Người phụ thuộc hợp lệ được giảm trừ <strong>4.4 triệu đồng/tháng</strong> theo Luật thuế TNCN hiện hành.
+  </div>
+
+  <form id="depForm" novalidate>
+    <input type="hidden" id="depId" value="{{ dependent.id if is_edit else '' }}">
+
+    <div class="mb-3">
+      <label class="form-label">Họ và tên người phụ thuộc <span class="required-star">*</span></label>
+      <input type="text" class="form-control" id="depName" maxlength="120"
+             placeholder="Nguyễn Thị B" required
+             value="{{ dependent.full_name if is_edit else '' }}">
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <label class="form-label">Ngày sinh <span class="required-star">*</span></label>
+        <input type="date" class="form-control" id="depDob" required
+               value="{{ dependent.dob.isoformat() if is_edit and dependent.dob else '' }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Mối quan hệ <span class="required-star">*</span></label>
+        <select class="form-select" id="depRelationship" required>
+          <option value="">-- Chọn --</option>
+          <option value="spouse"  {{ 'selected' if is_edit and dependent.relationship=='spouse'  }}>Vợ / Chồng</option>
+          <option value="child"   {{ 'selected' if is_edit and dependent.relationship=='child'   }}>Con</option>
+          <option value="parent"  {{ 'selected' if is_edit and dependent.relationship=='parent'  }}>Bố / Mẹ</option>
+          <option value="sibling" {{ 'selected' if is_edit and dependent.relationship=='sibling' }}>Anh / Chị / Em</option>
+          <option value="other"   {{ 'selected' if is_edit and dependent.relationship=='other'   }}>Khác</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="depIsValid"
+               {{ 'checked' if not is_edit or (is_edit and dependent.is_valid) }}>
+        <label class="form-check-label fw-medium" for="depIsValid" style="font-size:.84rem">
+          Hợp lệ — được tính vào giảm trừ gia cảnh
+        </label>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">Ghi chú</label>
+      <textarea class="form-control" id="depNote" rows="3" maxlength="500"
+                placeholder="Ghi chú bổ sung (nếu có)">{{ dependent.note if is_edit and dependent.note else '' }}</textarea>
+      <small class="text-muted">Tối đa 500 ký tự</small>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('personnel.my_dependents_page') }}" class="btn btn-outline-secondary flex-fill">
+        <i class="fas fa-arrow-left me-1"></i>Hủy
+      </a>
+      <button type="submit" class="btn btn-primary flex-fill" id="btnSave">
+        <i class="fas fa-save me-1"></i>{{ 'Lưu thay đổi' if is_edit else 'Thêm mới' }}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const DEP_BASE = "/personnel/profile/me/dependents";
+const depId    = document.getElementById("depId").value;
+const isEdit   = !!depId;
+
+document.getElementById("depForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById("btnSave");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang lưu...';
+
+  const payload = {
+    full_name:    document.getElementById("depName").value.trim(),
+    dob:          document.getElementById("depDob").value,
+    relationship: document.getElementById("depRelationship").value,
+    is_valid:     document.getElementById("depIsValid").checked,
+    note:         document.getElementById("depNote").value.trim(),
+  };
+
+  try {
+    const url    = isEdit ? `${DEP_BASE}/${depId}` : DEP_BASE;
+    const method = isEdit ? "PUT" : "POST";
+    const res    = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    await Swal.fire({
+      icon:  data.swal?.icon  || "error",
+      title: data.swal?.title || "Lỗi",
+      text:  data.swal?.text  || "",
+      timer: data.success ? 1500 : undefined,
+      showConfirmButton: !data.success
+    });
+    if (data.success) window.location.href = "{{ url_for('personnel.my_dependents_page') }}";
+  } catch {
+    Swal.fire("Lỗi", "Không thể kết nối máy chủ.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i>' + (isEdit ? 'Lưu thay đổi' : 'Thêm mới');
+  }
+});
+</script>
+{% endblock %}
