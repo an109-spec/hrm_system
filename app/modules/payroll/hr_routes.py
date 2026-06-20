@@ -503,3 +503,4 @@ def payroll_analytics():
 @role_required(RoleName.HR)
 def get_generate_page():
     return render_template("modules/payroll/generate.html")
+

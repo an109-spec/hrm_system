@@ -25,6 +25,26 @@ const PayrollAPI = (() => {
             headers: { ...defaultHeaders, ...(options.headers || {}) },
             ...options,
         });
+            
+        
+        if (response.status === 204) {
+            return { ok: true, status: 204, data: null };
+        }
+        
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") === -1) {
+            return {
+                ok: false,
+                status: response.status,
+                data: {
+                    swal: {
+                        icon: 'error',
+                        title: 'Lỗi Xác thực',
+                        text: 'Phiên đăng nhập có thể đã hết hạn. Trang sẽ không tự tải lại.'
+                    }
+                }
+            };
+        }
 
         const json = await response.json();
         return { ok: response.ok, status: response.status, data: json };
@@ -215,7 +235,9 @@ const PayrollAPI = (() => {
             body: JSON.stringify({ action, note }),
         });
     }
-
+    async function getDepartments() {
+        return _fetch(`/common/departments`);
+    }
     // ─── PUBLIC ────────────────────────────────────────────────────────────
 
     return {
@@ -250,5 +272,6 @@ const PayrollAPI = (() => {
         updatePolicy,
         setEditLock,
         processPayrollFlow,
+        getDepartments
     };
 })();
