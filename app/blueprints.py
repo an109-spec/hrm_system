@@ -9,6 +9,7 @@ def register_blueprints(app):
     from app.modules.admin        import admin_bp
     from app.modules.attendance   import attendance_bp
     from app.modules.auth         import auth_bp
+    from app.modules.common       import common_bp
     from app.modules.contract     import contract_bp
     from app.modules.history      import history_bp
     from app.modules.hr           import hr_bp
@@ -32,7 +33,8 @@ def register_blueprints(app):
             (payroll_bp, "/payroll"),
             (contract_bp, "/contract"),
             (resignation_bp, "/resignation"),
-            (home_bp, "/")
+            (home_bp, "/"),
+            (common_bp, "/common")
         )
 
     for bp, prefix in BLUEPRINTS:

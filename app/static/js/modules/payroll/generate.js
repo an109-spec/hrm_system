@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Load chính sách lương ────────────────────────────────────────────
     async function _loadPolicyStatus() {
         try {
-            const res = await PayrollAPI.getSalaryPolicy?.();
+            const res = await PayrollAPI.getPolicy?.();
             if (!res?.ok) {
                 if (lockStatusBadge) { lockStatusBadge.textContent = 'Không tải được'; lockStatusBadge.className = 'badge bg-danger ms-2 float-end'; }
                 return;
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnLockPolicy?.addEventListener('click', async () => {
         try {
-            const res = await PayrollAPI.lockSalaryPolicy?.();
+            const res = await PayrollAPI.setEditLock?.();
             if (res?.ok) { showNotification('success', 'Đã khóa cấu hình lương.'); _loadPolicyStatus(); }
             else showNotification('error', res?.data?.swal?.text || 'Khóa thất bại.');
         } catch (_) { showNotification('error', 'Lỗi kết nối.'); }
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnUnlockPolicy?.addEventListener('click', async () => {
         try {
-            const res = await PayrollAPI.unlockSalaryPolicy?.();
+            const res = await PayrollAPI.setEditLock?.();
             if (res?.ok) { showNotification('success', 'Đã mở khóa cấu hình lương.'); _loadPolicyStatus(); }
             else showNotification('error', res?.data?.swal?.text || 'Mở khóa thất bại.');
         } catch (_) { showNotification('error', 'Lỗi kết nối.'); }

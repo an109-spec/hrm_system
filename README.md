@@ -103,6 +103,9 @@ HRM_TOTNGHIEP
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
+│  │  ├─ common
+│  │  │  ├─ routes.py
+│  │  │  └─ __init__.py
 │  │  ├─ contract
 │  │  │  ├─ admin_routes.py
 │  │  │  ├─ admin_service.py
@@ -180,66 +183,66 @@ HRM_TOTNGHIEP
 │  │  │  ├─ admin_1.css
 │  │  │  ├─ attendance.css
 │  │  │  ├─ contract.css
+│  │  │  ├─ forms.css
 │  │  │  ├─ hr.css
+│  │  │  ├─ layouts.css
 │  │  │  ├─ leave.css
+│  │  │  ├─ main.css
 │  │  │  ├─ manager.css
 │  │  │  ├─ notification.css
 │  │  │  ├─ payroll.css
 │  │  │  ├─ resignation.css
-│  │  │  ├─ layouts.css
-│  │  │  ├─ main.css
-│  │  │  ├─ forms.css
 │  │  │  ├─ responsive.css
 │  │  │  └─ tables.css
 │  │  ├─ favicon.ico
 │  │  └─ js
 │  │     ├─ main.js
-│  │     ├─ modules
-│  │     │  ├─ admin
-│  │     │  │  ├─ admin.js
-│  │     │  │  ├─ create_employee.js
-│  │     │  │  ├─ employee_management.js
-│  │     │  │  ├─ lock_unlock.js
-│  │     │  │  ├─ metadata.js
-│  │     │  │  ├─ reset_password.js
-│  │     │  │  ├─ system_setting.js
-│  │     │  │  └─ user_account.js
-│  │     │  ├─ attendance.js
-│  │     │  ├─ auth.js
-│  │     │  ├─ contract
-│  │     │  │  ├─ Contract_api.js
-│  │     │  │  ├─ Contract_create.js
-│  │     │  │  ├─ Contract_detail.js
-│  │     │  │  ├─ Contract_list.js
-│  │     │  │  ├─ Expiration_reminders.js
-│  │     │  │  └─ Renewal_request.js
-│  │     │  ├─ contract.js
-│  │     │  ├─ hr
-│  │     │  │  ├─ company_analytics.js
-│  │     │  │  ├─ reports.js
-│  │     │  │  └─ settings.js
-│  │     │  ├─ leave.js
-│  │     │  ├─ manager
-│  │     │  │  ├─ team.js
-│  │     │  │  ├─ team_analytics.js
-│  │     │  │  └─ team_reports.js
-│  │     │  ├─ notification
-│  │     │  │  ├─ notification.js
-│  │     │  │  └─ notification_detail.js
-│  │     │  ├─ personnel.js
-│  │     │  └─ resignation
-│  │     │     ├─ resignation.js
-│  │     │     └─ resignation_api.js
-│  │     └─ payroll
-│  │        ├─ analytics.js
-│  │        ├─ complaint_form.js
-│  │        ├─ finalize.js
-│  │        ├─ generate.js
-│  │        ├─ manager_approval.js
-│  │        ├─ payroll_api.js
-│  │        ├─ payroll_history.js
-│  │        ├─ reports.js
-│  │        └─ salary_slip.js
+│  │     └─ modules
+│  │        ├─ admin
+│  │        │  ├─ admin.js
+│  │        │  ├─ create_employee.js
+│  │        │  ├─ employee_management.js
+│  │        │  ├─ lock_unlock.js
+│  │        │  ├─ metadata.js
+│  │        │  ├─ reset_password.js
+│  │        │  ├─ system_setting.js
+│  │        │  └─ user_account.js
+│  │        ├─ attendance.js
+│  │        ├─ auth.js
+│  │        ├─ contract
+│  │        │  ├─ Contract_api.js
+│  │        │  ├─ Contract_create.js
+│  │        │  ├─ Contract_detail.js
+│  │        │  ├─ Contract_list.js
+│  │        │  ├─ Expiration_reminders.js
+│  │        │  └─ Renewal_request.js
+│  │        ├─ contract.js
+│  │        ├─ hr
+│  │        │  ├─ company_analytics.js
+│  │        │  ├─ reports.js
+│  │        │  └─ settings.js
+│  │        ├─ leave.js
+│  │        ├─ manager
+│  │        │  ├─ team.js
+│  │        │  ├─ team_analytics.js
+│  │        │  └─ team_reports.js
+│  │        ├─ notification
+│  │        │  ├─ notification.js
+│  │        │  └─ notification_detail.js
+│  │        ├─ payroll
+│  │        │  ├─ analytics.js
+│  │        │  ├─ complaint_form.js
+│  │        │  ├─ finalize.js
+│  │        │  ├─ generate.js
+│  │        │  ├─ manager_approval.js
+│  │        │  ├─ payroll_api.js
+│  │        │  ├─ payroll_history.js
+│  │        │  ├─ reports.js
+│  │        │  └─ salary_slip.js
+│  │        ├─ personnel.js
+│  │        └─ resignation
+│  │           ├─ resignation.js
+│  │           └─ resignation_api.js
 │  ├─ templates
 │  │  ├─ base.html
 │  │  ├─ components

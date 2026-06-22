@@ -77,7 +77,7 @@ def calculate_monthly_payroll():
 # GET /payroll
 # Lấy danh sách bảng lương (có lọc, tìm kiếm)
 # ─────────────────────────────────────────────
-@payroll_bp.route("", methods=["GET"])
+@payroll_bp.route("/", methods=["GET"])
 @auth_required
 @role_required(RoleName.HR, RoleName.ADMIN)
 def get_payroll_list():
@@ -444,7 +444,7 @@ def get_total_payroll_fund():
             "text":    f"role_name không hợp lệ. Các giá trị cho phép: {', '.join(valid_roles)}.",
         }), 400
 
-    # Tham số status: chuỗi "approved,paid" → list ["approved", "paid"]
+    # Tham số staus: chuỗi "approved,paid" → list ["approved", "paid"]
     status_filter = None
     raw_status = request.args.get("status", "").strip()
     if raw_status:
@@ -496,11 +496,10 @@ def get_total_payroll_fund():
 @auth_required
 @role_required(RoleName.HR, RoleName.ADMIN)
 def payroll_analytics():
+    """
+    Render trang Phân tích Quỹ Lương.
+    Đây là trang dashboard cho phép HR và Admin xem các biểu đồ và số liệu
+    tổng hợp về chi phí lương của công ty.
+    """
     return render_template("modules/payroll/analytics.html")
-
-@payroll_bp.route("/generate-ui", methods=["GET"])
-@auth_required
-@role_required(RoleName.HR)
-def get_generate_page():
-    return render_template("modules/payroll/generate.html")
 

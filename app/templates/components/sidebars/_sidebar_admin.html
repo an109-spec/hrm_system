@@ -1,9 +1,25 @@
+<!-- Mục cha có nút mở rộng -->
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('payroll.finalize_page') }}">
-        <i class="fas fa-shield-alt me-2"></i> CHỐT SỔ & DUYỆT LƯƠNG
+    <a class="nav-link d-flex justify-content-between align-items-center" 
+       data-bs-toggle="collapse" 
+       href="#payrollMenu" 
+       role="button" 
+       aria-expanded="false" 
+       aria-controls="payrollMenu">
+        <span><i class="fas fa-wallet me-2"></i> Quản lý Lương</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
+    <!-- Menu con thu gọn -->
+    <div class="collapse" id="payrollMenu">
+        <ul class="nav flex-column ms-3">
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('payroll.finalize_page') }}">
+                <i class="fas fa-shield-alt me-2"></i> CHỐT SỔ & DUYỆT LƯƠNG
+            </a>
+        </li>
+        </ul>
+    </div>
 </li>
-
 
 <li class="nav-item">
     <a class="nav-link" href="{{ url_for('history.get_audit_logs') }}">

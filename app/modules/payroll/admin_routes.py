@@ -280,9 +280,7 @@ def set_salary_config_for_position(position_id: int):
     except Exception as e:
         return jsonify(swal_error(str(e))), HTTPStatus.INTERNAL_SERVER_ERROR
     
-@payroll_bp.route("" \
-"", methods=["GET"])
-@auth_required
+@payroll_bp.route("/admin/finalize", methods=["GET"])
 def finalize_page():
     """
     Hiển thị trang giao diện Chốt sổ & Duyệt bảng lương cho HR/Admin.
