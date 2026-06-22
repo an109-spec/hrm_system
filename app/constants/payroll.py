@@ -2,16 +2,14 @@ from app.constants.common import RoleName
 from decimal import Decimal
 
 class SalaryStatus:
-    # 1. Các hằng số trạng thái
-    DRAFT = "draft"           # Mới tạo, đang soạn thảo
-    PENDING = "pending"       # Chờ duyệt (đã gửi đi)
-    APPROVED = "approved"     # Admin đã duyệt, chờ thanh toán
-    PAID = "paid"             # Đã thanh toán xong
-    REJECTED = "rejected"     # Bị từ chối, cần sửa lại
-    COMPLAINT = "complaint"   # Đang có khiếu nại
-    LOCKED = "locked"         # Đã khóa sổ (Finalized), không thể sửa
+    DRAFT = "draft"
+    PENDING = "pending"
+    APPROVED = "approved"
+    PAID = "paid"
+    REJECTED = "rejected"
+    COMPLAINT = "complaint"
+    LOCKED = "locked"
 
-    # 2. Nhãn hiển thị cho UI
     LABELS = {
         DRAFT: "Nháp",
         PENDING: "Chờ Admin duyệt",
@@ -33,15 +31,9 @@ class SalaryStatus:
 
     @classmethod
     def is_editable(cls, status: str) -> bool:
-        """
-        Dùng cho các hàm Guard: 
-        Trả về True nếu trạng thái cho phép HR/Admin chỉnh sửa bảng lương.
-        """
-        # Chỉ những trạng thái này mới được phép sửa
         return status in {cls.DRAFT, cls.REJECTED, cls.COMPLAINT}
-    
+
 class PayrollIssueType:
-    """Các nhóm danh mục khiếu nại lương từ nhân viên"""
     ATTENDANCE = "attendance_issue"
     OT = "ot_issue"
     ALLOWANCE = "allowance_issue"
@@ -64,9 +56,7 @@ class PayrollIssueType:
     def values(cls) -> set[str]:
         return {cls.ATTENDANCE, cls.OT, cls.ALLOWANCE, cls.TAX, cls.INSURANCE, cls.DEDUCTION, cls.OTHER}
 
-
 class SalaryComplaintStatus:
-    """Trạng thái xử lý đơn khiếu nại của phòng nhân sự"""
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
@@ -82,15 +72,24 @@ class SalaryComplaintStatus:
     @classmethod
     def choices(cls) -> list[tuple[str, str]]:
         return [(key, value) for key, value in cls.LABELS.items()]
-    
+
 class PayrollConfig:
     KEY_PREFIX = "salary.policy"
 
     DEFAULT_POLICY = {
+        "late_penalty_rules": [
+            {"min": 60, "penalty": 0, "label": "Nửa ngày công", "type": "half_day"},
+            {"min": 31, "penalty": 100000, "label": "Phạt 100.000đ", "type": "money"},
+            {"min": 15, "penalty": 50000, "label": "Phạt 50.000đ", "type": "money"},
+            {"min": 1,  "penalty": 20000, "label": "Phạt 20.000đ", "type": "money"},
+        ],        
         "insurance": {
             "social_percent": 8.0,
             "health_percent": 1.5,
             "unemployment_percent": 1.0,
+            "employer_social_percent": 17.0,
+            "employer_health_percent": 3.0,
+            "employer_unemployment_percent": 1.0,
         },
         "tax": {
             "brackets": [
@@ -106,22 +105,29 @@ class PayrollConfig:
             "dependent_per_person": 6_200_000,
         },
         "tax_free_allowances": {
-            "fuel_allowance": 0,
-            "meal_allowance": 0,
+            "meal_allowance": 730000,
+            "fuel_allowance": 500000,
+            "responsibility_allowance": 0,
+            "other_allowance": 0
         },
+        "payroll_flow": [
+            {"status": "draft", "label": "Soạn thảo"},
+            {"status": "pending", "label": "Chờ duyệt"},
+            {"status": "approved", "label": "Đã duyệt"},
+            {"status": "locked", "label": "Đã chốt sổ"},
+            {"status": "paid", "label": "Đã thanh toán"}
+        ],
         "config_edit_locked": False,
     }
 
     @classmethod
     def get_default(cls, key=None):
-        """Hàm lấy cấu hình, nếu key là None trả về toàn bộ"""
         if key:
             return cls.DEFAULT_POLICY.get(key)
         return cls.DEFAULT_POLICY
     
     @classmethod
     def make_key(cls, name: str) -> str:
-        """Tạo khóa chuẩn hóa để truy vấn trong Database"""
         return f"{cls.KEY_PREFIX}.{name}"
 
 class SalarySettings:

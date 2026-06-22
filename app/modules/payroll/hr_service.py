@@ -27,39 +27,52 @@ from .tax_rules import TaxRules
 
 class HR_payroll_service(PersonalPayrollService):
     tax_by_bracket = staticmethod(TaxRules.tax_by_bracket)
+
     @staticmethod
     def sum_allowance(employee_id: int) -> dict:
         rows = EmployeeAllowance.query.filter_by(employee_id=employee_id, status=True, is_deleted=False).all()
         policy = PayrollPolicyService.get_policy().get("tax_free_allowances", {})
-        LIMIT_CONFIG = {
-            "meal": ("meal_allowance", TaxRules.DEFAULT_MEAL_LIMIT),
-            "fuel": ("fuel_allowance", TaxRules.DEFAULT_FUEL_LIMIT)
+        
+        # This maps a keyword in the allowance name (e.g., "ăn trưa") to the key in the policy dict (e.g., "meal_allowance")
+        LIMIT_POLICY_KEYS = {
+            "meal": "meal_allowance",
+            "trưa": "meal_allowance",
+            "fuel": "fuel_allowance",
+            "xăng": "fuel_allowance",
+            "responsibility": "responsibility_allowance",
+            "trách nhiệm": "responsibility_allowance",
         }
+        
         totals = {"total": Decimal("0"), "taxable": Decimal("0"), "tax_free": Decimal("0")}
         for row in rows:
             amount = Decimal(str(row.final_amount or 0))
             totals["total"] += amount
+            
+            # If the allowance type is fundamentally taxable, add it all to taxable amount.
             if row.allowance_type.is_taxable:
                 totals["taxable"] += amount
                 continue
+
+            # For non-taxable types, check if they exceed the policy limit.
             limit = Decimal("0")
             name_lower = row.allowance_type.name.lower()
-            for key, (config_key, default_val) in LIMIT_CONFIG.items():
-                if key in name_lower:
-                    limit = Decimal(str(policy.get(config_key) or default_val))
+            for keyword, policy_key in LIMIT_POLICY_KEYS.items():
+                if keyword in name_lower:
+                    # Get the limit *only* from the policy, default to 0 if not found.
+                    limit = Decimal(str(policy.get(policy_key, 0)))
                     break
+            
             if limit > 0 and amount > limit:
+                # If amount exceeds limit, the excess is taxable.
                 totals["taxable"] += (amount - limit)
                 totals["tax_free"] += limit
             else:
+                # Otherwise, the entire amount is tax-free.
                 totals["tax_free"] += amount
         return totals
 
     @staticmethod
     def calculate_insurance(base_salary_for_ins: Decimal, policy: dict = None) -> dict:
-        """
-        Tính toán bảo hiểm. Nếu không truyền policy
-        """
         if policy is None:
             policy = PayrollConfig.get_default()
         ins_config = policy.get("insurance", {})
@@ -78,11 +91,11 @@ class HR_payroll_service(PersonalPayrollService):
         }
 
     @staticmethod
-    def calculate_attendance_penalty(employee_id: int, month: int, year: int, base_salary: Decimal, standard_days: int) -> dict:
-        """
-        Tính tổng tiền phạt đi muộn/về sớm của nhân viên trong tháng.
-        Trả về: {"total": Decimal, "details": list}
-        """
+    def calculate_attendance_penalty(employee_id: int, month: int, year: int, base_salary: Decimal, standard_days: int, policy: dict) -> dict:
+        rules = policy.get("late_penalty_rules", [])
+        if not rules:
+            return {"total": Decimal("0"), "details": []}
+
         start_date, end_date = get_month_range(month, year)
         attendances = Attendance.query.filter(
             Attendance.employee_id == employee_id,
@@ -91,30 +104,43 @@ class HR_payroll_service(PersonalPayrollService):
             Attendance.late_minutes > 0,
             Attendance.is_deleted.is_(False)
         ).all()
+
         total_penalty = Decimal("0")
         details = []
+        
+        # Sắp xếp rules để đảm bảo duyệt từ lỗi nặng nhất đến nhẹ nhất
+        sorted_rules = sorted(rules, key=lambda x: x.get("min", 0), reverse=True)
+
         for att in attendances:
-            rule = AttendanceConstants.get_late_penalty(att.late_minutes)
+            matched_rule = None
+            for rule in sorted_rules:
+                if att.late_minutes >= rule["min"]:
+                    matched_rule = rule
+                    break
+            
+            if not matched_rule:
+                continue
+
             penalty_amount = Decimal("0")
-            if rule["is_half_day"]:
-                penalty_amount = (base_salary / Decimal(str(standard_days))) * Decimal("0.5")
+            if matched_rule.get("type") == "half_day":
+                if standard_days > 0:
+                    penalty_amount = (base_salary / Decimal(str(standard_days))) * Decimal("0.5")
             else:
-                penalty_amount = Decimal(str(rule["penalty_amount"]))
+                penalty_amount = Decimal(str(matched_rule.get("penalty", 0)))
+
             total_penalty += penalty_amount
+
             if penalty_amount > 0:
                 details.append({
                     "date": str(att.date),
                     "late_minutes": att.late_minutes,
                     "amount": float(penalty_amount),
-                    "reason": rule["message"]
+                    "reason": matched_rule.get("label", "Phạt đi muộn")
                 })
-        return {"total": total_penalty, "details": details}
+        return {"total": total_penalty.quantize(Decimal("1"), rounding=ROUND_HALF_UP), "details": details}
     
     @staticmethod
     def get_total_dependent_deduction(employee_id: int) -> Decimal:
-        """
-        Tính tổng số tiền giảm trừ cho người phụ thuộc của một nhân viên.
-        """
         policy = PayrollPolicyService.get_policy()
         deduction_per_person = Decimal(str(policy.get("deduction", {}).get("dependent_per_person", 4400000)))
         count = PayrollPolicyService._dependent_count(employee_id)
@@ -122,16 +148,6 @@ class HR_payroll_service(PersonalPayrollService):
 
     @staticmethod
     def _compute_salary_employee(employee: Employee, month: int, year: int) -> tuple[Salary, dict]:
-        """
-        Tính lương theo giờ cho nhân viên (role = EMPLOYEE).
-
-        Công thức gross:
-            regular_hours = số ngày công × 8  (từ calculate_regular_work_units)
-            ot_hours      = tổng giờ OT đã nhân hệ số (1.5/2.0/3.0) theo từng loại ngày
-            gross         = (regular_hours + ot_hours) × FIXED_HOURLY_RATE (50.000đ)
-
-        Thực nhận = gross + tổng phụ cấp - bảo hiểm NLĐ - thuế TNCN - phạt đi muộn
-        """
         policy   = PayrollPolicyService.get_policy()
         brackets = policy.get("tax_brackets", [])
         contract = (
@@ -192,7 +208,7 @@ class HR_payroll_service(PersonalPayrollService):
         # ------------------------------------------------------------------ #
         standard_days = policy.get("standard_work_days", WorkConfig.STANDARD_WORKING_DAYS)
         penalty_info  = HR_payroll_service.calculate_attendance_penalty(
-            employee.id, month, year, gross_salary, standard_days
+            employee.id, month, year, gross_salary, standard_days, policy
         )
         total_penalty = penalty_info["total"]
 
@@ -290,11 +306,6 @@ class HR_payroll_service(PersonalPayrollService):
     
     @staticmethod
     def _compute_salary(employee: Employee, month: int, year: int) -> tuple[Salary, dict]:
-        """
-        Tính lương cố định cho HR, Admin, Manager.
-        Lương cơ bản lấy từ SalarySettings.BASE_SALARY_BY_ROLE theo role.
-        Không bắt chấm công, không phạt đi muộn.
-        """
         policy = PayrollPolicyService.get_policy()
         brackets = policy.get("tax_brackets", [])
 
@@ -378,9 +389,6 @@ class HR_payroll_service(PersonalPayrollService):
         }
         return salary_record, breakdown
 
-    ''''
-    tính lương hàng loạt
-    '''
     @staticmethod
     def calculate_monthly_payroll(
         month: int,
@@ -388,10 +396,6 @@ class HR_payroll_service(PersonalPayrollService):
         department_id: int | None = None,
         actor_user_id: int | None = None
     ) -> dict:
-        """
-        Tính lương hàng loạt cho toàn bộ nhân viên (hoặc theo phòng ban).
-        Các bản ghi mới sẽ ở trạng thái DRAFT.
-        """
         # Giả sử bạn có hàm kiểm tra trạng thái khóa từ PayrollPolicyService
         # Nếu đang khóa, không cho phép tính lương mới
         current_lock_status = PayrollPolicyService.get_setting_value("config_edit_locked",ConfigLockStatus.UNLOCKED)
@@ -473,9 +477,6 @@ class HR_payroll_service(PersonalPayrollService):
     ################################################################################
     @staticmethod
     def _attendance_metrics(employee_ids: list, month: int, year: int) -> dict:
-        """
-        Tổng hợp số giờ làm việc (regular_hours, ot_hours) của danh sách nhân viên trong 1 tháng.
-        """
         HOURS_PER_DAY = 8
 
         regular_work_days = HR_payroll_service.get_department_regular_work_days(
@@ -495,9 +496,6 @@ class HR_payroll_service(PersonalPayrollService):
 
     @staticmethod
     def _attendance_status_from_record(record: Attendance | None, has_leave: bool) -> str:
-        """
-        Trạng thái chấm công dựa trên cấu hình hệ thống (WorkConfig) và hằng số (AttendanceConstants).
-        """
         # 1. Trạng thái nghỉ phép
         if has_leave:
             return AttendanceStatus.LEAVE
@@ -541,10 +539,6 @@ class HR_payroll_service(PersonalPayrollService):
     
     @staticmethod
     def _is_attendance_required(employee: Employee) -> bool:
-        """
-        Chỉ nhân viên (Employee) mới bị bắt chấm công.
-        Manager, HR, Admin không cần chấm công.
-        """
         if not employee.user or not employee.user.role:
             return False
         return employee.user.role.name == RoleName.EMPLOYEE
@@ -613,11 +607,6 @@ class HR_payroll_service(PersonalPayrollService):
         year: int | None = None, 
         status: str | None = None
     ) -> list[dict]:
-        """
-        HR truy cập danh sách khiếu nại.
-        - Có thể lọc theo tháng/năm.
-        - Có thể lọc theo trạng thái (vd: IN_PROGRESS để lấy danh sách cần HR xử lý).
-        """
         query = Complaint.query.join(Employee, Complaint.employee_id == Employee.id).filter(
             or_(Complaint.salary_id.isnot(None), Complaint.type.ilike("%salary%"))
         )
@@ -695,9 +684,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
 
     @staticmethod
     def create_complaint_notification(employee_id: int, complaint_id: int, status: str, message: str = ""):
-        """
-        Tạo thông báo gửi tới nhân viên về kết quả khiếu nại.
-        """
         status_label = "đã được giải quyết" if status == SalaryComplaintStatus.RESOLVED else "đã bị từ chối"
         content = f"Khiếu nại #{complaint_id} của bạn {status_label}. {message}".strip()
         notification = Notification(
@@ -710,7 +696,8 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
         db.session.add(notification)
         return notification
 
-    '''Bước 2: Điều tra và Ghi chú
+    '''
+Bước 2: Điều tra và Ghi chú
     Khi HR bắt đầu kiểm tra một khiếu nại (ví dụ: nhân viên khiếu nại thiếu giờ làm), 
     họ sẽ thực hiện kiểm tra dữ liệu thực tế. 
     Hàm này cho phép HR lưu lại các ghi chú điều tra
@@ -742,7 +729,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
 
     @staticmethod
     def hr_complaint_detail(complaint_id: int) -> dict:
-        """Xem chi tiết khiếu nại (Dành cho HR - Xem mọi đơn)"""
         complaint = Complaint.query.filter_by(
             id=complaint_id, 
             is_deleted=False
@@ -849,10 +835,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
 
     @staticmethod
     def get_payroll_detail(salary_id: int) -> dict:
-        """
-        Lấy chi tiết bảng lương bao gồm thông tin nhân viên, 
-        chi tiết tài chính, các điều chỉnh thủ công và lịch sử thao tác.
-        """
         salary = Salary.query.options(
             joinedload(Salary.employee).joinedload(Employee.department),
             joinedload(Salary.employee).joinedload(Employee.position)
@@ -922,10 +904,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
     ################################################################################
     @staticmethod
     def _serialize_payroll(salary: Salary) -> dict:
-        """
-        Chuyển đổi object Salary sang dict để trả về API.
-        Sử dụng trực tiếp các thuộc tính của model và thuộc tính note_data.
-        """
         note_data = salary.note_data 
         metrics = note_data.get("metrics", {})
         breakdown = note_data.get("breakdown", {})
@@ -968,9 +946,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
         
     @staticmethod
     def payroll_audit_history(salary_id: int) -> list[dict]:
-        """
-        Lấy lịch sử thay đổi của phiếu lương.
-        """
         logs = (
             HistoryLog.query
             .options(joinedload(HistoryLog.employee)) 
@@ -1000,35 +975,6 @@ chuyển đổi trạng thái của một khiếu nại từ "Chờ xử lý" (p
         role_name: str | None = None,
         status_filter: list[str] | None = None,  # Lọc theo trạng thái lương (vd: ["approved", "paid"])
     ) -> dict:
-        """
-        Tính tổng quỹ lương (Labor Cost) mà công ty phải chi ra trong một kỳ.
-
-        Chi phí công ty = Gross Salary + Bảo hiểm NSDLĐ đóng (17.5% theo luật VN)
-        - BHXH phần NSDLĐ: 17%
-        - BHYT phần NSDLĐ: 3%
-        - BHTN phần NSDLĐ: 1%
-        => Tổng NSDLĐ: 21% trên lương đóng BH (tính trên gross_salary / base_salary)
-
-        Kết quả trả về:
-        {
-            "period": {...},
-            "summary": {
-                "total_gross":            Tổng lương gộp nhân viên nhận,
-                "total_net":              Tổng lương thực nhận,
-                "total_allowance":        Tổng phụ cấp,
-                "total_pit_tax":          Tổng thuế TNCN (công ty khấu trừ hộ),
-                "total_insurance_employee": Tổng BH phần NLĐ đóng (trừ vào lương NV),
-                "total_insurance_employer": Tổng BH phần NSDLĐ đóng (chi phí thêm của công ty),
-                "total_penalty":          Tổng tiền phạt (thu về),
-                "total_labor_cost":       TỔNG CHI PHÍ NHÂN SỰ THỰC SỰ CỦA CÔNG TY,
-            },
-            "by_period": [...],   # Breakdown theo từng tháng (nếu lọc quý/năm)
-            "by_department": [...],
-            "by_role": [...],
-            "employee_count": số nhân viên,
-            "salary_count":   số phiếu lương được tính,
-        }
-        """
         policy = PayrollPolicyService.get_policy()
         ins_config = policy.get("insurance", {})
 

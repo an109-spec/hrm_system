@@ -2,9 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 
 class TaxRules:
-    DEFAULT_MEAL_LIMIT = 730_000
-    DEFAULT_FUEL_LIMIT = 500_000
-
+    
     @staticmethod
     def tax_by_bracket(taxable_income: Decimal, brackets: list[dict]) -> Decimal:
         """Tính thuế TNCN theo phương pháp lũy tiến từng phần."""
