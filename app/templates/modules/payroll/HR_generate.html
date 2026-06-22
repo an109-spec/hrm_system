@@ -53,10 +53,10 @@
             </div>
         </div>
 
-        <!-- Policy Status -->
+        <!-- Policy Status (read-only view for HR) -->
         <div class="card">
             <div class="card-header bg-white fw-semibold">
-                <i class="fas fa-shield-alt me-2 text-info"></i>Chinh Sach Luong Hien Tai
+                <i class="fas fa-shield-alt me-2 text-info"></i>Trang Thai Chinh Sach Luong
                 <span class="badge bg-info ms-2 float-end" id="lockStatusBadge">Dang tai...</span>
             </div>
             <div class="card-body">
@@ -66,13 +66,9 @@
                     </div>
                 </div>
                 <hr>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-danger flex-fill" id="btnLockPolicy">
-                        <i class="fas fa-lock me-1"></i>Khoa cau hinh
-                    </button>
-                    <button class="btn btn-sm btn-outline-success flex-fill" id="btnUnlockPolicy">
-                        <i class="fas fa-lock-open me-1"></i>Mo khoa
-                    </button>
+                <div class="alert alert-info mb-0 py-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <small>Chi Admin moi co the khoa / mo khoa cau hinh chinh sach luong.</small>
                 </div>
             </div>
         </div>
@@ -187,5 +183,5 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="{{ url_for('static', filename='js/modules/payroll/payroll_api.js') }}"></script>
-<script src="{{ url_for('static', filename='js/modules/payroll/generate.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modules/payroll/hr_generate.js') }}"></script>
 {% endblock %}

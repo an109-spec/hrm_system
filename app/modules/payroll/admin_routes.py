@@ -280,6 +280,15 @@ def set_salary_config_for_position(position_id: int):
     except Exception as e:
         return jsonify(swal_error(str(e))), HTTPStatus.INTERNAL_SERVER_ERROR
     
+@payroll_bp.route("/admin/policy-config", methods=["GET"])
+def admin_policy_page():
+    """
+    Hiển thị trang Cấu Hình Chính Sách Lương cho Admin.
+    Chức năng: xem toàn bộ tham số chính sách, khóa/mở khóa chỉnh sửa.
+    """
+    return render_template("modules/payroll/admin_policy.html")
+
+
 @payroll_bp.route("/admin/finalize", methods=["GET"])
 def finalize_page():
     """

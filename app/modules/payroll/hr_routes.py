@@ -492,6 +492,17 @@ def get_total_payroll_fund():
         "data": result,
     }), 200
 
+@payroll_bp.route("/hr/generate", methods=["GET"])
+@auth_required
+@role_required(RoleName.HR)
+def hr_generate_page():
+    """
+    Hiển thị trang Tạo Bảng Lương cho HR.
+    Chức năng: chạy tính lương hàng loạt, xem danh sách bảng lương, gửi duyệt.
+    """
+    return render_template("modules/payroll/hr_generate.html")
+
+
 @payroll_bp.route("/analytics", methods=["GET"])
 @auth_required
 @role_required(RoleName.HR, RoleName.ADMIN)
@@ -502,4 +513,3 @@ def payroll_analytics():
     tổng hợp về chi phí lương của công ty.
     """
     return render_template("modules/payroll/analytics.html")
-

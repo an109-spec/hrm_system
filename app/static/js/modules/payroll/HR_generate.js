@@ -1,21 +1,17 @@
 /**
- * GENERATE PAYROLL (HR)
- * POST /payroll/calculate
- * HR chạy tính lương hàng loạt theo tháng/năm.
- *
- * Đã sửa:
- *  - Đồng bộ toàn bộ ID với generate.html
- *  - Logic lấy tháng/năm từ <input type="month"> (format YYYY-MM)
- *  - Nút "Chạy tính lương" enable/disable đúng theo confirmCheck + payrollMonth
- *  - Render kết quả đúng với các phần tử trong HTML
+ * HR GENERATE PAYROLL
+ * Chức năng: Tính lương hàng loạt + xem danh sách bảng lương.
+ * Trang: hr_generate.html
+ * API sử dụng: calculatePayroll, getPayrollList, submitPayrollApproval,
+ *              getDepartments, getPolicy (chỉ đọc trạng thái)
  */
 document.addEventListener('DOMContentLoaded', () => {
 
-    // ─── DOM refs (đồng bộ với generate.html) ────────────────────────────
-    const monthInput    = document.getElementById('payrollMonth');      // <input type="month">
-    const deptSelect    = document.getElementById('departmentSelect');  // <select>
-    const generateBtn   = document.getElementById('btnGenerate');       // nút chạy
-    const confirmCheck  = document.getElementById('confirmCheck');      // checkbox xác nhận
+    // ─── DOM refs ─────────────────────────────────────────────────────────
+    const monthInput      = document.getElementById('payrollMonth');
+    const deptSelect      = document.getElementById('departmentSelect');
+    const generateBtn     = document.getElementById('btnGenerate');
+    const confirmCheck    = document.getElementById('confirmCheck');
 
     // Progress
     const progressSection = document.getElementById('progressSection');
@@ -23,31 +19,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressText    = document.getElementById('progressText');
 
     // Result summary
-    const resultSummary  = document.getElementById('resultSummary');
-    const resProcessed   = document.getElementById('resProcessed');
-    const resFailed      = document.getElementById('resFailed');
-    const resTotal       = document.getElementById('resTotal');
+    const resultSummary   = document.getElementById('resultSummary');
+    const resProcessed    = document.getElementById('resProcessed');
+    const resFailed       = document.getElementById('resFailed');
+    const resTotal        = document.getElementById('resTotal');
 
     // Error section
-    const errorSection   = document.getElementById('errorSection');
-    const errorList      = document.getElementById('errorList');
+    const errorSection    = document.getElementById('errorSection');
+    const errorList       = document.getElementById('errorList');
+    const initState       = document.getElementById('initState');
 
-    // Init state (ẩn khi có kết quả)
-    const initState      = document.getElementById('initState');
-
-    // Danh sách bảng lương phía dưới
-    const btnLoadList    = document.getElementById('btnLoadList');
+    // Payroll list
+    const btnLoadList     = document.getElementById('btnLoadList');
     const listStatusFilter = document.getElementById('listStatusFilter');
     const payrollListBody  = document.getElementById('payrollListBody');
 
-    // Policy
+    // Policy status (read-only)
     const lockStatusBadge = document.getElementById('lockStatusBadge');
     const policyInfo      = document.getElementById('policyInfo');
-    const btnLockPolicy   = document.getElementById('btnLockPolicy');
-    const btnUnlockPolicy = document.getElementById('btnUnlockPolicy');
 
     // ─── Init ─────────────────────────────────────────────────────────────
-    // Set giá trị mặc định cho input[type="month"] → format YYYY-MM
     const now = new Date();
     if (monthInput) {
         const yyyy = now.getFullYear();
@@ -55,33 +46,25 @@ document.addEventListener('DOMContentLoaded', () => {
         monthInput.value = `${yyyy}-${mm}`;
     }
 
-    // Tải danh sách phòng ban
     _loadDepartments();
-
-    // Tải chính sách lương
     _loadPolicyStatus();
-
-    // Tải danh sách bảng lương tháng hiện tại
     _loadPayrollList();
 
     // ─── Enable/Disable nút Chạy tính lương ──────────────────────────────
     function _updateGenerateBtn() {
-        const hasMonth   = monthInput && monthInput.value;
-        const isChecked  = confirmCheck && confirmCheck.checked;
+        const hasMonth  = monthInput && monthInput.value;
+        const isChecked = confirmCheck && confirmCheck.checked;
         if (generateBtn) generateBtn.disabled = !(hasMonth && isChecked);
     }
 
     monthInput?.addEventListener('change', _updateGenerateBtn);
     confirmCheck?.addEventListener('change', _updateGenerateBtn);
-
-    // Khởi tạo trạng thái ban đầu
     _updateGenerateBtn();
 
-    // ─── Nút Chạy Tính Lương ─────────────────────────────────────────────
+    // ─── Chạy tính lương ──────────────────────────────────────────────────
     generateBtn?.addEventListener('click', handleGenerate);
 
     async function handleGenerate() {
-        // Lấy tháng/năm từ input[type="month"] (value = "YYYY-MM")
         const [year, month] = _parseMonthInput(monthInput?.value);
         const deptId = deptSelect?.value ? parseInt(deptSelect.value) : null;
 
@@ -90,32 +73,28 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Xác nhận trước khi chạy
-        const confirm = await Swal.fire({
+        const confirmed = await Swal.fire({
             title:   `Tính lương tháng ${String(month).padStart(2,'0')}/${year}?`,
             text:    deptId
                 ? 'Sẽ tính lương cho nhân viên thuộc phòng ban đã chọn.'
                 : 'Sẽ tính lương cho toàn bộ nhân viên. Hệ thống bỏ qua nhân viên đã có bản ghi trong tháng này.',
             icon:    'warning',
-            showCancelButton:  true,
-            confirmButtonText: 'Xác nhận tính lương',
-            cancelButtonText:  'Hủy',
+            showCancelButton:   true,
+            confirmButtonText:  'Xác nhận tính lương',
+            cancelButtonText:   'Hủy',
             confirmButtonColor: '#198754',
         });
 
-        if (!confirm.isConfirmed) return;
+        if (!confirmed.isConfirmed) return;
 
         _setGenerating(true);
         _resetResultUI();
 
         try {
-            const res = await PayrollAPI.calculatePayroll(month, year, deptId);
+            const res  = await PayrollAPI.calculatePayroll(month, year, deptId);
             const data = res.data?.data || {};
             _renderResult(data, res.data?.swal);
-
-            // Tải lại danh sách sau khi tính xong
             _loadPayrollList();
-
         } catch (err) {
             console.error('handleGenerate error:', err);
             showNotification('error', 'Lỗi kết nối máy chủ khi tính lương.');
@@ -124,15 +103,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ─── Load danh sách phòng ban ─────────────────────────────────────────
+    // ─── Load phòng ban ───────────────────────────────────────────────────
     async function _loadDepartments() {
         try {
-            const res = await PayrollAPI.getDepartments?.();
-            if (!res?.ok) return;
+            const res   = await PayrollAPI.getDepartments?.();
+            if (!res?.ok || !deptSelect) return;
             const depts = res.data?.data || [];
-            if (!deptSelect) return;
             depts.forEach(d => {
-                const opt = document.createElement('option');
+                const opt       = document.createElement('option');
                 opt.value       = d.id;
                 opt.textContent = d.name;
                 deptSelect.appendChild(opt);
@@ -140,25 +118,31 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (_) { /* không bắt buộc */ }
     }
 
-    // ─── Load chính sách lương ────────────────────────────────────────────
+    // ─── Load trạng thái chính sách (chỉ đọc) ────────────────────────────
     async function _loadPolicyStatus() {
         try {
             const res = await PayrollAPI.getPolicy?.();
             if (!res?.ok) {
-                if (lockStatusBadge) { lockStatusBadge.textContent = 'Không tải được'; lockStatusBadge.className = 'badge bg-danger ms-2 float-end'; }
+                if (lockStatusBadge) {
+                    lockStatusBadge.textContent = 'Không tải được';
+                    lockStatusBadge.className   = 'badge bg-danger ms-2 float-end';
+                }
                 return;
             }
             const policy = res.data?.data || {};
-            _renderPolicyInfo(policy);
+            _renderPolicyReadOnly(policy);
         } catch (_) {
-            if (lockStatusBadge) { lockStatusBadge.textContent = 'Lỗi'; lockStatusBadge.className = 'badge bg-danger ms-2 float-end'; }
+            if (lockStatusBadge) {
+                lockStatusBadge.textContent = 'Lỗi';
+                lockStatusBadge.className   = 'badge bg-danger ms-2 float-end';
+            }
         }
     }
 
-    function _renderPolicyInfo(policy) {
+    function _renderPolicyReadOnly(policy) {
         if (!policyInfo) return;
-
         const isLocked = policy.is_locked;
+
         if (lockStatusBadge) {
             lockStatusBadge.textContent = isLocked ? 'Đã khóa' : 'Đang mở';
             lockStatusBadge.className   = `badge ${isLocked ? 'bg-danger' : 'bg-success'} ms-2 float-end`;
@@ -180,22 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    btnLockPolicy?.addEventListener('click', async () => {
-        try {
-            const res = await PayrollAPI.setEditLock?.();
-            if (res?.ok) { showNotification('success', 'Đã khóa cấu hình lương.'); _loadPolicyStatus(); }
-            else showNotification('error', res?.data?.swal?.text || 'Khóa thất bại.');
-        } catch (_) { showNotification('error', 'Lỗi kết nối.'); }
-    });
-
-    btnUnlockPolicy?.addEventListener('click', async () => {
-        try {
-            const res = await PayrollAPI.setEditLock?.();
-            if (res?.ok) { showNotification('success', 'Đã mở khóa cấu hình lương.'); _loadPolicyStatus(); }
-            else showNotification('error', res?.data?.swal?.text || 'Mở khóa thất bại.');
-        } catch (_) { showNotification('error', 'Lỗi kết nối.'); }
-    });
-
     // ─── Load danh sách bảng lương ────────────────────────────────────────
     async function _loadPayrollList() {
         const [year, month] = _parseMonthInput(monthInput?.value);
@@ -209,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (month && year) { filters.month = month; filters.year = year; }
             if (status) filters.status = status;
 
-            const res = await PayrollAPI.getPayrollList(filters);
+            const res   = await PayrollAPI.getPayrollList(filters);
             const items = res.data?.data?.items || [];
             _renderPayrollList(items);
         } catch (_) {
@@ -245,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     listStatusFilter?.addEventListener('change', _loadPayrollList);
     monthInput?.addEventListener('change', _loadPayrollList);
 
-    // ─── Submit for HR approval ───────────────────────────────────────────
+    // ─── Gửi duyệt ────────────────────────────────────────────────────────
     window.submitForApproval = async function(salaryId) {
         try {
             const res = await PayrollAPI.submitPayrollApproval(salaryId);
@@ -267,7 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const total     = processed + failed;
         const pct       = total > 0 ? Math.round((processed / total) * 100) : 0;
 
-        // Progress bar
         if (progressSection) progressSection.style.display = '';
         if (progressBar) {
             progressBar.style.width = `${pct}%`;
@@ -275,13 +242,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (progressText) progressText.textContent = `${pct}%`;
 
-        // Summary cards
         if (resultSummary)  resultSummary.style.display  = '';
         if (resProcessed)   resProcessed.textContent     = processed;
         if (resFailed)      resFailed.textContent        = failed;
         if (resTotal)       resTotal.textContent         = total;
 
-        // Danh sách lỗi
         if (data.errors?.length) {
             if (errorSection) errorSection.style.display = '';
             if (errorList) {
@@ -296,10 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Ẩn init state
         if (initState) initState.style.display = 'none';
 
-        // Toast tổng hợp
         const icon = swal?.icon || (failed > 0 ? 'warning' : 'success');
         const msg  = swal?.text || `Đã tính lương cho ${processed}/${total} nhân viên.`;
         showNotification(icon, msg);
@@ -310,20 +273,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resultSummary)   resultSummary.style.display   = 'none';
         if (errorSection)    errorSection.style.display    = 'none';
         if (initState)       initState.style.display       = '';
-        if (progressBar)     { progressBar.style.width = '0%'; }
-        if (progressText)    progressText.textContent = '0%';
+        if (progressBar)     progressBar.style.width       = '0%';
+        if (progressText)    progressText.textContent      = '0%';
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-
-    /** Parse "YYYY-MM" → [year(int), month(int)] */
     function _parseMonthInput(val) {
         if (!val) return [null, null];
         const parts = val.split('-');
         if (parts.length !== 2) return [null, null];
-        const year  = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10);
-        return [year, month];
+        return [parseInt(parts[0], 10), parseInt(parts[1], 10)];
     }
 
     function _setGenerating(state) {
