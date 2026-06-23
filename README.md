@@ -73,6 +73,7 @@ HRM_TOTNGHIEP
 │  │  │  ├─ dept_pos_service.py
 │  │  │  ├─ employee_routes.py
 │  │  │  ├─ employee_service.py
+│  │  │  ├─ rendering_routes.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ user_routes.py
 │  │  │  ├─ user_service.py
@@ -93,6 +94,7 @@ HRM_TOTNGHIEP
 │  │  │  ├─ overtime_service.py
 │  │  │  ├─ qr_routes.py
 │  │  │  ├─ qr_service.py
+│  │  │  ├─ rendering_routes.py
 │  │  │  ├─ routes.py
 │  │  │  ├─ service.py
 │  │  │  └─ __init__.py
@@ -179,11 +181,22 @@ HRM_TOTNGHIEP
 │  ├─ scheduler.py
 │  ├─ static
 │  │  ├─ css
+│  │  │  ├─ admin.css
+│  │  │  ├─ admin_1.css
+│  │  │  ├─ attendance.css
+│  │  │  ├─ contract.css
 │  │  │  ├─ forms.css
+│  │  │  ├─ hr.css
 │  │  │  ├─ layouts.css
+│  │  │  ├─ leave.css
 │  │  │  ├─ main.css
+│  │  │  ├─ manager.css
+│  │  │  ├─ notification.css
+│  │  │  ├─ payroll.css
+│  │  │  ├─ resignation.css
 │  │  │  ├─ responsive.css
 │  │  │  └─ tables.css
+│  │  ├─ favicon.ico
 │  │  └─ js
 │  │     ├─ main.js
 │  │     └─ modules
@@ -346,6 +359,7 @@ HRM_TOTNGHIEP
 │     ├─ 0e8242241019_add_address_fields_to_employee.py
 │     ├─ 1f2e3d4c5b6a_expand_shift_status_length.py
 │     ├─ 37f52a6ac6b8_your_message.py
+│     ├─ 49305570c9c7_add_early_leave_minutes_to_attendance_.py
 │     ├─ 4f2b6f9f8a1a_add_overtime_columns_to_attendance.py
 │     ├─ 779ee223a0da_merge_multiple_heads.py
 │     ├─ 7c3b2a1f9d10_add_holiday_ot_fields_to_overtime_request.py

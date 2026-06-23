@@ -163,10 +163,10 @@ def list_today():
 
 
 # ============================================================
-# 2️⃣  GET /attendance/history  — Bảng công cá nhân
+# 2️⃣  GET /attendance/api/history  — Bảng công cá nhân (API)
 # ============================================================
 
-@attendance_bp.route("/history", methods=["GET"])
+@attendance_bp.route("/api/history", methods=["GET"])
 @auth_required
 def get_history():
     """

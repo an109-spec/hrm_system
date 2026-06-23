@@ -15,16 +15,36 @@ const AttendanceAPI = {
     /**
      * Generic AJAX wrapper — trả về JSON response
      * Tự động xử lý swal notification từ backend
+     * *** TỰ ĐỘNG THÊM AUTH TOKEN VÀO HEADER ***
      */
     async _request(method, path, body = null, opts = {}) {
+        const token = localStorage.getItem('auth_token'); // Giả định token được lưu với key 'auth_token'
+
         const config = {
             method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+            },
         };
+
+        // Thêm header Authorization nếu có token
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+
         if (body) config.body = JSON.stringify(body);
 
         try {
-            const res  = await fetch(this._baseUrl + path, config);
+            const res = await fetch(this._baseUrl + path, config);
+
+            // Nếu là 401 Unauthorized, có thể token hết hạn, thử redirect về trang login
+            if (res.status === 401 && !opts.silent) {
+                window.showNotification('error', 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+                // Đợi 2 giây rồi redirect
+                setTimeout(() => window.location.href = '/auth/login', 2000);
+                return { ok: false, status: 401, data: null };
+            }
+
             const data = await res.json();
 
             // Hiển thị swal nếu backend trả về
@@ -34,7 +54,6 @@ const AttendanceAPI = {
                     Swal.fire({ icon: s.icon, title: s.title, text: s.text,
                                 timer: s.timer, showConfirmButton: false, toast: false });
                 } else {
-                    // Chỉ toast với success nhanh
                     if (s.icon === 'success') {
                         window.showNotification('success', s.title);
                     } else {
@@ -45,8 +64,9 @@ const AttendanceAPI = {
 
             return { ok: res.ok, status: res.status, data };
         } catch (err) {
-            console.error('[AttendanceAPI] Error:', err);
-            window.showNotification('error', 'Lỗi kết nối máy chủ');
+            // Lỗi này thường là lỗi mạng hoặc lỗi server không trả về JSON hợp lệ
+            console.error('[AttendanceAPI] Network/JSON Error:', err);
+            window.showNotification('error', 'Lỗi kết nối hoặc dữ liệu trả về không hợp lệ.');
             return { ok: false, status: 0, data: null };
         }
     },
@@ -68,7 +88,7 @@ const AttendanceAPI = {
     // ── History ─────────────────────────────────────────────
     getHistory(params = {}) {
         const q = new URLSearchParams(params).toString();
-        return this._request('GET', `/history${q ? '?' + q : ''}`);
+        return this._request('GET', `/api/history${q ? '?' + q : ''}`);
     },
     deleteAttendance(date, employeeId = '') {
         const q = employeeId ? `?employee_id=${employeeId}` : '';
@@ -358,7 +378,11 @@ const AttendanceHistory = {
     async load() {
         AttendanceUI.showLoading('history-table-body');
         const { ok, data } = await AttendanceAPI.getHistory(this._params);
-        if (!ok || !data) return;
+        if (!ok || !data) {
+             // Nếu API call không thành công (vd: 401), không render gì cả
+             // Hàm _request đã hiển thị thông báo lỗi rồi
+            return;
+        }
         this.render(data);
         AttendanceUI.renderPagination('history-pagination', data.pagination, p => {
             this._params.page = p;

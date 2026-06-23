@@ -9,9 +9,10 @@ Route map:
     POST /attendance/finalize           → Chốt công (Finalize) ngày làm việc
     POST /attendance/auto-complete      → Tự động xử lý các ca quên check-out (Batch/Cronjob)
     POST /attendance/ot/reset-noti      → Hủy đơn OT dựa trên thông báo (khi user xóa noti)
+    GET /attendance/api/history         → Lấy dữ liệu lịch sử chấm công (JSON)
 """
 
-from flask import request, g
+from flask import request, g, jsonify
 from http import HTTPStatus
 from datetime import datetime, date
 
@@ -512,3 +513,62 @@ def reset_ot_from_notification():
         },
         timer=2000,
     )
+
+# ============================================================
+# 6️⃣  GET /attendance/api/history  — Lấy dữ liệu lịch sử (JSON)
+# ============================================================
+
+@attendance_bp.route("/api/history", methods=["GET"])
+@auth_required
+def get_history_api():
+    """
+    Cung cấp dữ liệu lịch sử chấm công dưới dạng JSON cho XHR/fetch.
+    """
+    try:
+        # Lấy các tham số từ query string
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        from_date_str = request.args.get('from_date')
+        to_date_str = request.args.get('to_date')
+        employee_id = request.args.get('employee_id')
+
+        # Gọi service để lấy dữ liệu
+        history_data = AttendanceService.get_history(
+            page=page,
+            per_page=per_page,
+            from_date=from_date_str,
+            to_date=to_date_str,
+            employee_id=employee_id
+        )
+        return jsonify(history_data)
+
+    except Exception as e:
+        return jsonify(icon="error", title="Lỗi hệ thống", text=str(e)), 500
+
+# ============================================================
+# 7️⃣  DELETE /attendance/<date>  — Xóa bản ghi chấm công
+# ============================================================
+
+@attendance_bp.route('/<string:date_str>', methods=['DELETE'])
+@auth_required
+@role_required('Admin', 'HR')
+def delete_attendance_record(date_str):
+    """Xóa (soft delete) một bản ghi chấm công.
+    Chỉ Admin và HR được phép.
+    """
+    employee_id = request.args.get('employee_id', type=int)
+    if not employee_id:
+        return _bad_request('Thiếu ID nhân viên.')
+
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        success = AttendanceService.delete_attendance(employee_id, date_obj)
+        if success:
+            return _ok("success", "Xóa thành công", f"Đã xóa bản ghi chấm công ngày {date_str} của nhân viên #{employee_id}")
+        else:
+            return _not_found(f"Không tìm thấy bản ghi chấm công phù hợp để xóa.")
+    except ValueError:
+        return _bad_request('Định dạng ngày không hợp lệ.')
+    except Exception as e:
+        return _err("error", "Lỗi máy chủ", str(e), 500)
+

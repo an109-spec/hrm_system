@@ -1,9 +1,11 @@
 from flask import Blueprint
 
 contract_bp = Blueprint(
-    "contract",
+    'contract',
     __name__,
-    url_prefix="/contract"
+    template_folder='templates',
+    static_folder='static',
+    static_url_path='/static/contract'
 )
 
 from . import routes

@@ -262,11 +262,18 @@ class Attendance(BaseModel):
     )
 
     # =====================================================
-    # LATE / HALF DAY
+    # LATE / EARLY / HALF DAY
     # =====================================================
 
     # số phút đi muộn
     late_minutes = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
+
+    # số phút về sớm
+    early_leave_minutes = db.Column(
         db.Integer,
         default=0,
         nullable=False

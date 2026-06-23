@@ -6,4 +6,4 @@ attendance_bp = Blueprint(
     url_prefix="/attendance"
 )
 
-from . import routes
+from . import routes, rendering_routes

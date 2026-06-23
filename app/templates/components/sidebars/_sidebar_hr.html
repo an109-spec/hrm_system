@@ -49,3 +49,29 @@
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>
+
+<li class="nav-item nav-heading">NHAN SU</li>
+<li class="nav-item">
+    <a class="nav-link {{ 'active' if request.path == url_for('contract.create_contract') else '' }}" href="{{ url_for('contract.create_contract') }}">
+        <i class="bi bi-plus-circle"></i>
+        <span>Tao Hop dong Moi</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link {{ 'active' if request.path == url_for('contract.expiration_reminders') else '' }}" href="{{ url_for('contract.expiration_reminders') }}">
+        <i class="bi bi-bell"></i>
+        <span>Hop dong Sap het han</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="#">
+        <i class="bi bi-card-checklist"></i>
+        <span>Quan ly Don tu</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="#">
+        <i class="bi bi-graph-up-arrow"></i>
+        <span>Bao cao Nhan su</span>
+    </a>
+</li>

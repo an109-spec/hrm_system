@@ -4,6 +4,7 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <style>
 /* ── Page-level overrides ────────────────────────────────── */
 .qr-page-wrapper {
@@ -405,6 +406,7 @@
 {% block scripts %}
 <!-- jsQR library for QR decoding -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
 <script>
 /* ============================================================

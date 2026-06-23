@@ -4,7 +4,8 @@
     'attendance.render_checkin_interface',
     'attendance.render_attendance_history',
     'attendance.render_attendance_summary',
-    'attendance.render_overtime_request'
+    'attendance.render_overtime_request',
+    'attendance.render_qr_scanner' 
 ] %}
 
 <!-- Payroll Menu -->
@@ -63,6 +64,11 @@
                     <i class="fas fa-business-time me-2"></i> Đơn làm thêm giờ
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_qr_scanner' %}active{% endif %}" href="{{ url_for('attendance.render_qr_scanner') }}">
+                    <i class="fas fa-qrcode me-2"></i> Quét QR
+                </a>
+            </li>
         </ul>
     </div>
 </li>
@@ -72,5 +78,19 @@
 <li class="nav-item">
     <a class="nav-link {% if request.endpoint == 'leave.my_requests' %}active{% endif %}" href="{{ url_for('leave.my_requests') }}">
         <i class="fas fa-history me-2"></i> Lịch sử nghỉ phép
+    </a>
+</li>
+<li class="nav-item nav-heading">HOP DONG</li>
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('contract.contract_detail', contract_id=current_user.id) }}">
+        <i class="bi bi-file-earmark-text"></i>
+        <span>Xem Hop Dong</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link {{ 'active' if request.path == url_for('contract.renewal_request') else '' }}" 
+       href="{{ url_for('contract.renewal_request') }}">
+        <i class="bi bi-pen"></i>
+        <span>Yeu cau Gia han</span>
     </a>
 </li>

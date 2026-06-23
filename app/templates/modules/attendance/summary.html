@@ -4,10 +4,11 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 {% endblock %}
 
 {% block content %}
-<div>
+<div data-page="attendance-summary">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="mb-0 fw-bold">Bao Cao Cham Cong Ngay</h4>
@@ -74,6 +75,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {

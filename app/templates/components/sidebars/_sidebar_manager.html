@@ -148,10 +148,22 @@
     </div>
 </li>
 
-
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
+<li class="nav-item nav-heading">QUAN LY</li>
 <li class="nav-item">
-    <a class="nav-link {% if request.endpoint in hợp_đồng_pages %}active{% endif %}" href="{{ url_for('contract.manager_get_contracts') }}">
-        <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
+    <a class="nav-link" href="#">
+        <i class="bi bi-people"></i>
+        <span>Quan ly Nhan vien</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link {{ 'active' if request.path == url_for('contract.list_contracts') else '' }}" href="{{ url_for('contract.list_contracts') }}">
+        <i class="bi bi-file-earmark-text"></i>
+        <span>Quan ly Hop dong</span>
+    </a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="#">
+        <i class="bi bi-calendar-check"></i>
+        <span>Duyet Don tu</span>
     </a>
 </li>

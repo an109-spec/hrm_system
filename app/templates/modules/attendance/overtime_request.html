@@ -4,6 +4,7 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 {% endblock %}
 
 {% block content %}
@@ -13,7 +14,7 @@
             <h4 class="mb-0 fw-bold">Dang Ky Tang Ca</h4>
             <p class="text-muted mb-0 small">Gui don dang ky lam them gio cho quan ly phe duyet</p>
         </div>
-        <a href="{{ url_for('attendance.attendance_page') }}" class="btn btn-outline-secondary btn-sm">
+        <a href="{{ url_for('attendance.render_attendance_page') }}" class="btn btn-outline-secondary btn-sm">
             Quay lai
         </a>
     </div>
@@ -117,6 +118,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="{{ url_for('static', filename='js/modules/attendance.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
