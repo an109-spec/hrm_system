@@ -410,3 +410,52 @@ def delete_dependent_by_id(employee_id, dependent_id):
         return swal_warning(title="Không thể xóa", message=str(e))
     except Exception as e:
         return swal_error(message=str(e), status_code=500)
+    
+from flask import Blueprint, g, jsonify, render_template
+from app.common.security.decorators import auth_required
+
+@personnel_bp.route("/profile")
+@auth_required
+def render_my_profile():
+    """Render trang hồ sơ cá nhân của người dùng đang đăng nhập."""
+    return render_template("modules/personnel/profile.html", title="Hồ sơ của tôi")
+
+@personnel_bp.route("/profile/edit")
+@auth_required
+def render_edit_profile():
+    """Render trang chỉnh sửa hồ sơ cá nhân."""
+    return render_template("modules/personnel/edit_profile.html", title="Chỉnh sửa hồ sơ")
+
+@personnel_bp.route("/profile/change-password")
+@auth_required
+def render_change_password():
+    """Render trang để người dùng thay đổi mật khẩu."""
+    return render_template("modules/personnel/change_password.html", title="Đổi mật khẩu")
+
+@personnel_bp.route("/profile/dependents")
+@auth_required
+def render_dependents_list():
+    """Render trang danh sách người phụ thuộc của người dùng."""
+    return render_template("modules/personnel/dependents_list.html", title="Người phụ thuộc")
+
+@personnel_bp.route("/profile/dependents/form")
+@auth_required
+def render_dependent_form():
+    """Render form để thêm hoặc chỉnh sửa người phụ thuộc."""
+    return render_template("modules/personnel/dependent_form.html", title="Thêm/Sửa người phụ thuộc")
+
+@personnel_bp.route("/profile/activity")
+@auth_required
+def render_activity_history():
+    """Render trang lịch sử hoạt động của người dùng."""
+    return render_template("modules/personnel/activity_history.html", title="Lịch sử hoạt động")
+
+@personnel_bp.route("/employees")
+def render_employee_list():
+    """Render trang danh sách toàn bộ nhân viên."""
+    return render_template("modules/personnel/employee_list.html", title="Danh sách nhân viên")
+
+@personnel_bp.route("/employees/<int:employee_id>")
+def render_employee_profile(employee_id):
+    """Render trang hồ sơ của một nhân viên cụ thể."""
+    return render_template("modules/personnel/profile.html", title="Hồ sơ nhân viên", employee_id=employee_id)

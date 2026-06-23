@@ -519,3 +519,31 @@ def resignation_detail_page(resignation_id: int):
             return render_template("errors/403.html"), 403
 
     return render_template("modules/resignation/detail.html", resignation=item)
+
+@resignation_bp.route("/my-requests")
+@auth_required
+def render_my_list():
+    """Render trang danh sách các đơn xin nghỉ việc của người dùng hiện tại."""
+    return render_template("modules/resignation/my_list.html", title="Đơn xin nghỉ việc của tôi")
+
+@resignation_bp.route("/submit")
+@auth_required
+def render_submit_form():
+    """Render form để nhân viên tự gửi đơn xin nghỉ việc."""
+    return render_template("modules/resignation/submit_form.html", title="Gửi đơn nghỉ việc")
+
+@resignation_bp.route("/<int:request_id>")
+@auth_required
+def render_detail(request_id):
+    """Render trang chi tiết của một đơn xin nghỉ việc cụ thể."""
+    return render_template("modules/resignation/detail.html", title="Chi tiết đơn nghỉ việc", request_id=request_id)
+
+@resignation_bp.route("/propose")
+def render_propose_form():
+    """Render form cho Manager đề xuất cho nhân viên nghỉ việc."""
+    return render_template("modules/resignation/propose_form.html", title="Đề xuất cho nhân viên nghỉ việc")
+
+@resignation_bp.route("/all-requests")
+def render_list_all():
+    """Render trang quản lý tất cả các đơn xin nghỉ việc cho HR/Admin."""
+    return render_template("modules/resignation/list_all.html", title="Quản lý đơn thôi việc")

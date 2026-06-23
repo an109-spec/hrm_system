@@ -159,3 +159,27 @@ def delete_notification(notification_id: int):
             message=str(e),
             status_code=500
         )
+    
+from flask import render_template
+from app.common.security.decorators import auth_required
+from app.modules.notification import notification_bp
+
+@notification_bp.route("/")
+@auth_required
+def render_notification_center():
+    """
+    Render trang Trung tâm thông báo, hiển thị tất cả thông báo của người dùng.
+    """
+    return render_template("modules/notifications/center.html", title="Trung tâm thông báo")
+
+@notification_bp.route("/<int:notification_id>")
+@auth_required
+def render_notification_detail(notification_id):
+    """
+    Render trang chi tiết cho một thông báo cụ thể.
+    """
+    return render_template(
+        "modules/notifications/detail.html",
+        title="Chi tiết thông báo",
+        notification_id=notification_id
+    )

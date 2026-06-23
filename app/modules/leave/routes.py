@@ -8,7 +8,7 @@ from app.constants.common import RoleName
 # ─────────────────────────────────────────────
 # 1. Danh sách lịch sử nghỉ phép cá nhân
 # ─────────────────────────────────────────────
-@leave_bp.route("/my-requests", methods=["GET"])
+@leave_bp.route("/api/my-requests", methods=["GET"])
 @auth_required
 
 def my_requests():
@@ -88,7 +88,7 @@ def create_request():
 # ─────────────────────────────────────────────
 # 3. Xem chi tiết đơn cá nhân
 # ─────────────────────────────────────────────
-@leave_bp.route("/request/<int:id>", methods=["GET"])
+@leave_bp.route("/api/request/<int:id>", methods=["GET"])
 @auth_required
 def get_detail(id):
     try:
@@ -183,7 +183,7 @@ def cancel_request(id):
 # ─────────────────────────────────────────────
 # 5. Danh sách đơn cần phê duyệt (Manager)
 # ─────────────────────────────────────────────
-@leave_bp.route("/manager/pending", methods=["GET"])
+@leave_bp.route("/api/manager/pending", methods=["GET"])
 @auth_required
 @role_required(RoleName.MANAGER)
 def mgr_pending_list():
@@ -207,7 +207,7 @@ def mgr_pending_list():
 # ─────────────────────────────────────────────
 # 6. Xem chi tiết đơn để duyệt / từ chối (Manager)
 # ─────────────────────────────────────────────
-@leave_bp.route("/manager/request/<int:id>", methods=["GET"])
+@leave_bp.route("/api/manager/request/<int:id>", methods=["GET"])
 @auth_required
 @role_required(RoleName.MANAGER)
 def mgr_view_detail(id):
@@ -249,7 +249,7 @@ def mgr_view_detail(id):
 # ─────────────────────────────────────────────
 # 7. Duyệt đơn (Manager)
 # ─────────────────────────────────────────────
-@leave_bp.route("/manager/approve/<int:id>", methods=["POST"])
+@leave_bp.route("/api/manager/approve/<int:id>", methods=["POST"])
 @auth_required
 @role_required(RoleName.MANAGER)
 def mgr_approve(id):
@@ -304,7 +304,7 @@ def mgr_approve(id):
 # ─────────────────────────────────────────────
 # 8. Từ chối đơn (Manager – có ghi lý do)
 # ─────────────────────────────────────────────
-@leave_bp.route("/manager/reject/<int:id>", methods=["POST"])
+@leave_bp.route("/api/manager/reject/<int:id>", methods=["POST"])
 @auth_required
 @role_required(RoleName.MANAGER)
 def mgr_reject(id):
@@ -471,3 +471,43 @@ def get_manager_leave_summary():
                 "text": str(e)
             }
         }), 500
+    
+from flask import render_template
+from app.modules.leave import leave_bp
+from app.common.security.decorators import auth_required
+
+# --- Rendering Routes ---
+
+@leave_bp.route("/my-requests")
+@auth_required
+def render_my_requests():
+    """Renders the page showing the current user's leave requests."""
+    return render_template("modules/leave/my_requests.html", title="Đơn nghỉ phép của tôi")
+
+@leave_bp.route("/new-request")
+@auth_required
+def render_request_form():
+    """Renders the form to create a new leave request."""
+    return render_template("modules/leave/request_form.html", title="Tạo đơn nghỉ phép")
+
+@leave_bp.route("/request/<int:request_id>")
+@auth_required
+def render_request_detail(request_id):
+    """Renders the detail page for a specific leave request."""
+    return render_template("modules/leave/request_detail.html", title="Chi tiết đơn nghỉ phép", request_id=request_id)
+
+@leave_bp.route("/calendar")
+@auth_required
+def render_leave_calendar():
+    """Renders the team/company leave calendar."""
+    return render_template("modules/leave/leave_calendar.html", title="Lịch nghỉ phép")
+
+@leave_bp.route("/manager/pending-approval")
+def render_manager_pending_list():
+    """Renders the list of pending leave requests for a manager to review."""
+    return render_template("modules/leave/manager_pending.html", title="Duyệt đơn nghỉ phép")
+
+@leave_bp.route("/department-report")
+def render_department_report():
+    """Renders the leave report for all departments."""
+    return render_template("modules/leave/department_report.html", title="Thống kê nghỉ phép")

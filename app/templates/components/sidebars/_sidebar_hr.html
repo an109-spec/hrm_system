@@ -30,6 +30,9 @@
                 <i class="fas fa-chart-line me-2"></i>  Lịch sử lương cá nhân
             </a>
         </li>
+        <li class="submenu-item {% if request.endpoint == 'payroll.render_payroll_reports' %}active{% endif %}">
+            <a href="{{ url_for('payroll.render_payroll_reports') }}">Báo cáo lương</a>
+        </li>
     </ul>
 </li>
 
@@ -95,6 +98,37 @@
         </li>
         <li class="submenu-item {% if request.endpoint == 'hr.render_hr_settings' %}active{% endif %}">
             <a href="{{ url_for('hr.render_hr_settings') }}">Cài đặt nghiệp vụ</a>
+        </li>
+    </ul>
+</li>
+
+{% set nghỉ_phép_pages = [
+    'leave.render_department_report',
+    'leave.render_leave_calendar'
+] %}
+
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' and request.endpoint in nghỉ_phép_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-calendar-range"></i>
+        <span>Quản lý Nghỉ phép</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' and request.endpoint in nghỉ_phép_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_department_report') }}">Thống kê nghỉ phép</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ toàn công ty</a>
+        </li>
+    </ul>
+</li>
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'resignation' and request.endpoint in thôi_việc_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-person-dash-fill"></i>
+        <span>Quản lý Thôi việc</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'resignation' and request.endpoint in thôi_việc_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'resignation.render_list_all' %}active{% endif %}">
+            <a href="{{ url_for('resignation.render_list_all') }}">Danh sách đơn</a>
         </li>
     </ul>
 </li>

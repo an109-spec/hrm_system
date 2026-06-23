@@ -73,13 +73,6 @@
     </div>
 </li>
 
-<!-- Leave Menu -->
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Nghỉ phép của tôi</li>
-<li class="nav-item">
-    <a class="nav-link {% if request.endpoint == 'leave.my_requests' %}active{% endif %}" href="{{ url_for('leave.my_requests') }}">
-        <i class="fas fa-history me-2"></i> Lịch sử nghỉ phép
-    </a>
-</li>
 <li class="nav-item nav-heading">HOP DONG</li>
 <li class="nav-item">
     <a class="nav-link" href="{{ url_for('contract.contract_detail', contract_id=current_user.id) }}">
@@ -93,4 +86,49 @@
         <i class="bi bi-pen"></i>
         <span>Yeu cau Gia han</span>
     </a>
+</li>
+
+<!-- Sidebar cho vai trò Nhân viên -->
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-calendar-plus"></i>
+        <span>Nghỉ phép</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'leave.render_request_form' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_request_form') }}">Tạo đơn nghỉ phép</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint in ['leave.render_my_requests', 'leave.render_request_detail'] %}active{% endif %}">
+            <a href="{{ url_for('leave.render_my_requests') }}">Lịch sử đơn của tôi</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ công ty</a>
+        </li>
+    </ul>
+</li>
+
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'resignation' %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-box-arrow-left"></i>
+        <span>Thôi việc</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'resignation' %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'resignation.render_submit_form' %}active{% endif %}">
+            <a href="{{ url_for('resignation.render_submit_form') }}">Nộp đơn nghỉ việc</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'resignation.render_my_list' %}active{% endif %}">
+            <a href="{{ url_for('resignation.render_my_list') }}">Xem đơn của tôi</a>
+        </li>
+    </ul>
+</li>
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'payroll' %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-wallet2"></i>
+        <span>Phiếu lương</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'payroll' %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint in ['payroll.render_my_payslips_page', 'payroll.render_salary_slip'] %}active{% endif %}">
+            <a href="{{ url_for('payroll.render_my_payslips_page') }}">Phiếu lương của tôi</a>
+        </li>
+    </ul>
 </li>

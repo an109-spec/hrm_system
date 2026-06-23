@@ -167,3 +167,102 @@
         <span>Duyet Don tu</span>
     </a>
 </li>
+
+{% set leave_pages = [
+    'leave.render_manager_approval_list',
+    'leave.render_manager_pending_list'
+] %}
+
+<li class="sidebar-item has-sub {% if request.endpoint in leave_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-calendar-check"></i>
+        <span>QL Nghỉ phép (Team)</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in leave_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint in leave_pages %}active{% endif %}">
+            <a href="{{ url_for('leave.render_manager_pending_list') }}">Duyệt đơn nghỉ phép</a>
+        </li>
+    </ul>
+</li>
+
+{% set nhân_sự_pages = [
+    'manager.render_team_page'
+] %}
+{% set phân_tích_báo_cáo_pages = [
+    'manager.render_team_analytics',
+    'manager.render_team_reports'
+] %}
+{% set nghỉ_phép_pages = [
+    'leave.render_manager_approval_list',
+    'leave.render_manager_pending_list'
+] %}
+{% set chấm_công_pages = [
+    'attendance.render_team_attendance',
+    'attendance.render_manager_ot_approval'
+] %}
+
+
+<li class="sidebar-item has-sub {% if request.endpoint in nhân_sự_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-people-fill"></i>
+        <span>Nhân sự Team</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in nhân_sự_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'manager.render_team_page' %}active{% endif %}">
+            <a href="{{ url_for('manager.render_team_page') }}">Danh sách Team</a>
+        </li>
+    </ul>
+</li>
+
+<li class="sidebar-item has-sub {% if request.endpoint in phân_tích_báo_cáo_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-graph-up"></i>
+        <span>Phân tích & Báo cáo</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in phân_tích_báo_cáo_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'manager.render_team_analytics' %}active{% endif %}">
+            <a href="{{ url_for('manager.render_team_analytics') }}">Thống kê Team</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'manager.render_team_reports' %}active{% endif %}">
+            <a href="{{ url_for('manager.render_team_reports') }}">Báo cáo Team</a>
+        </li>
+    </ul>
+</li>
+
+<li class="sidebar-item has-sub {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-calendar-check"></i>
+        <span>Duyệt nghỉ phép</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
+            <a href="{{ url_for('leave.render_manager_pending_list') }}">Danh sách đơn</a>
+        </li>
+    </ul>
+</li>
+
+<li class="sidebar-item has-sub {% if request.endpoint in chấm_công_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-clock-history"></i>
+        <span>QL Chấm công</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in chấm_công_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'attendance.render_team_attendance' %}active{% endif %}">
+            <a href="{{ url_for('attendance.render_team_attendance') }}">Bảng công team</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'attendance.render_manager_ot_approval' %}active{% endif %}">
+            <a href="{{ url_for('attendance.render_manager_ot_approval') }}">Duyệt đơn OT</a>
+        </li>
+    </ul>
+</li>
+<li class="sidebar-item has-sub {% if request.endpoint in thôi_việc_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-person-x-fill"></i>
+        <span>Thôi việc (Team)</span>
+    </a>
+    <ul class="submenu {% if request.endpoint in thôi_việc_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'resignation.render_propose_form' %}active{% endif %}">
+            <a href="{{ url_for('resignation.render_propose_form') }}">Đề xuất nghỉ việc</a>
+        </li>
+    </ul>
+</li>

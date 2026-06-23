@@ -105,16 +105,40 @@
         </ul>
     </div>
 </li>
-<li class="nav-item nav-heading">HE THONG</li>
-<li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-sliders"></i>
-        <span>Cau hinh</span>
+{% set hệ_thống_pages = [
+    'admin.render_system_settings',
+    'admin.render_user_accounts',
+    'admin.render_metadata_page'
+] %}
+<li class="sidebar-item has-sub {% if request.endpoint in hệ_thống_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-gear"></i>
+        <span>Hệ thống</span>
     </a>
+    <ul class="submenu {% if request.endpoint in hệ_thống_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'admin.render_system_settings' %}active{% endif %}">
+            <a href="{{ url_for('admin.render_system_settings') }}">Cài đặt chung</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'admin.render_user_accounts' %}active{% endif %}">
+            <a href="{{ url_for('admin.render_user_account') }}">Tài khoản & Phân quyền</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'admin.render_metadata_page' %}active{% endif %}">
+            <a href="{{ url_for('admin.render_metadata') }}">Danh mục dùng chung</a>
+        </li>
+    </ul>
 </li>
-<li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-shield-lock"></i>
-        <span>Phan quyen</span>
+
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-calendar-range"></i>
+        <span>Quản lý Nghỉ phép</span>
     </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_department_report') }}">Thống kê nghỉ phép</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
+            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ toàn công ty</a>
+        </li>
+    </ul>
 </li>

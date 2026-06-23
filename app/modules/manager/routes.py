@@ -1,4 +1,4 @@
-from flask import jsonify, request, g
+from flask import jsonify, request, g, render_template
 
 from app.constants.common import RoleName
 from app.common.security.decorators import auth_required, role_required
@@ -114,3 +114,18 @@ def get_department_employee_detail(employee_id: int):
         return swal_error(title, str(e), status)
     except Exception as e:
         return swal_error("Lỗi hệ thống", f"Đã xảy ra lỗi: {str(e)}", 500)
+    
+@manager_bp.route("/team")
+def render_team_page():
+    """Renders the manager's team overview page."""
+    return render_template("modules/manager/team.html", title="Quản lý đội nhóm")
+
+@manager_bp.route("/team-analytics")
+def render_team_analytics():
+    """Renders the team performance analytics page."""
+    return render_template("modules/manager/team_analytics.html", title="Thống kê hiệu suất đội nhóm")
+
+@manager_bp.route("/team-reports")
+def render_team_reports():
+    """Renders the page for generating reports about the team."""
+    return render_template("modules/manager/team_reports.html", title="Báo cáo đội nhóm")

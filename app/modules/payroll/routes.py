@@ -400,3 +400,20 @@ def payroll_history_page():
     Hiển thị trang Lịch sử lương.
     """
     return render_template("modules/payroll/history.html")
+@payroll_bp.route("/my-payslips")
+@auth_required
+def render_my_payslips_page():
+    """Render trang liệt kê các phiếu lương của nhân viên đang đăng nhập."""
+    # Giả định tồn tại file `my_payslips.html` để liệt kê phiếu lương
+    return render_template("modules/payroll/my_payslips.html", title="Phiếu lương của tôi")
+
+@payroll_bp.route("/salary-slip/<int:slip_id>")
+@auth_required
+def render_salary_slip(slip_id):
+    """Render trang chi tiết một phiếu lương cụ thể của nhân viên."""
+    return render_template("modules/payroll/salary_slip.html", title="Chi tiết Phiếu lương", slip_id=slip_id)
+
+@payroll_bp.route("/reports")
+def render_payroll_reports():
+    """Render trang báo cáo, thống kê lương cho HR và Admin."""
+    return render_template("modules/payroll/reports.html", title="Báo cáo Lương")
