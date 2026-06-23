@@ -16,10 +16,10 @@
             <i class="fa-solid fa-user-plus"></i> Thêm nhân viên mới
         </h1>
         <div class="admin-breadcrumb">
-            <a href="{{ url_for('admin.employee_management_page') }}">Nhân viên</a> / Tạo mới
+            <a href="{{ url_for('admin.render_employee_management') }}">Nhân viên</a> / Tạo mới
         </div>
     </div>
-    <a href="{{ url_for('admin.employee_management_page') }}" class="btn btn-sm btn-outline-secondary">
+    <a href="{{ url_for('admin.render_employee_management') }}" class="btn btn-sm btn-outline-secondary">
         <i class="fa-solid fa-arrow-left me-1"></i> Quay lại
     </a>
 </div>
@@ -165,7 +165,7 @@
         <h3 class="fw-bold mb-1" id="doneTitle">Thêm nhân viên thành công!</h3>
         <p class="text-muted mb-4" id="doneText">Hồ sơ đã được khởi tạo và gán thông tin công việc.</p>
         <div class="d-flex justify-content-center gap-2 flex-wrap">
-            <a href="{{ url_for('admin.employee_management_page') }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('admin.render_employee_management') }}" class="btn btn-outline-secondary">
                 <i class="fa-solid fa-list me-1"></i> Xem danh sách
             </a>
             <button id="btnCreateAnother" class="btn-admin-primary">

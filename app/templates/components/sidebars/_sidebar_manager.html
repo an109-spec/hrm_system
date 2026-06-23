@@ -1,43 +1,157 @@
+{% set nhân_sự_pages = [
+    'manager.get_department_employee_summary',
+    'manager.get_department_employee_list'
+] %}
+{% set nghỉ_phép_pages = [
+    'leave.get_manager_leave_summary',
+    'leave.get_manager_leaves',
+    'history.get_team_timeline'
+] %}
+{% set hợp_đồng_pages = ['contract.manager_get_contracts'] %}
+{% set chấm_công_cá_nhân_pages = [
+    'attendance.render_checkin_interface',
+    'attendance.render_attendance_history',
+    'attendance.render_attendance_summary',
+    'attendance.render_overtime_request'
+] %}
+{% set quản_lý_chấm_công_pages = [
+    'attendance.render_team_attendance',
+    'attendance.render_manager_ot_approval'
+] %}
+
+
 <li class="nav-header text-uppercase text-muted px-3 mt-3">
     Quản lý nhân sự
 </li>
-
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('manager.get_department_employee_summary') }}">
-        <i class="fas fa-chart-pie me-2"></i> Tổng quan phòng ban
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nhân_sự_pages %}active{% endif %}"
+       data-bs-toggle="collapse"
+       href="#nhanSuMenu"
+       role="button"
+       aria-expanded="{{ 'true' if request.endpoint in nhân_sự_pages else 'false' }}"
+       aria-controls="nhanSuMenu">
+        <span><i class="fas fa-users-cog me-2"></i> Nhân sự</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-</li>
-
-<li class="nav-item">
-    <a class="nav-link" href="{{ url_for('manager.get_department_employee_list') }}">
-        <i class="fas fa-users me-2"></i> Danh sách nhân viên
-    </a>
+    <div class="collapse {{ 'show' if request.endpoint in nhân_sự_pages else '' }}" id="nhanSuMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_summary' %}active{% endif %}" href="{{ url_for('manager.get_department_employee_summary') }}">
+                    <i class="fas fa-chart-pie me-2"></i> Tổng quan phòng ban
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_list' %}active{% endif %}" href="{{ url_for('manager.get_department_employee_list') }}">
+                    <i class="fas fa-users me-2"></i> Danh sách nhân viên
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
 <li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý nghỉ phép</li>
-
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('leave.get_manager_leave_summary') }}">
-        <i class="fas fa-chart-line me-2"></i> Thống kê nghỉ phép
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}"
+       data-bs-toggle="collapse"
+       href="#nghiPhepMenu"
+       role="button"
+       aria-expanded="{{ 'true' if request.endpoint in nghỉ_phép_pages else 'false' }}"
+       aria-controls="nghiPhepMenu">
+        <span><i class="fas fa-calendar-check me-2"></i> Nghỉ phép</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
+    <div class="collapse {{ 'show' if request.endpoint in nghỉ_phép_pages else '' }}" id="nghiPhepMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leave_summary' %}active{% endif %}" href="{{ url_for('leave.get_manager_leave_summary') }}">
+                    <i class="fas fa-chart-line me-2"></i> Thống kê nghỉ phép
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leaves' %}active{% endif %}" href="{{ url_for('leave.get_manager_leaves') }}">
+                    <i class="fas fa-tasks me-2"></i> Tất cả đơn của team
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'history.get_team_timeline' %}active{% endif %}" href="{{ url_for('history.get_team_timeline') }}">
+                    <i class="fas fa-users-viewfinder me-2"></i> Lịch sử nhóm
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
+
+<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Chấm công</li>
+<!-- Team Attendance Management -->
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('leave.get_manager_leaves') }}">
-        <i class="fas fa-tasks me-2"></i> Tất cả đơn của team
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in quản_lý_chấm_công_pages %}active{% endif %}"
+       data-bs-toggle="collapse"
+       href="#quanLyChamCongMenu"
+       role="button"
+       aria-expanded="{{ 'true' if request.endpoint in quản_lý_chấm_công_pages else 'false' }}"
+       aria-controls="quanLyChamCongMenu">
+        <span><i class="fas fa-user-check me-2"></i> Chấm công Team</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
+    <div class="collapse {{ 'show' if request.endpoint in quản_lý_chấm_công_pages else '' }}" id="quanLyChamCongMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_team_attendance' %}active{% endif %}" href="{{ url_for('attendance.render_team_attendance') }}">
+                    <i class="fas fa-calendar-alt me-2"></i> Bảng chấm công team
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_manager_ot_approval' %}active{% endif %}" href="{{ url_for('attendance.render_manager_ot_approval') }}">
+                    <i class="fas fa-check-double me-2"></i> Duyệt làm thêm giờ
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
+
+<li class="nav-header text-uppercase text-muted px-3 mt-3">Chấm công của tôi</li>
+<!-- Personal Attendance -->
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('history.get_team_timeline') }}">
-        <i class="fas fa-users-viewfinder me-2"></i> Lịch sử nhóm
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in chấm_công_cá_nhân_pages %}active{% endif %}"
+       data-bs-toggle="collapse"
+       href="#chamCongCaNhanMenu"
+       role="button"
+       aria-expanded="{{ 'true' if request.endpoint in chấm_công_cá_nhân_pages else 'false' }}"
+       aria-controls="chamCongCaNhanMenu">
+        <span><i class="fas fa-clock me-2"></i> Chấm công cá nhân</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
+    <div class="collapse {{ 'show' if request.endpoint in chấm_công_cá_nhân_pages else '' }}" id="chamCongCaNhanMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_checkin_interface' %}active{% endif %}" href="{{ url_for('attendance.render_checkin_interface') }}">
+                    <i class="fas fa-fingerprint me-2"></i> Check-in/Check-out
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_history' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_history') }}">
+                    <i class="fas fa-history me-2"></i> Lịch sử chấm công
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_summary' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_summary') }}">
+                    <i class="fas fa-calendar-alt me-2"></i> Bảng tổng hợp
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_overtime_request' %}active{% endif %}" href="{{ url_for('attendance.render_overtime_request') }}">
+                    <i class="fas fa-business-time me-2"></i> Đơn làm thêm giờ
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
 
 <li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
-
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('contract.manager_get_contracts') }}">
+    <a class="nav-link {% if request.endpoint in hợp_đồng_pages %}active{% endif %}" href="{{ url_for('contract.manager_get_contracts') }}">
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>

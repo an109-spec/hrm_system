@@ -93,16 +93,16 @@ class PayrollConfig:
         },
         "tax": {
             "brackets": [
-                {"from": 0, "to": 10_000_000, "rate_percent": 5, "quick_deduction": 0},
-                {"from": 10_000_000, "to": 30_000_000, "rate_percent": 10, "quick_deduction": 500_000},
-                {"from": 30_000_000, "to": 60_000_000, "rate_percent": 20, "quick_deduction": 3_500_000},
-                {"from": 60_000_000, "to": 100_000_000, "rate_percent": 30, "quick_deduction": 9_500_000},
-                {"from": 100_000_000, "to": 999_999_999_999, "rate_percent": 35, "quick_deduction": 14_500_000},
+                {"from": 0, "to": 10000000, "rate_percent": 5, "quick_deduction": 0},
+                {"from": 10000000, "to": 30000000, "rate_percent": 10, "quick_deduction": 500000},
+                {"from": 30000000, "to": 60000000, "rate_percent": 20, "quick_deduction": 3500000},
+                {"from": 60000000, "to": 100000000, "rate_percent": 30, "quick_deduction": 9500000},
+                {"from": 100000000, "to": 999999999999, "rate_percent": 35, "quick_deduction": 14500000},
             ]
         },
         "deduction": {
-            "personal": 15_500_000,
-            "dependent_per_person": 6_200_000,
+            "personal": 15500000,
+            "dependent_per_person": 6200000,
         },
         "tax_free_allowances": {
             "meal_allowance": 730000,

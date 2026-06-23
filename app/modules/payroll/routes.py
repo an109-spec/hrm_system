@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 
 from app.modules.payroll import payroll_bp
 from app.modules.payroll.base_service import BasePayrollService, PersonalPayrollService
@@ -392,3 +392,11 @@ def get_latest_salary_by_id(employee_id):
         return swal_error(title="Không tìm thấy", message=str(e), status_code=404)
     except Exception as e:
         return swal_error(message=str(e), status_code=500)
+
+@payroll_bp.route("/history", methods=["GET"])
+@auth_required
+def payroll_history_page():
+    """
+    Hiển thị trang Lịch sử lương.
+    """
+    return render_template("modules/payroll/history.html")
