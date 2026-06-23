@@ -41,6 +41,7 @@ class PayrollPolicyService(PersonalPayrollService):
             "late_penalty": {
                 "under_15": int(float(PayrollPolicyService.get_setting_value("late.under_15", d["late_penalty"]["under_15"]))),
                 "from_15_to_30": int(float(PayrollPolicyService.get_setting_value("late.from_15_to_30", d["late_penalty"]["from_15_to_30"]))),
+                "from_31_to_59": int(float(PayrollPolicyService.get_setting_value("late.from_31_to_59", d["late_penalty"]["from_31_to_59"]))),
                 "over_60_half_day": PayrollPolicyService.get_setting_value("late.over_60_half_day", str(d["late_penalty"]["over_60_half_day"])).lower() == "true",
             },
             "insurance": {
@@ -97,6 +98,7 @@ class PayrollPolicyService(PersonalPayrollService):
         if late:
             PayrollPolicyService._set_setting("late.under_15", late.get("under_15"))
             PayrollPolicyService._set_setting("late.from_15_to_30", late.get("from_15_to_30"))
+            PayrollPolicyService._set_setting("late.from_31_to_59", late.get("from_31_to_59"))
             PayrollPolicyService._set_setting("late.over_60_half_day", str(late.get("over_60_half_day", True)).lower())
         if ins:
             PayrollPolicyService._set_setting("insurance.social_percent", ins.get("social_percent"))

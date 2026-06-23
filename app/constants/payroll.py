@@ -77,12 +77,12 @@ class PayrollConfig:
     KEY_PREFIX = "salary.policy"
 
     DEFAULT_POLICY = {
-        "late_penalty_rules": [
-            {"min": 60, "penalty": 0, "label": "Nửa ngày công", "type": "half_day"},
-            {"min": 31, "penalty": 100000, "label": "Phạt 100.000đ", "type": "money"},
-            {"min": 15, "penalty": 50000, "label": "Phạt 50.000đ", "type": "money"},
-            {"min": 1,  "penalty": 20000, "label": "Phạt 20.000đ", "type": "money"},
-        ],        
+        "late_penalty": {
+            "under_15": 20000,
+            "from_15_to_30": 50000,
+            "from_31_to_59": 100000,
+            "over_60_half_day": True
+        },       
         "insurance": {
             "social_percent": 8.0,
             "health_percent": 1.5,

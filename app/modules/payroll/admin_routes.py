@@ -292,6 +292,6 @@ def admin_policy_page():
 @payroll_bp.route("/admin/finalize", methods=["GET"])
 def finalize_page():
     """
-    Hiển thị trang giao diện Chốt sổ & Duyệt bảng lương cho HR/Admin.
+    Hiển thị trang giao diện Chốt sổ & Duyệt bảng lương cho Admin.
     """
-    return render_template("modules/payroll/finalize.html")
+    return render_template("modules/payroll/admin_approval.html")

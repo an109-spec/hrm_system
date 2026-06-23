@@ -179,22 +179,11 @@ HRM_TOTNGHIEP
 │  ├─ scheduler.py
 │  ├─ static
 │  │  ├─ css
-│  │  │  ├─ admin.css
-│  │  │  ├─ admin_1.css
-│  │  │  ├─ attendance.css
-│  │  │  ├─ contract.css
 │  │  │  ├─ forms.css
-│  │  │  ├─ hr.css
 │  │  │  ├─ layouts.css
-│  │  │  ├─ leave.css
 │  │  │  ├─ main.css
-│  │  │  ├─ manager.css
-│  │  │  ├─ notification.css
-│  │  │  ├─ payroll.css
-│  │  │  ├─ resignation.css
 │  │  │  ├─ responsive.css
 │  │  │  └─ tables.css
-│  │  ├─ favicon.ico
 │  │  └─ js
 │  │     ├─ main.js
 │  │     └─ modules
@@ -230,10 +219,12 @@ HRM_TOTNGHIEP
 │  │        │  ├─ notification.js
 │  │        │  └─ notification_detail.js
 │  │        ├─ payroll
+│  │        │  ├─ admin_approval.js
+│  │        │  ├─ admin_policy.js
 │  │        │  ├─ analytics.js
 │  │        │  ├─ complaint_form.js
-│  │        │  ├─ finalize.js
-│  │        │  ├─ generate.js
+│  │        │  ├─ HR_generate.js
+│  │        │  ├─ hr_submit.js
 │  │        │  ├─ manager_approval.js
 │  │        │  ├─ payroll_api.js
 │  │        │  ├─ payroll_history.js
@@ -309,11 +300,13 @@ HRM_TOTNGHIEP
 │  │     │  ├─ center.html
 │  │     │  └─ detail.html
 │  │     ├─ payroll
+│  │     │  ├─ admin_approval.html
+│  │     │  ├─ admin_policy.html
 │  │     │  ├─ analytics.html
 │  │     │  ├─ complaint_form.html
-│  │     │  ├─ finalize.html
-│  │     │  ├─ generate.html
 │  │     │  ├─ history.html
+│  │     │  ├─ HR_generate.html
+│  │     │  ├─ hr_submit.html
 │  │     │  ├─ manager_approval.html
 │  │     │  ├─ reports.html
 │  │     │  └─ salary_slip.html

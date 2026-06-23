@@ -513,3 +513,10 @@ def payroll_analytics():
     tổng hợp về chi phí lương của công ty.
     """
     return render_template("modules/payroll/analytics.html")
+
+@payroll_bp.route("/hr/submission", methods=["GET"])
+def submission_page():
+    """
+    Hiển thị trang giao diện Gửi duyệt bảng lương cho HR.
+    """
+    return render_template("modules/payroll/hr_submit.html")
