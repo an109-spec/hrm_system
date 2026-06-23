@@ -31,6 +31,9 @@
                     <i class="fas fa-spinner fa-spin me-1"></i> Dang tai...
                 </div>
                 <div class="d-grid gap-2">
+                    <button class="btn btn-primary" id="btnEditPolicy">
+                        <i class="fas fa-pen-to-square me-2"></i>Chinh Sua Cau Hinh
+                    </button>
                     <button class="btn btn-outline-danger" id="btnLockPolicy">
                         <i class="fas fa-lock me-2"></i>Khoa Cau Hinh
                     </button>
@@ -115,6 +118,25 @@
             </div>
             <div class="card-body" id="latePenaltyInfo">
                 <div class="text-center text-muted py-2"><i class="fas fa-spinner fa-spin"></i> Dang tai...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="policyEditModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-pen-to-square me-2"></i>Chinh Sua Cau Hinh Luong</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="policyEditForm" class="row g-3"></div>
+                <div class="alert alert-info mt-3 mb-0">Chi co the luu khi cau hinh dang mo khoa.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button>
+                <button type="button" class="btn btn-primary" id="btnSavePolicy"><i class="fas fa-save me-1"></i>Luu Cau Hinh</button>
             </div>
         </div>
     </div>

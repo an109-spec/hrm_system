@@ -152,14 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function _buildActionButtons(item) {
         const btns = [];
-
+        const status = String(item.status || '').trim().toLowerCase();
         // Luôn hiển thị nút "Xem chi tiết"
         btns.push(`<a href="/payroll/${item.id}" class="btn btn-sm btn-outline-secondary" title="Chi tiết">
             <i class="fas fa-eye"></i>
         </a>`);
 
         // Các hành động của Admin tùy theo trạng thái
-        switch (item.status) {
+        switch (status) {
             case 'pending':
                 // Khi đang "Chờ duyệt" -> có thể "Phê duyệt" hoặc "Từ chối"
                 btns.push(`<button class="btn btn-sm btn-success" onclick="processFlow(${item.id}, 'approve')" title="Phê duyệt">

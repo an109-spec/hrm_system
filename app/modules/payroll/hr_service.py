@@ -827,7 +827,12 @@ Bước 2: Điều tra và Ghi chú
         ).count()
         summary = {
             "payroll_fund": sum(row["net_salary"] for row in rows),
-            "pending_approval": sum(1 for row in rows if row["status"] == "pending_approval"),
+            "draft_count": sum(1 for row in rows if row["status"] == SalaryStatus.DRAFT),
+            "pending_count": sum(1 for row in rows if row["status"] == SalaryStatus.PENDING),
+            "approved_count": sum(1 for row in rows if row["status"] == SalaryStatus.APPROVED),
+            "locked_count": sum(1 for row in rows if row["status"] == SalaryStatus.LOCKED),
+            "paid_count": sum(1 for row in rows if row["status"] == SalaryStatus.PAID),
+            "pending_approval": sum(1 for row in rows if row["status"] == SalaryStatus.PENDING),
             "complaint_count": complaint_count,
             "missing_payroll": max(Employee.query.filter_by(is_deleted=False).count() - len(rows), 0),
         }

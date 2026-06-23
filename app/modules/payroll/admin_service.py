@@ -18,7 +18,10 @@ class PayrollPolicyService(PersonalPayrollService):
     def get_setting_value(name: str, default: Any) -> str:
         full_key = PayrollConfig.make_key(name)
         row = SystemSetting.query.filter_by(key=full_key).first()
-        return row.value if row else str(default)
+        value = row.value if row else default
+        if value in (None, "", "None", "null"):
+            value = default
+        return str(value)
 
     @staticmethod
     def _set_setting(name: str, value: Any, description: str = "") -> None:
@@ -38,6 +41,7 @@ class PayrollPolicyService(PersonalPayrollService):
         d = PayrollConfig.get_default()
         
         policy = {
+            "is_locked": PayrollPolicyService.get_setting_value("config_edit_locked", str(d["config_edit_locked"])).lower() == "true",
             "late_penalty": {
                 "under_15": int(float(PayrollPolicyService.get_setting_value("late.under_15", d["late_penalty"]["under_15"]))),
                 "from_15_to_30": int(float(PayrollPolicyService.get_setting_value("late.from_15_to_30", d["late_penalty"]["from_15_to_30"]))),
@@ -62,7 +66,7 @@ class PayrollPolicyService(PersonalPayrollService):
             "payroll_flow": d["payroll_flow"],
             "config_edit_locked": PayrollPolicyService.get_setting_value("config_edit_locked", str(d["config_edit_locked"])).lower() == "true",
         }
-
+        policy["is_locked"] = policy["config_edit_locked"]
         brackets = []
         for idx, row in enumerate(d["tax"]["brackets"], start=1):
             brackets.append({
@@ -96,23 +100,23 @@ class PayrollPolicyService(PersonalPayrollService):
         tax_free = payload.get("tax_free_allowances") or {}
 
         if late:
-            PayrollPolicyService._set_setting("late.under_15", late.get("under_15"))
-            PayrollPolicyService._set_setting("late.from_15_to_30", late.get("from_15_to_30"))
-            PayrollPolicyService._set_setting("late.from_31_to_59", late.get("from_31_to_59"))
-            PayrollPolicyService._set_setting("late.over_60_half_day", str(late.get("over_60_half_day", True)).lower())
+            for key in ["under_15", "from_15_to_30", "from_31_to_59", "over_60_half_day"]:
+                if key in late and late[key] is not None:
+                    value = str(late[key]).lower() if key == "over_60_half_day" else late[key]
+                    PayrollPolicyService._set_setting(f"late.{key}", value)
         if ins:
-            PayrollPolicyService._set_setting("insurance.social_percent", ins.get("social_percent"))
-            PayrollPolicyService._set_setting("insurance.health_percent", ins.get("health_percent"))
-            PayrollPolicyService._set_setting("insurance.unemployment_percent", ins.get("unemployment_percent"))
+            for key in ["social_percent", "health_percent", "unemployment_percent"]:
+                if key in ins and ins[key] is not None:
+                    PayrollPolicyService._set_setting(f"insurance.{key}", ins[key])
         if ded:
-            PayrollPolicyService._set_setting("deduction.personal", ded.get("personal"))
-            PayrollPolicyService._set_setting("deduction.dependent_per_person", ded.get("dependent_per_person"))
+            for key in ["personal", "dependent_per_person"]:
+                if key in ded and ded[key] is not None:
+                    PayrollPolicyService._set_setting(f"deduction.{key}", ded[key])
         if tax:
             for idx, row in enumerate(tax, start=1):
-                PayrollPolicyService._set_setting(f"tax.bracket.{idx}.from", row.get("from"))
-                PayrollPolicyService._set_setting(f"tax.bracket.{idx}.to", row.get("to"))
-                PayrollPolicyService._set_setting(f"tax.bracket.{idx}.rate_percent", row.get("rate_percent"))
-                PayrollPolicyService._set_setting(f"tax.bracket.{idx}.quick_deduction", row.get("quick_deduction"))
+                for key in ["from", "to", "rate_percent", "quick_deduction"]:
+                    if key in row and row[key] is not None:
+                        PayrollPolicyService._set_setting(f"tax.bracket.{idx}.{key}", row[key])
         if tax_free:
             for key in ["fuel_allowance", "meal_allowance", "responsibility_allowance", "other_allowance"]:
                 if key in tax_free:
@@ -158,7 +162,8 @@ class PayrollPolicyService(PersonalPayrollService):
 
         # 1. PHÊ DUYỆT (Chỉ cho phép khi đã qua bước Review)
         if action == "approve":
-            # Gợi ý: Có thể thêm kiểm tra xem đã có khiếu nại nào chưa xử lý xong không
+            if salary.status != SalaryStatus.PENDING:
+                raise ValueError("Chỉ phê duyệt được bảng lương đang ở trạng thái PENDING")
             salary.status = SalaryStatus.APPROVED
 
         # 2. GỬI BẢNG LƯƠNG CHO TOÀN BỘ NHÂN VIÊN REVIEW (Bước mới)
@@ -177,8 +182,10 @@ class PayrollPolicyService(PersonalPayrollService):
 
         # 4. TỪ CHỐI / KHIẾU NẠI (Reject)
         elif action == "reject":
-            if salary.status == SalaryStatus.PAID:
-                raise ValueError("Không thể từ chối bảng lương đã thanh toán.")
+            if salary.status in {SalaryStatus.PAID, SalaryStatus.REJECTED}:
+                raise ValueError("Không thể từ chối bảng lương đã thanh toán hoặc đã bị từ chối.")
+            if salary.status not in {SalaryStatus.PENDING, SalaryStatus.APPROVED}:
+                raise ValueError("Chỉ từ chối được bảng lương đang PENDING hoặc APPROVED.")
             if not note or len(note.strip()) < 5:
                 raise ValueError("Cần nhập lý do từ chối để HR sửa đổi.")
             salary.status = SalaryStatus.REJECTED

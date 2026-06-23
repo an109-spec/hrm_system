@@ -11,7 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const lockInfoBox     = document.getElementById('lockInfoBox');
     const btnLockPolicy   = document.getElementById('btnLockPolicy');
     const btnUnlockPolicy = document.getElementById('btnUnlockPolicy');
-
+    const btnEditPolicy   = document.getElementById('btnEditPolicy');
+    const btnSavePolicy   = document.getElementById('btnSavePolicy');
+    const policyEditForm  = document.getElementById('policyEditForm');
+    const policyEditModalEl = document.getElementById('policyEditModal');
+    const policyEditModal = policyEditModalEl && window.bootstrap ? new bootstrap.Modal(policyEditModalEl) : null;
+    let currentPolicy = null;
     // Policy sections
     const insuranceInfo   = document.getElementById('insuranceInfo');
     const deductionInfo   = document.getElementById('deductionInfo');
@@ -32,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const policy = res.data?.data || {};
+            currentPolicy = policy;
             _renderAll(policy);
         } catch (_) {
             _setLockBadge(null, true);
@@ -50,9 +56,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Lock status ──────────────────────────────────────────────────────
     function _renderLockStatus(policy) {
-        const isLocked = policy.is_locked;
+        const isLocked = policy.is_locked ?? policy.config_edit_locked;
         _setLockBadge(isLocked);
-
+        if (btnEditPolicy) btnEditPolicy.disabled = !!isLocked;
+        if (btnSavePolicy) btnSavePolicy.disabled = !!isLocked;
         if (lockInfoBox) {
             lockInfoBox.className = `alert ${isLocked ? 'alert-danger' : 'alert-success'} mb-3`;
             lockInfoBox.innerHTML = isLocked
@@ -122,6 +129,90 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (_) {
             showNotification('error', 'Lỗi kết nối.');
         }
+    }
+    btnEditPolicy?.addEventListener('click', () => {
+        if (!currentPolicy) return;
+        if (currentPolicy.is_locked ?? currentPolicy.config_edit_locked) {
+            showNotification('warning', 'Vui lòng mở khóa cấu hình trước khi chỉnh sửa.');
+            return;
+        }
+        _renderEditForm(currentPolicy);
+        policyEditModal?.show();
+    });
+
+    btnSavePolicy?.addEventListener('click', async () => {
+        const payload = _collectEditPayload();
+        if (!payload) return;
+        btnSavePolicy.disabled = true;
+        try {
+            const res = await PayrollAPI.updatePolicy(payload);
+            if (res?.ok) {
+                showNotification('success', res.data?.swal?.text || 'Đã cập nhật chính sách lương.');
+                policyEditModal?.hide();
+                currentPolicy = res.data?.data || currentPolicy;
+                _renderAll(currentPolicy);
+            } else {
+                showNotification('error', res?.data?.swal?.text || 'Không thể cập nhật chính sách lương.');
+            }
+        } catch (err) {
+            console.error('updatePolicy error:', err);
+            showNotification('error', 'Lỗi kết nối khi cập nhật chính sách.');
+        } finally {
+            btnSavePolicy.disabled = false;
+        }
+    });
+
+    function _renderEditForm(policy) {
+        if (!policyEditForm) return;
+        const brackets = policy.tax?.brackets || [];
+        policyEditForm.innerHTML = `
+            ${_input('insurance.social_percent', 'BHXH NLĐ (%)', policy.insurance?.social_percent, 'number', '0.1')}
+            ${_input('insurance.health_percent', 'BHYT NLĐ (%)', policy.insurance?.health_percent, 'number', '0.1')}
+            ${_input('insurance.unemployment_percent', 'BHTN NLĐ (%)', policy.insurance?.unemployment_percent, 'number', '0.1')}
+            ${_input('deduction.personal', 'Giảm trừ bản thân', policy.deduction?.personal)}
+            ${_input('deduction.dependent_per_person', 'Giảm trừ người phụ thuộc', policy.deduction?.dependent_per_person)}
+            ${_input('late_penalty.under_15', 'Phạt đi muộn dưới 15 phút', policy.late_penalty?.under_15)}
+            ${_input('late_penalty.from_15_to_30', 'Phạt đi muộn 15-30 phút', policy.late_penalty?.from_15_to_30)}
+            ${_input('late_penalty.from_31_to_59', 'Phạt đi muộn 31-59 phút', policy.late_penalty?.from_31_to_59)}
+            ${_select('late_penalty.over_60_half_day', 'Trên 60 phút tính nửa ngày', policy.late_penalty?.over_60_half_day)}
+            ${Object.entries(policy.tax_free_allowances || {}).map(([k, v]) => _input(`tax_free_allowances.${k}`, _formatKey(k), v)).join('')}
+            <div class="col-12"><hr><h6 class="fw-bold mb-0">Biểu thuế TNCN</h6></div>
+            ${brackets.map((b, i) => `
+                <div class="col-12"><div class="border rounded p-3"><div class="fw-semibold mb-2">Bậc ${i + 1}</div><div class="row g-2">
+                    ${_input(`tax.brackets.${i}.from`, 'Từ', b.from, 'number', '1', 'col-md-3')}
+                    ${_input(`tax.brackets.${i}.to`, 'Đến', b.to, 'number', '1', 'col-md-3')}
+                    ${_input(`tax.brackets.${i}.rate_percent`, 'Thuế suất (%)', b.rate_percent, 'number', '0.1', 'col-md-3')}
+                    ${_input(`tax.brackets.${i}.quick_deduction`, 'Giảm trừ nhanh', b.quick_deduction, 'number', '1', 'col-md-3')}
+                </div></div></div>`).join('')}
+        `;
+    }
+
+    function _input(name, label, value, type = 'number', step = '1', col = 'col-md-4') {
+        return `<div class="${col}"><label class="form-label small fw-semibold">${_escHtml(label)}</label><input class="form-control" data-policy-field="${name}" type="${type}" step="${step}" value="${value ?? ''}"></div>`;
+    }
+
+    function _select(name, label, value) {
+        const selected = String(value) === 'true';
+        return `<div class="col-md-4"><label class="form-label small fw-semibold">${_escHtml(label)}</label><select class="form-select" data-policy-field="${name}"><option value="true" ${selected ? 'selected' : ''}>Có</option><option value="false" ${!selected ? 'selected' : ''}>Không</option></select></div>`;
+    }
+
+    function _collectEditPayload() {
+        const payload = { insurance: {}, deduction: {}, late_penalty: {}, tax_free_allowances: {}, tax: { brackets: [] } };
+        policyEditForm?.querySelectorAll('[data-policy-field]').forEach(el => {
+            const path = el.dataset.policyField.split('.');
+            let value = el.value;
+            if (value === '') value = null;
+            else if (value === 'true' || value === 'false') value = value === 'true';
+            else value = Number(value);
+            if (path[0] === 'tax') {
+                const idx = Number(path[2]);
+                payload.tax.brackets[idx] ||= {};
+                payload.tax.brackets[idx][path[3]] = value;
+            } else {
+                payload[path[0]][path[1]] = value;
+            }
+        });
+        return payload;
     }
 
     // ─── Render sections ──────────────────────────────────────────────────
