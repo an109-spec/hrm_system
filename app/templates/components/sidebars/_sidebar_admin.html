@@ -47,7 +47,8 @@
 <li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
 
 <li class="nav-item">
-    <a class="nav-link {% if request.endpoint == 'contract.get_all_contracts' %}active{% endif %}" href="{{ url_for('contract.get_all_contracts') }}">
+    <a class="nav-link {% if request.endpoint == 'contract.list_contracts' %}active{% endif %}"
+   href="{{ url_for('contract.list_contracts') }}">
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>

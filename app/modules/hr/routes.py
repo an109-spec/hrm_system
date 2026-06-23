@@ -154,4 +154,27 @@ def get_stats_by_position():
     except Exception as e:
         return swal_error("Lỗi hệ thống", f"Không thể thống kê theo chức danh: {str(e)}", 500)
 
+from flask import render_template
+from .service import get_hr_dashboard_data
+@hr_bp.route("/dashboard-data")
+def get_dashboard_data():
+    """
+    Endpoint to get HR dashboard data.
+    """
+    data = get_hr_dashboard_data()
+    return {"success": True, "data": data}
 
+@hr_bp.route('/company-analytics')
+def render_company_analytics():
+    """Render the company analytics page for HR."""
+    return render_template('modules/hr/company_analytics.html', title="Phân tích & Thống kê")
+
+@hr_bp.route('/reports')
+def render_reports():
+    """Render the HR reports page."""
+    return render_template('modules/hr/reports.html', title="Báo cáo & Tổng hợp")
+
+@hr_bp.route('/settings')
+def render_hr_settings():
+    """Render the HR settings page."""
+    return render_template('modules/hr/settings.html', title="Cài đặt nghiệp vụ")

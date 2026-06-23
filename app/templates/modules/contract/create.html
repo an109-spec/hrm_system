@@ -59,7 +59,7 @@
 
 {% block content %}
 <div class="d-flex align-items-center gap-3 mb-4">
-    <a href="{{ url_for('contract.get_all_contracts') }}" class="btn btn-sm btn-outline-secondary">
+    <a href="{{ url_for('contract.list_contracts') }}" class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-arrow-left"></i>
     </a>
     <div>
@@ -188,7 +188,7 @@
             </div>
 
             <div class="d-flex gap-2 justify-content-end">
-                <a href="{{ url_for('contract.get_all_contracts') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('contract.list_contracts') }}"class="btn btn-sm btn-outline-secondary"> 
                     Hủy
                 </a>
                 <button type="button" class="btn btn-primary px-4" id="btnSubmit">

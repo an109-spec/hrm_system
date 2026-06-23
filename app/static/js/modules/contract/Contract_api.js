@@ -16,9 +16,16 @@ const ContractAPI = (() => {
             headers: { 'Content-Type': 'application/json' },
         };
         const res = await fetch(url, { ...defaults, ...options });
-        const json = await res.json();
-        return json;
+
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+            return res.json();
+        } else {
+            const text = await res.text();
+            throw new Error(`Expected JSON response, but got ${res.status} ${res.statusText} with content: ${text.substring(0, 100)}...`);
+        }
     }
+
 
     // ── BASE / HR / ADMIN: Danh sách hợp đồng ─────────────────────────
 
@@ -28,7 +35,7 @@ const ContractAPI = (() => {
      */
     async function getContracts({ search = '', contract_status = 'all', contract_type = 'all' } = {}) {
         const params = new URLSearchParams({ search, contract_status, contract_type });
-        return _fetch(`/contract/?${params}`);
+        return _fetch(`/contract/api?${params}`);
     }
 
     /**
@@ -36,21 +43,21 @@ const ContractAPI = (() => {
      * @param {number} contractId
      */
     async function getContractDetail(contractId) {
-        return _fetch(`/contract/${contractId}`);
+        return _fetch(`/contract/api/${contractId}`);
     }
 
     /**
      * Lấy danh sách cảnh báo HĐ sắp hết hạn (HR + Admin)
      */
     async function getContractReminders() {
-        return _fetch('/contract/reminders');
+        return _fetch('/contract/api/reminders');
     }
 
     /**
      * Lấy filter meta (danh mục phòng ban, loại HĐ, trạng thái...) (HR + Admin)
      */
     async function getFilterMeta() {
-        return _fetch('/contract/meta');
+        return _fetch('/contract/api/meta');
     }
 
     // ── ADMIN only ─────────────────────────────────────────────────────
@@ -60,7 +67,7 @@ const ContractAPI = (() => {
      * @param {Object} data - { employee_id, duration, contract_type, basic_salary?, note? }
      */
     async function adminCreateContract(data) {
-        return _fetch('/api/admin/contracts', {
+        return _fetch('/contract/api/admin/contracts', {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -72,7 +79,7 @@ const ContractAPI = (() => {
      * @param {Object} data - { end_date?, note? }
      */
     async function adminTerminateContract(contractId, data) {
-        return _fetch(`/api/admin/contracts/${contractId}/terminate`, {
+        return _fetch(`/contract/api/admin/contracts/${contractId}/terminate`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         });
@@ -86,7 +93,7 @@ const ContractAPI = (() => {
         const params = new URLSearchParams({ page, per_page });
         if (status)      params.set('status', status);
         if (employee_id) params.set('employee_id', employee_id);
-        return _fetch(`/api/admin/contracts?${params}`);
+        return _fetch(`/contract/api/admin/contracts?${params}`);
     }
 
     // ── HR only ────────────────────────────────────────────────────────
@@ -97,7 +104,7 @@ const ContractAPI = (() => {
      * @param {Object} data - { duration? | end_date?, note? }
      */
     async function hrExtendContract(contractId, data) {
-        return _fetch(`/api/hr/contracts/${contractId}/extend`, {
+        return _fetch(`/contract/api/hr/contracts/${contractId}/extend`, {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -109,7 +116,7 @@ const ContractAPI = (() => {
      * @param {Object} data - { is_approved: bool, feedback?: string }
      */
     async function hrProcessRenewalRequest(proposalId, data) {
-        return _fetch(`/api/hr/contract-proposals/${proposalId}/process`, {
+        return _fetch(`/contract/api/hr/contract-proposals/${proposalId}/process`, {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -126,14 +133,14 @@ const ContractAPI = (() => {
         if (search)          params.set('search', search);
         if (contract_type)   params.set('contract_type', contract_type);
         if (contract_status) params.set('contract_status', contract_status);
-        return _fetch(`/api/manager/contracts?${params}`);
+        return _fetch(`/manager/api/contracts?${params}`);
     }
 
     /**
      * Lấy danh sách HĐ sắp hết hạn (Manager)
      */
     async function managerGetExpiringContracts() {
-        return _fetch('/api/manager/contracts/expiring');
+        return _fetch('/manager/api/contracts/expiring');
     }
 
     /**
@@ -141,7 +148,7 @@ const ContractAPI = (() => {
      * @param {number} contractId
      */
     async function managerGetContractDetail(contractId) {
-        return _fetch(`/api/manager/contracts/${contractId}`);
+        return _fetch(`/manager/api/contracts/${contractId}`);
     }
 
     /**
@@ -149,7 +156,7 @@ const ContractAPI = (() => {
      * @param {number} employeeId
      */
     async function managerGetLatestContractForEmployee(employeeId) {
-        return _fetch(`/api/manager/employees/${employeeId}/latest-contract`);
+        return _fetch(`/manager/api/employees/${employeeId}/latest-contract`);
     }
 
     /**
@@ -158,7 +165,7 @@ const ContractAPI = (() => {
      * @param {Object} data - { reason, proposed_duration_months, professional_note? }
      */
     async function managerRequestRenewal(contractId, data) {
-        return _fetch(`/api/manager/contracts/${contractId}/request-renewal`, {
+        return _fetch(`/manager/api/contracts/${contractId}/request-renewal`, {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -171,7 +178,9 @@ const ContractAPI = (() => {
      * @param {number} contractId
      */
     async function employeeGetMyContract(contractId) {
-        return _fetch(`/contract/${contractId}`);
+        // Employee views their own contract through the base detail page,
+        // but the backend decorator will enforce that they can only see their own.
+        return _fetch(`/contract/api/${contractId}`);
     }
 
     // ── Public API ─────────────────────────────────────────────────────

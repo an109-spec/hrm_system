@@ -12,7 +12,8 @@ from app.models.contract import Contract
 from app.constants.contract import ContractStatus
 from app.constants.employee import WorkingStatus, EmploymentType
 from app.utils.time import _normalize, get_current_time
-
+from app.models.leave import LeaveRequest
+from app.constants.leave import LeaveStatus
 class HRService: 
     @staticmethod
     def get_all_employee_summary() -> dict:
@@ -184,7 +185,39 @@ class HRService:
         ]
 
 
+def get_hr_dashboard_data():
+    """
+    Gathers various statistics for the HR dashboard.
+    """
+    total_employees = db.session.query(func.count(Employee.id)).filter(
+        Employee.working_status == WorkingStatus.WORKING
+    ).scalar() or 0
 
+    active_contracts = db.session.query(func.count(Contract.id)).filter(
+        Contract.status == ContractStatus.ACTIVE
+    ).scalar() or 0
+
+    # Contracts expiring in the next 30 days
+    thirty_days_from_now = datetime.utcnow().date() + timedelta(days=30)
+    expiring_soon_contracts = db.session.query(func.count(Contract.id)).filter(
+        Contract.status == ContractStatus.ACTIVE,
+        Contract.end_date <= thirty_days_from_now,
+        Contract.end_date.isnot(None)
+    ).scalar() or 0
+
+    total_departments = db.session.query(func.count(Department.id)).scalar() or 0
+    
+    pending_leave_requests = db.session.query(func.count(LeaveRequest.id)).filter(
+        LeaveRequest.status == LeaveStatus.PENDING_MANAGER_APPROVAL
+    ).scalar() or 0
+
+    return {
+        "total_employees": total_employees,
+        "active_contracts": active_contracts,
+        "expiring_soon_contracts": expiring_soon_contracts,
+        "total_departments": total_departments,
+        "pending_leave_requests": pending_leave_requests
+    }
     
 
     

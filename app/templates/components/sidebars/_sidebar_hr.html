@@ -1,3 +1,8 @@
+{% set quản_lý_chung_pages = [
+    'hr.render_company_analytics',
+    'hr.render_reports',
+    'hr.render_hr_settings'
+] %}
 <li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Lương</li>
 
 <li class="nav-item dropdown">
@@ -45,7 +50,7 @@
 <li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
 
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('contract.get_contracts') }}">
+    <a class="nav-link" href="{{ url_for('contract.list_contracts') }}">
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>
@@ -74,4 +79,22 @@
         <i class="bi bi-graph-up-arrow"></i>
         <span>Bao cao Nhan su</span>
     </a>
+</li>
+
+<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'hr' and request.endpoint in quản_lý_chung_pages %}active{% endif %}">
+    <a href="#" class='sidebar-link'>
+        <i class="bi bi-graph-up"></i>
+        <span>Quản lý chung</span>
+    </a>
+    <ul class="submenu {% if request.endpoint.split('.')[0] == 'hr' and request.endpoint in quản_lý_chung_pages %}active{% endif %}">
+        <li class="submenu-item {% if request.endpoint == 'hr.render_company_analytics' %}active{% endif %}">
+            <a href="{{ url_for('hr.render_company_analytics') }}">Phân tích & Thống kê</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'hr.render_reports' %}active{% endif %}">
+            <a href="{{ url_for('hr.render_reports') }}">Báo cáo & Tổng hợp</a>
+        </li>
+        <li class="submenu-item {% if request.endpoint == 'hr.render_hr_settings' %}active{% endif %}">
+            <a href="{{ url_for('hr.render_hr_settings') }}">Cài đặt nghiệp vụ</a>
+        </li>
+    </ul>
 </li>
