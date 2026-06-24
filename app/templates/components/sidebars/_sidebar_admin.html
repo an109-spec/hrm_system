@@ -1,3 +1,4 @@
+{# ===== MENU ADMIN ===== #}
 {% set payroll_pages = ['payroll.finalize_page', 'payroll.admin_policy_page'] %}
 {% set admin_management_pages = [
     'admin.render_create_employee',
@@ -8,137 +9,134 @@
     'admin.render_system_settings',
     'admin.render_metadata'
 ] %}
+{% set leave_pages = ['leave.render_department_report', 'leave.render_leave_calendar'] %}
 
-<!-- Mục cha có nút mở rộng -->
+{# --- Quản lý Lương --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Lương</li>
 <li class="nav-item">
     <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in payroll_pages %}active{% endif %}"
-       data-bs-toggle="collapse" 
-       href="#payrollMenu" 
-       role="button" 
-       aria-expanded="{{ 'true' if request.endpoint in payroll_pages else 'false' }}" 
-       aria-controls="payrollMenu">
+       data-bs-toggle="collapse" href="#payrollAdminMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in payroll_pages else 'false' }}"
+       aria-controls="payrollAdminMenu">
         <span><i class="fas fa-wallet me-2"></i> Quản lý Lương</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <!-- Menu con thu gọn -->
-    <div class="collapse {{ 'show' if request.endpoint in payroll_pages else '' }}" id="payrollMenu">
+    <div class="collapse {{ 'show' if request.endpoint in payroll_pages else '' }}" id="payrollAdminMenu">
         <ul class="nav flex-column ms-3">
-        <li class="nav-item">
-            <a class="nav-link {% if request.endpoint == 'payroll.finalize_page' %}active{% endif %}" href="{{ url_for('payroll.finalize_page') }}">
-                <i class="fas fa-shield-alt me-2"></i> CHỐT SỔ & DUYỆT LƯƠNG
-            </a>
-        </li>
-
-         <li class="nav-item">
-            <a class="nav-link {% if request.endpoint == 'payroll.admin_policy_page' %}active{% endif %}" href="{{ url_for('payroll.admin_policy_page') }}">
-                <i class="fas fa-shield-alt me-2"></i> Cấu Hình Chính Sách Lương
-            </a>
-        </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.finalize_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.finalize_page') }}">
+                    <i class="fas fa-check-circle me-2"></i> Chốt sổ & Duyệt lương
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.admin_policy_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.admin_policy_page') }}">
+                    <i class="fas fa-sliders-h me-2"></i> Cấu hình Chính sách Lương
+                </a>
+            </li>
         </ul>
     </div>
 </li>
 
+{# --- Nhật ký & Hợp đồng --- #}
 <li class="nav-item">
-    <a class="nav-link {% if request.endpoint == 'history.get_audit_logs' %}active{% endif %}" href="{{ url_for('history.get_audit_logs') }}">
+    <a class="nav-link {% if request.endpoint == 'history.get_audit_logs' %}active{% endif %}"
+       href="{{ url_for('history.get_audit_logs') }}">
         <i class="fas fa-shield-alt me-2"></i> Nhật ký hệ thống
     </a>
 </li>
 
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
-
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Hợp đồng</li>
 <li class="nav-item">
     <a class="nav-link {% if request.endpoint == 'contract.list_contracts' %}active{% endif %}"
-   href="{{ url_for('contract.list_contracts') }}">
+       href="{{ url_for('contract.list_contracts') }}">
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>
 
-<!-- Collapsible Menu for Admin -->
+{# --- Quản lý Nghỉ phép --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Nghỉ phép</li>
+<li class="nav-item">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in leave_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#leaveAdminMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in leave_pages else 'false' }}"
+       aria-controls="leaveAdminMenu">
+        <span><i class="fas fa-calendar-range me-2"></i> Quản lý Nghỉ phép</span>
+        <i class="fas fa-chevron-down small"></i>
+    </a>
+    <div class="collapse {{ 'show' if request.endpoint in leave_pages else '' }}" id="leaveAdminMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}"
+                   href="{{ url_for('leave.render_department_report') }}">
+                    <i class="fas fa-chart-pie me-2"></i> Thống kê nghỉ phép
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}"
+                   href="{{ url_for('leave.render_leave_calendar') }}">
+                    <i class="fas fa-calendar me-2"></i> Lịch nghỉ toàn công ty
+                </a>
+            </li>
+        </ul>
+    </div>
+</li>
+
+{# --- Quản trị Admin --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản trị Admin</li>
 <li class="nav-item">
     <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in admin_management_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#adminManagementMenu"
-       role="button"
+       data-bs-toggle="collapse" href="#adminManagementMenu" role="button"
        aria-expanded="{{ 'true' if request.endpoint in admin_management_pages else 'false' }}"
        aria-controls="adminManagementMenu">
         <span><i class="fas fa-cogs me-2"></i> Quản trị Admin</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <!-- Collapsible sub-menu -->
     <div class="collapse {{ 'show' if request.endpoint in admin_management_pages else '' }}" id="adminManagementMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_create_employee' %}active{% endif %}" href="{{ url_for('admin.render_create_employee') }}">
+                <a class="nav-link {% if request.endpoint == 'admin.render_create_employee' %}active{% endif %}"
+                   href="{{ url_for('admin.render_create_employee') }}">
                     <i class="fas fa-user-plus me-2"></i> Tạo nhân viên
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_employee_management' %}active{% endif %}" href="{{ url_for('admin.render_employee_management') }}">
+                <a class="nav-link {% if request.endpoint == 'admin.render_employee_management' %}active{% endif %}"
+                   href="{{ url_for('admin.render_employee_management') }}">
                     <i class="fas fa-users-cog me-2"></i> Quản lý nhân viên
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_user_account' %}active{% endif %}" href="{{ url_for('admin.render_user_account') }}">
-                    <i class="fas fa-user-circle me-2"></i> Tài khoản người dùng
+                <a class="nav-link {% if request.endpoint == 'admin.render_user_account' %}active{% endif %}"
+                   href="{{ url_for('admin.render_user_account') }}">
+                    <i class="fas fa-user-circle me-2"></i> Tài khoản & Phân quyền
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_lock_unlock' %}active{% endif %}" href="{{ url_for('admin.render_lock_unlock') }}">
+                <a class="nav-link {% if request.endpoint == 'admin.render_lock_unlock' %}active{% endif %}"
+                   href="{{ url_for('admin.render_lock_unlock') }}">
                     <i class="fas fa-user-lock me-2"></i> Khóa/Mở khóa
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_reset_password' %}active{% endif %}" href="{{ url_for('admin.render_reset_password') }}">
+                <a class="nav-link {% if request.endpoint == 'admin.render_reset_password' %}active{% endif %}"
+                   href="{{ url_for('admin.render_reset_password') }}">
                     <i class="fas fa-key me-2"></i> Reset mật khẩu
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_system_settings' %}active{% endif %}" href="{{ url_for('admin.render_system_settings') }}">
+                <a class="nav-link {% if request.endpoint == 'admin.render_system_settings' %}active{% endif %}"
+                   href="{{ url_for('admin.render_system_settings') }}">
                     <i class="fas fa-sliders-h me-2"></i> Cài đặt hệ thống
                 </a>
             </li>
-             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.render_metadata' %}active{% endif %}" href="{{ url_for('admin.render_metadata') }}">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'admin.render_metadata' %}active{% endif %}"
+                   href="{{ url_for('admin.render_metadata') }}">
                     <i class="fas fa-database me-2"></i> Quản lý Metadata
                 </a>
             </li>
         </ul>
     </div>
-</li>
-{% set hệ_thống_pages = [
-    'admin.render_system_settings',
-    'admin.render_user_accounts',
-    'admin.render_metadata_page'
-] %}
-<li class="sidebar-item has-sub {% if request.endpoint in hệ_thống_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-gear"></i>
-        <span>Hệ thống</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in hệ_thống_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'admin.render_system_settings' %}active{% endif %}">
-            <a href="{{ url_for('admin.render_system_settings') }}">Cài đặt chung</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'admin.render_user_accounts' %}active{% endif %}">
-            <a href="{{ url_for('admin.render_user_account') }}">Tài khoản & Phân quyền</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'admin.render_metadata_page' %}active{% endif %}">
-            <a href="{{ url_for('admin.render_metadata') }}">Danh mục dùng chung</a>
-        </li>
-    </ul>
-</li>
-
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-calendar-range"></i>
-        <span>Quản lý Nghỉ phép</span>
-    </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_department_report') }}">Thống kê nghỉ phép</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ toàn công ty</a>
-        </li>
-    </ul>
 </li>

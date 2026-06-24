@@ -1,134 +1,170 @@
-{% set quản_lý_chung_pages = [
-    'hr.render_company_analytics',
-    'hr.render_reports',
-    'hr.render_hr_settings'
-] %}
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Lương</li>
+{# ===== MENU HR ===== #}
+{% set payroll_pages = ['payroll.payroll_analytics','payroll.hr_generate_page','payroll.submission_page','payroll.payroll_history_page','payroll.render_payroll_reports'] %}
+{% set quản_lý_chung_pages = ['hr.render_company_analytics','hr.render_reports','hr.render_hr_settings'] %}
+{% set nghỉ_phép_pages = ['leave.render_department_report','leave.render_leave_calendar'] %}
+{% set thôi_việc_pages = ['resignation.render_list_all'] %}
 
-<li class="nav-item dropdown">
-    <a class="nav-link dropdown-toggle" href="#" id="payrollDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="fas fa-money-check-alt me-2"></i> Hệ thống lương
+{# --- Quản lý Lương --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Lương</li>
+<li class="nav-item">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in payroll_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#payrollHrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in payroll_pages else 'false' }}"
+       aria-controls="payrollHrMenu">
+        <span><i class="fas fa-money-check-alt me-2"></i> Hệ thống lương</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-    <ul class="dropdown-menu w-100 border-0 shadow-sm" aria-labelledby="payrollDropdown" style="background-color: #f8f9fa;">
-        <li>
-            <a class="dropdown-item" href="{{ url_for('payroll.payroll_analytics') }}">
-                <i class="fas fa-chart-line me-2"></i> Phân tích lương
-            </a>
-        </li>
-        <li>
-            <a class="dropdown-item" href="{{ url_for('payroll.hr_generate_page') }}">
-                <i class="fas fa-chart-line me-2"></i> Tạo Bảng Lương
-            </a>
-        </li>
-        <li>
-            <a class="dropdown-item" href="{{ url_for('payroll.submission_page') }}">
-                <i class="fas fa-chart-line me-2"></i>  Gửi duyệt bảng lương
-            </a>
-        </li>
-        <li>
-            <a class="dropdown-item" href="{{ url_for('payroll.payroll_history_page') }}">
-                <i class="fas fa-chart-line me-2"></i>  Lịch sử lương cá nhân
-            </a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'payroll.render_payroll_reports' %}active{% endif %}">
-            <a href="{{ url_for('payroll.render_payroll_reports') }}">Báo cáo lương</a>
-        </li>
-    </ul>
+    <div class="collapse {{ 'show' if request.endpoint in payroll_pages else '' }}" id="payrollHrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.payroll_analytics' %}active{% endif %}"
+                   href="{{ url_for('payroll.payroll_analytics') }}">
+                    <i class="fas fa-chart-line me-2"></i> Phân tích lương
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.hr_generate_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.hr_generate_page') }}">
+                    <i class="fas fa-table me-2"></i> Tạo Bảng Lương
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.submission_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.submission_page') }}">
+                    <i class="fas fa-paper-plane me-2"></i> Gửi duyệt bảng lương
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.payroll_history_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.payroll_history_page') }}">
+                    <i class="fas fa-history me-2"></i> Lịch sử lương cá nhân
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.render_payroll_reports' %}active{% endif %}"
+                   href="{{ url_for('payroll.render_payroll_reports') }}">
+                    <i class="fas fa-file-invoice me-2"></i> Báo cáo lương
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản trị nhân sự</li>
-
+{# --- Quản trị nhân sự --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản trị nhân sự</li>
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('hr.get_all_employee_summary') }}">
-        <i class="fas fa-chart-pie me-2"></i> Bảng điều khiển (Dashboard)
+    <a class="nav-link {% if request.endpoint == 'hr.get_all_employee_summary' %}active{% endif %}"
+       href="{{ url_for('hr.get_all_employee_summary') }}">
+        <i class="fas fa-chart-pie me-2"></i> Dashboard nhân sự
     </a>
 </li>
-
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('history.get_audit_logs') }}">
+    <a class="nav-link {% if request.endpoint == 'history.get_audit_logs' %}active{% endif %}"
+       href="{{ url_for('history.get_audit_logs') }}">
         <i class="fas fa-shield-alt me-2"></i> Nhật ký hệ thống
     </a>
 </li>
 
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Hợp đồng</li>
-
+{# --- Quản lý chung --- #}
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('contract.list_contracts') }}">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in quản_lý_chung_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#generalHrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in quản_lý_chung_pages else 'false' }}"
+       aria-controls="generalHrMenu">
+        <span><i class="fas fa-cog me-2"></i> Quản lý chung</span>
+        <i class="fas fa-chevron-down small"></i>
+    </a>
+    <div class="collapse {{ 'show' if request.endpoint in quản_lý_chung_pages else '' }}" id="generalHrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'hr.render_company_analytics' %}active{% endif %}"
+                   href="{{ url_for('hr.render_company_analytics') }}">
+                    <i class="fas fa-chart-bar me-2"></i> Phân tích & Thống kê
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'hr.render_reports' %}active{% endif %}"
+                   href="{{ url_for('hr.render_reports') }}">
+                    <i class="fas fa-file-alt me-2"></i> Báo cáo & Tổng hợp
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'hr.render_hr_settings' %}active{% endif %}"
+                   href="{{ url_for('hr.render_hr_settings') }}">
+                    <i class="fas fa-sliders-h me-2"></i> Cài đặt nghiệp vụ
+                </a>
+            </li>
+        </ul>
+    </div>
+</li>
+
+{# --- Quản lý Hợp đồng --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Hợp đồng</li>
+<li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'contract.list_contracts' %}active{% endif %}"
+       href="{{ url_for('contract.list_contracts') }}">
         <i class="fas fa-file-contract me-2"></i> Danh sách hợp đồng
     </a>
 </li>
-
-<li class="nav-item nav-heading">NHAN SU</li>
 <li class="nav-item">
-    <a class="nav-link {{ 'active' if request.path == url_for('contract.create_contract') else '' }}" href="{{ url_for('contract.create_contract') }}">
-        <i class="bi bi-plus-circle"></i>
-        <span>Tao Hop dong Moi</span>
+    <a class="nav-link {% if request.endpoint == 'contract.create_contract' %}active{% endif %}"
+       href="{{ url_for('contract.create_contract') }}">
+        <i class="fas fa-plus-circle me-2"></i> Tạo Hợp đồng Mới
     </a>
 </li>
 <li class="nav-item">
-    <a class="nav-link {{ 'active' if request.path == url_for('contract.expiration_reminders') else '' }}" href="{{ url_for('contract.expiration_reminders') }}">
-        <i class="bi bi-bell"></i>
-        <span>Hop dong Sap het han</span>
+    <a class="nav-link {% if request.endpoint == 'contract.expiration_reminders' %}active{% endif %}"
+       href="{{ url_for('contract.expiration_reminders') }}">
+        <i class="fas fa-bell me-2"></i> Hợp đồng Sắp hết hạn
     </a>
 </li>
+
+{# --- Quản lý Nghỉ phép --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Nghỉ phép</li>
 <li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-card-checklist"></i>
-        <span>Quan ly Don tu</span>
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#leaveHrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in nghỉ_phép_pages else 'false' }}"
+       aria-controls="leaveHrMenu">
+        <span><i class="fas fa-calendar-range me-2"></i> Quản lý Nghỉ phép</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
+    <div class="collapse {{ 'show' if request.endpoint in nghỉ_phép_pages else '' }}" id="leaveHrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}"
+                   href="{{ url_for('leave.render_department_report') }}">
+                    <i class="fas fa-chart-pie me-2"></i> Thống kê nghỉ phép
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}"
+                   href="{{ url_for('leave.render_leave_calendar') }}">
+                    <i class="fas fa-calendar me-2"></i> Lịch nghỉ toàn công ty
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
+
+{# --- Quản lý Thôi việc --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Thôi việc</li>
 <li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-graph-up-arrow"></i>
-        <span>Bao cao Nhan su</span>
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in thôi_việc_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#resignationHrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in thôi_việc_pages else 'false' }}"
+       aria-controls="resignationHrMenu">
+        <span><i class="fas fa-user-minus me-2"></i> Quản lý Thôi việc</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-</li>
-
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'hr' and request.endpoint in quản_lý_chung_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-graph-up"></i>
-        <span>Quản lý chung</span>
-    </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'hr' and request.endpoint in quản_lý_chung_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'hr.render_company_analytics' %}active{% endif %}">
-            <a href="{{ url_for('hr.render_company_analytics') }}">Phân tích & Thống kê</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'hr.render_reports' %}active{% endif %}">
-            <a href="{{ url_for('hr.render_reports') }}">Báo cáo & Tổng hợp</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'hr.render_hr_settings' %}active{% endif %}">
-            <a href="{{ url_for('hr.render_hr_settings') }}">Cài đặt nghiệp vụ</a>
-        </li>
-    </ul>
-</li>
-
-{% set nghỉ_phép_pages = [
-    'leave.render_department_report',
-    'leave.render_leave_calendar'
-] %}
-
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' and request.endpoint in nghỉ_phép_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-calendar-range"></i>
-        <span>Quản lý Nghỉ phép</span>
-    </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' and request.endpoint in nghỉ_phép_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'leave.render_department_report' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_department_report') }}">Thống kê nghỉ phép</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ toàn công ty</a>
-        </li>
-    </ul>
-</li>
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'resignation' and request.endpoint in thôi_việc_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-person-dash-fill"></i>
-        <span>Quản lý Thôi việc</span>
-    </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'resignation' and request.endpoint in thôi_việc_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'resignation.render_list_all' %}active{% endif %}">
-            <a href="{{ url_for('resignation.render_list_all') }}">Danh sách đơn</a>
-        </li>
-    </ul>
+    <div class="collapse {{ 'show' if request.endpoint in thôi_việc_pages else '' }}" id="resignationHrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'resignation.render_list_all' %}active{% endif %}"
+                   href="{{ url_for('resignation.render_list_all') }}">
+                    <i class="fas fa-list me-2"></i> Danh sách đơn
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>

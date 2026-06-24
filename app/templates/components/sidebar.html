@@ -8,40 +8,39 @@
         {# Menu dùng chung #}
         {% include 'components/sidebars/_sidebar_common.html' %}
 
-        {# Chỉ hiển thị menu theo quyền khi đã đăng nhập #}
-        {% if current_user and current_user.role %}
+        {# Hiển thị menu theo role — dùng g.user thay vì current_user #}
+        {% if g.user and g.user.role %}
 
-            {% if current_user.role.name == 'EMPLOYEE' %}
+            {% if g.user.role.name == 'Employee' %}
                 {% include 'components/sidebars/_sidebar_employee.html' %}
 
-            {% elif current_user.role.name == 'MANAGER' %}
+            {% elif g.user.role.name == 'Manager' %}
                 {% include 'components/sidebars/_sidebar_manager.html' %}
 
-            {% elif current_user.role.name == 'HR' %}
+            {% elif g.user.role.name == 'HR' %}
                 {% include 'components/sidebars/_sidebar_hr.html' %}
 
-            {% elif current_user.role.name == 'Admin' %}
+            {% elif g.user.role.name == 'Admin' %}
                 {% include 'components/sidebars/_sidebar_admin.html' %}
 
-            {% endif %}
+        {% endif %}
 
         {% endif %}
 
     </ul>
 
     <div class="sidebar-footer p-3">
-
-        {% if current_user %}
-            <a href="{{ url_for('auth.logout') }}"
-               class="btn btn-sm btn-danger w-100">
-                Đăng xuất
-            </a>
+        {% if g.user %}
+            <form action="{{ url_for('auth.logout') }}" method="POST">
+                <button type="submit" class="btn btn-sm btn-danger w-100">
+                    Đăng xuất
+                </button>
+            </form>
         {% else %}
             <a href="{{ url_for('auth.login_page') }}"
                class="btn btn-sm btn-primary w-100">
                 Đăng nhập
             </a>
         {% endif %}
-
     </div>
 </aside>

@@ -1,79 +1,114 @@
-{% set nhân_sự_pages = [
-    'manager.get_department_employee_summary',
-    'manager.get_department_employee_list'
-] %}
-{% set nghỉ_phép_pages = [
-    'leave.get_manager_leave_summary',
-    'leave.get_manager_leaves',
-    'history.get_team_timeline'
-] %}
-{% set hợp_đồng_pages = ['contract.manager_get_contracts'] %}
-{% set chấm_công_cá_nhân_pages = [
-    'attendance.render_checkin_interface',
-    'attendance.render_attendance_history',
-    'attendance.render_attendance_summary',
-    'attendance.render_overtime_request'
-] %}
-{% set quản_lý_chấm_công_pages = [
-    'attendance.render_team_attendance',
-    'attendance.render_manager_ot_approval'
-] %}
+{# ===== MENU MANAGER ===== #}
+{% set nhân_sự_pages = ['manager.get_department_employee_summary','manager.get_department_employee_list','manager.render_team_page'] %}
+{% set nghỉ_phép_pages = ['leave.get_manager_leave_summary','leave.get_manager_leaves','history.get_team_timeline','leave.render_manager_approval_list','leave.render_manager_pending_list'] %}
+{% set chấm_công_team_pages = ['attendance.render_team_attendance','attendance.render_manager_ot_approval'] %}
+{% set chấm_công_cá_nhân_pages = ['attendance.render_checkin_interface','attendance.render_attendance_history','attendance.render_attendance_summary','attendance.render_overtime_request'] %}
+{% set phân_tích_pages = ['manager.render_team_analytics','manager.render_team_reports'] %}
+{% set thôi_việc_pages = ['resignation.render_propose_form'] %}
 
-
-<li class="nav-header text-uppercase text-muted px-3 mt-3">
-    Quản lý nhân sự
-</li>
+{# --- Quản lý nhân sự --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý nhân sự</li>
 <li class="nav-item">
     <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nhân_sự_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#nhanSuMenu"
-       role="button"
+       data-bs-toggle="collapse" href="#nhanSuMgrMenu" role="button"
        aria-expanded="{{ 'true' if request.endpoint in nhân_sự_pages else 'false' }}"
-       aria-controls="nhanSuMenu">
-        <span><i class="fas fa-users-cog me-2"></i> Nhân sự</span>
+       aria-controls="nhanSuMgrMenu">
+        <span><i class="fas fa-users-cog me-2"></i> Nhân sự Team</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in nhân_sự_pages else '' }}" id="nhanSuMenu">
+    <div class="collapse {{ 'show' if request.endpoint in nhân_sự_pages else '' }}" id="nhanSuMgrMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_summary' %}active{% endif %}" href="{{ url_for('manager.get_department_employee_summary') }}">
+                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_summary' %}active{% endif %}"
+                   href="{{ url_for('manager.get_department_employee_summary') }}">
                     <i class="fas fa-chart-pie me-2"></i> Tổng quan phòng ban
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_list' %}active{% endif %}" href="{{ url_for('manager.get_department_employee_list') }}">
+                <a class="nav-link {% if request.endpoint == 'manager.get_department_employee_list' %}active{% endif %}"
+                   href="{{ url_for('manager.get_department_employee_list') }}">
                     <i class="fas fa-users me-2"></i> Danh sách nhân viên
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'manager.render_team_page' %}active{% endif %}"
+                   href="{{ url_for('manager.render_team_page') }}">
+                    <i class="fas fa-sitemap me-2"></i> Danh sách Team
                 </a>
             </li>
         </ul>
     </div>
 </li>
 
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý nghỉ phép</li>
+{# --- Phân tích & Báo cáo --- #}
 <li class="nav-item">
-    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#nghiPhepMenu"
-       role="button"
-       aria-expanded="{{ 'true' if request.endpoint in nghỉ_phép_pages else 'false' }}"
-       aria-controls="nghiPhepMenu">
-        <span><i class="fas fa-calendar-check me-2"></i> Nghỉ phép</span>
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in phân_tích_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#analyticsMgrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in phân_tích_pages else 'false' }}"
+       aria-controls="analyticsMgrMenu">
+        <span><i class="fas fa-chart-bar me-2"></i> Phân tích & Báo cáo</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in nghỉ_phép_pages else '' }}" id="nghiPhepMenu">
+    <div class="collapse {{ 'show' if request.endpoint in phân_tích_pages else '' }}" id="analyticsMgrMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leave_summary' %}active{% endif %}" href="{{ url_for('leave.get_manager_leave_summary') }}">
+                <a class="nav-link {% if request.endpoint == 'manager.render_team_analytics' %}active{% endif %}"
+                   href="{{ url_for('manager.render_team_analytics') }}">
+                    <i class="fas fa-chart-line me-2"></i> Thống kê Team
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'manager.render_team_reports' %}active{% endif %}"
+                   href="{{ url_for('manager.render_team_reports') }}">
+                    <i class="fas fa-file-alt me-2"></i> Báo cáo Team
+                </a>
+            </li>
+        </ul>
+    </div>
+</li>
+
+{# --- Quản lý Hợp đồng --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Hợp đồng</li>
+<li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'contract.list_contracts' %}active{% endif %}"
+       href="{{ url_for('contract.list_contracts') }}">
+        <i class="fas fa-file-contract me-2"></i> Quản lý Hợp đồng
+    </a>
+</li>
+
+{# --- Quản lý nghỉ phép --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý nghỉ phép</li>
+<li class="nav-item">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#nghiPhepMgrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in nghỉ_phép_pages else 'false' }}"
+       aria-controls="nghiPhepMgrMenu">
+        <span><i class="fas fa-calendar-check me-2"></i> Nghỉ phép Team</span>
+        <i class="fas fa-chevron-down small"></i>
+    </a>
+    <div class="collapse {{ 'show' if request.endpoint in nghỉ_phép_pages else '' }}" id="nghiPhepMgrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leave_summary' %}active{% endif %}"
+                   href="{{ url_for('leave.get_manager_leave_summary') }}">
                     <i class="fas fa-chart-line me-2"></i> Thống kê nghỉ phép
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leaves' %}active{% endif %}" href="{{ url_for('leave.get_manager_leaves') }}">
+                <a class="nav-link {% if request.endpoint == 'leave.get_manager_leaves' %}active{% endif %}"
+                   href="{{ url_for('leave.get_manager_leaves') }}">
                     <i class="fas fa-tasks me-2"></i> Tất cả đơn của team
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'history.get_team_timeline' %}active{% endif %}" href="{{ url_for('history.get_team_timeline') }}">
+                <a class="nav-link {% if request.endpoint in ['leave.render_manager_pending_list','leave.render_manager_approval_list'] %}active{% endif %}"
+                   href="{{ url_for('leave.render_manager_pending_list') }}">
+                    <i class="fas fa-check-circle me-2"></i> Duyệt đơn nghỉ phép
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'history.get_team_timeline' %}active{% endif %}"
+                   href="{{ url_for('history.get_team_timeline') }}">
                     <i class="fas fa-users-viewfinder me-2"></i> Lịch sử nhóm
                 </a>
             </li>
@@ -81,27 +116,27 @@
     </div>
 </li>
 
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Quản lý Chấm công</li>
-<!-- Team Attendance Management -->
+{# --- Quản lý Chấm công Team --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Quản lý Chấm công</li>
 <li class="nav-item">
-    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in quản_lý_chấm_công_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#quanLyChamCongMenu"
-       role="button"
-       aria-expanded="{{ 'true' if request.endpoint in quản_lý_chấm_công_pages else 'false' }}"
-       aria-controls="quanLyChamCongMenu">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in chấm_công_team_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#attendanceTeamMgrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in chấm_công_team_pages else 'false' }}"
+       aria-controls="attendanceTeamMgrMenu">
         <span><i class="fas fa-user-check me-2"></i> Chấm công Team</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in quản_lý_chấm_công_pages else '' }}" id="quanLyChamCongMenu">
+    <div class="collapse {{ 'show' if request.endpoint in chấm_công_team_pages else '' }}" id="attendanceTeamMgrMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_team_attendance' %}active{% endif %}" href="{{ url_for('attendance.render_team_attendance') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_team_attendance' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_team_attendance') }}">
                     <i class="fas fa-calendar-alt me-2"></i> Bảng chấm công team
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_manager_ot_approval' %}active{% endif %}" href="{{ url_for('attendance.render_manager_ot_approval') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_manager_ot_approval' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_manager_ot_approval') }}">
                     <i class="fas fa-check-double me-2"></i> Duyệt làm thêm giờ
                 </a>
             </li>
@@ -109,38 +144,39 @@
     </div>
 </li>
 
-
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Chấm công của tôi</li>
-<!-- Personal Attendance -->
+{# --- Chấm công cá nhân --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Chấm công của tôi</li>
 <li class="nav-item">
     <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in chấm_công_cá_nhân_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#chamCongCaNhanMenu"
-       role="button"
+       data-bs-toggle="collapse" href="#attendanceSelfMgrMenu" role="button"
        aria-expanded="{{ 'true' if request.endpoint in chấm_công_cá_nhân_pages else 'false' }}"
-       aria-controls="chamCongCaNhanMenu">
+       aria-controls="attendanceSelfMgrMenu">
         <span><i class="fas fa-clock me-2"></i> Chấm công cá nhân</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in chấm_công_cá_nhân_pages else '' }}" id="chamCongCaNhanMenu">
+    <div class="collapse {{ 'show' if request.endpoint in chấm_công_cá_nhân_pages else '' }}" id="attendanceSelfMgrMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_checkin_interface' %}active{% endif %}" href="{{ url_for('attendance.render_checkin_interface') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_checkin_interface' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_checkin_interface') }}">
                     <i class="fas fa-fingerprint me-2"></i> Check-in/Check-out
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_history' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_history') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_history' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_attendance_history') }}">
                     <i class="fas fa-history me-2"></i> Lịch sử chấm công
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_summary' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_summary') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_summary' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_attendance_summary') }}">
                     <i class="fas fa-calendar-alt me-2"></i> Bảng tổng hợp
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_overtime_request' %}active{% endif %}" href="{{ url_for('attendance.render_overtime_request') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_overtime_request' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_overtime_request') }}">
                     <i class="fas fa-business-time me-2"></i> Đơn làm thêm giờ
                 </a>
             </li>
@@ -148,121 +184,24 @@
     </div>
 </li>
 
-<li class="nav-item nav-heading">QUAN LY</li>
+{# --- Thôi việc Team --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Thôi việc</li>
 <li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-people"></i>
-        <span>Quan ly Nhan vien</span>
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in thôi_việc_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#resignationMgrMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in thôi_việc_pages else 'false' }}"
+       aria-controls="resignationMgrMenu">
+        <span><i class="fas fa-user-minus me-2"></i> Thôi việc (Team)</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-</li>
-<li class="nav-item">
-    <a class="nav-link {{ 'active' if request.path == url_for('contract.list_contracts') else '' }}" href="{{ url_for('contract.list_contracts') }}">
-        <i class="bi bi-file-earmark-text"></i>
-        <span>Quan ly Hop dong</span>
-    </a>
-</li>
-<li class="nav-item">
-    <a class="nav-link" href="#">
-        <i class="bi bi-calendar-check"></i>
-        <span>Duyet Don tu</span>
-    </a>
-</li>
-
-{% set leave_pages = [
-    'leave.render_manager_approval_list',
-    'leave.render_manager_pending_list'
-] %}
-
-<li class="sidebar-item has-sub {% if request.endpoint in leave_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-calendar-check"></i>
-        <span>QL Nghỉ phép (Team)</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in leave_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint in leave_pages %}active{% endif %}">
-            <a href="{{ url_for('leave.render_manager_pending_list') }}">Duyệt đơn nghỉ phép</a>
-        </li>
-    </ul>
-</li>
-
-{% set nhân_sự_pages = [
-    'manager.render_team_page'
-] %}
-{% set phân_tích_báo_cáo_pages = [
-    'manager.render_team_analytics',
-    'manager.render_team_reports'
-] %}
-{% set nghỉ_phép_pages = [
-    'leave.render_manager_approval_list',
-    'leave.render_manager_pending_list'
-] %}
-{% set chấm_công_pages = [
-    'attendance.render_team_attendance',
-    'attendance.render_manager_ot_approval'
-] %}
-
-
-<li class="sidebar-item has-sub {% if request.endpoint in nhân_sự_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-people-fill"></i>
-        <span>Nhân sự Team</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in nhân_sự_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'manager.render_team_page' %}active{% endif %}">
-            <a href="{{ url_for('manager.render_team_page') }}">Danh sách Team</a>
-        </li>
-    </ul>
-</li>
-
-<li class="sidebar-item has-sub {% if request.endpoint in phân_tích_báo_cáo_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-graph-up"></i>
-        <span>Phân tích & Báo cáo</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in phân_tích_báo_cáo_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'manager.render_team_analytics' %}active{% endif %}">
-            <a href="{{ url_for('manager.render_team_analytics') }}">Thống kê Team</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'manager.render_team_reports' %}active{% endif %}">
-            <a href="{{ url_for('manager.render_team_reports') }}">Báo cáo Team</a>
-        </li>
-    </ul>
-</li>
-
-<li class="sidebar-item has-sub {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-calendar-check"></i>
-        <span>Duyệt nghỉ phép</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint in nghỉ_phép_pages %}active{% endif %}">
-            <a href="{{ url_for('leave.render_manager_pending_list') }}">Danh sách đơn</a>
-        </li>
-    </ul>
-</li>
-
-<li class="sidebar-item has-sub {% if request.endpoint in chấm_công_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-clock-history"></i>
-        <span>QL Chấm công</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in chấm_công_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'attendance.render_team_attendance' %}active{% endif %}">
-            <a href="{{ url_for('attendance.render_team_attendance') }}">Bảng công team</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'attendance.render_manager_ot_approval' %}active{% endif %}">
-            <a href="{{ url_for('attendance.render_manager_ot_approval') }}">Duyệt đơn OT</a>
-        </li>
-    </ul>
-</li>
-<li class="sidebar-item has-sub {% if request.endpoint in thôi_việc_pages %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-person-x-fill"></i>
-        <span>Thôi việc (Team)</span>
-    </a>
-    <ul class="submenu {% if request.endpoint in thôi_việc_pages %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'resignation.render_propose_form' %}active{% endif %}">
-            <a href="{{ url_for('resignation.render_propose_form') }}">Đề xuất nghỉ việc</a>
-        </li>
-    </ul>
+    <div class="collapse {{ 'show' if request.endpoint in thôi_việc_pages else '' }}" id="resignationMgrMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'resignation.render_propose_form' %}active{% endif %}"
+                   href="{{ url_for('resignation.render_propose_form') }}">
+                    <i class="fas fa-file-alt me-2"></i> Đề xuất nghỉ việc
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>

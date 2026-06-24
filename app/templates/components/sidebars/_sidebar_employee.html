@@ -1,28 +1,42 @@
-{% set payroll_pages = ['payroll.complaint_form_page'] %}
-{% set leave_pages = ['leave.my_requests'] %}
+{# ===== MENU NHÂN VIÊN ===== #}
+{% set payroll_pages = ['payroll.complaint_form_page', 'payroll.render_my_payslips_page', 'payroll.render_salary_slip'] %}
 {% set attendance_pages = [
     'attendance.render_checkin_interface',
     'attendance.render_attendance_history',
     'attendance.render_attendance_summary',
     'attendance.render_overtime_request',
-    'attendance.render_qr_scanner' 
+    'attendance.render_qr_scanner'
 ] %}
+{% set leave_pages = [
+    'leave.render_request_form',
+    'leave.render_my_requests',
+    'leave.render_request_detail',
+    'leave.render_leave_calendar'
+] %}
+{% set resignation_pages = ['resignation.render_submit_form', 'resignation.render_my_list'] %}
+{% set contract_pages = ['contract.contract_detail', 'contract.renewal_request'] %}
 
-<!-- Payroll Menu -->
+{# --- Phiếu lương --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Phiếu lương</li>
 <li class="nav-item">
-    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in payroll_pages %}active{% endif %}" 
-       data-bs-toggle="collapse" 
-       href="#payrollMenu" 
-       role="button" 
-       aria-expanded="{{ 'true' if request.endpoint in payroll_pages else 'false' }}" 
-       aria-controls="payrollMenu">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in payroll_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#payrollEmpMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in payroll_pages else 'false' }}"
+       aria-controls="payrollEmpMenu">
         <span><i class="fas fa-wallet me-2"></i> Quản lý Lương</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in payroll_pages else '' }}" id="payrollMenu">
+    <div class="collapse {{ 'show' if request.endpoint in payroll_pages else '' }}" id="payrollEmpMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'payroll.complaint_form_page' %}active{% endif %}" href="{{ url_for('payroll.complaint_form_page') }}">
+                <a class="nav-link {% if request.endpoint in ['payroll.render_my_payslips_page','payroll.render_salary_slip'] %}active{% endif %}"
+                   href="{{ url_for('payroll.render_my_payslips_page') }}">
+                    <i class="fas fa-receipt me-2"></i> Phiếu lương của tôi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'payroll.complaint_form_page' %}active{% endif %}"
+                   href="{{ url_for('payroll.complaint_form_page') }}">
                     <i class="fas fa-exclamation-circle me-2"></i> Khiếu nại lương
                 </a>
             </li>
@@ -30,42 +44,45 @@
     </div>
 </li>
 
-<!-- Attendance Menu -->
-<li class="nav-header text-uppercase text-muted px-3 mt-3">Chấm công của tôi</li>
+{# --- Chấm công --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Chấm công của tôi</li>
 <li class="nav-item">
     <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in attendance_pages %}active{% endif %}"
-       data-bs-toggle="collapse"
-       href="#attendanceMenu"
-       role="button"
+       data-bs-toggle="collapse" href="#attendanceEmpMenu" role="button"
        aria-expanded="{{ 'true' if request.endpoint in attendance_pages else 'false' }}"
-       aria-controls="attendanceMenu">
+       aria-controls="attendanceEmpMenu">
         <span><i class="fas fa-clock me-2"></i> Chấm công</span>
         <i class="fas fa-chevron-down small"></i>
     </a>
-    <div class="collapse {{ 'show' if request.endpoint in attendance_pages else '' }}" id="attendanceMenu">
+    <div class="collapse {{ 'show' if request.endpoint in attendance_pages else '' }}" id="attendanceEmpMenu">
         <ul class="nav flex-column ms-3">
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_checkin_interface' %}active{% endif %}" href="{{ url_for('attendance.render_checkin_interface') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_checkin_interface' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_checkin_interface') }}">
                     <i class="fas fa-fingerprint me-2"></i> Check-in/Check-out
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_history' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_history') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_history' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_attendance_history') }}">
                     <i class="fas fa-history me-2"></i> Lịch sử chấm công
                 </a>
             </li>
-             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_summary' %}active{% endif %}" href="{{ url_for('attendance.render_attendance_summary') }}">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_attendance_summary' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_attendance_summary') }}">
                     <i class="fas fa-calendar-alt me-2"></i> Bảng tổng hợp
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_overtime_request' %}active{% endif %}" href="{{ url_for('attendance.render_overtime_request') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_overtime_request' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_overtime_request') }}">
                     <i class="fas fa-business-time me-2"></i> Đơn làm thêm giờ
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'attendance.render_qr_scanner' %}active{% endif %}" href="{{ url_for('attendance.render_qr_scanner') }}">
+                <a class="nav-link {% if request.endpoint == 'attendance.render_qr_scanner' %}active{% endif %}"
+                   href="{{ url_for('attendance.render_qr_scanner') }}">
                     <i class="fas fa-qrcode me-2"></i> Quét QR
                 </a>
             </li>
@@ -73,62 +90,92 @@
     </div>
 </li>
 
-<li class="nav-item nav-heading">HOP DONG</li>
+{# --- Nghỉ phép --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Nghỉ phép</li>
 <li class="nav-item">
-    <a class="nav-link" href="{{ url_for('contract.contract_detail', contract_id=current_user.id) }}">
-        <i class="bi bi-file-earmark-text"></i>
-        <span>Xem Hop Dong</span>
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in leave_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#leaveEmpMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in leave_pages else 'false' }}"
+       aria-controls="leaveEmpMenu">
+        <span><i class="fas fa-calendar-plus me-2"></i> Nghỉ phép</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-</li>
-<li class="nav-item">
-    <a class="nav-link {{ 'active' if request.path == url_for('contract.renewal_request') else '' }}" 
-       href="{{ url_for('contract.renewal_request') }}">
-        <i class="bi bi-pen"></i>
-        <span>Yeu cau Gia han</span>
-    </a>
+    <div class="collapse {{ 'show' if request.endpoint in leave_pages else '' }}" id="leaveEmpMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_request_form' %}active{% endif %}"
+                   href="{{ url_for('leave.render_request_form') }}">
+                    <i class="fas fa-plus me-2"></i> Tạo đơn nghỉ phép
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint in ['leave.render_my_requests','leave.render_request_detail'] %}active{% endif %}"
+                   href="{{ url_for('leave.render_my_requests') }}">
+                    <i class="fas fa-list me-2"></i> Lịch sử đơn của tôi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}"
+                   href="{{ url_for('leave.render_leave_calendar') }}">
+                    <i class="fas fa-calendar me-2"></i> Lịch nghỉ công ty
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
-<!-- Sidebar cho vai trò Nhân viên -->
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-calendar-plus"></i>
-        <span>Nghỉ phép</span>
+{# --- Hợp đồng --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Hợp đồng</li>
+<li class="nav-item">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in contract_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#contractEmpMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in contract_pages else 'false' }}"
+       aria-controls="contractEmpMenu">
+        <span><i class="fas fa-file-contract me-2"></i> Hợp đồng</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'leave' %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'leave.render_request_form' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_request_form') }}">Tạo đơn nghỉ phép</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint in ['leave.render_my_requests', 'leave.render_request_detail'] %}active{% endif %}">
-            <a href="{{ url_for('leave.render_my_requests') }}">Lịch sử đơn của tôi</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'leave.render_leave_calendar' %}active{% endif %}">
-            <a href="{{ url_for('leave.render_leave_calendar') }}">Lịch nghỉ công ty</a>
-        </li>
-    </ul>
+    <div class="collapse {{ 'show' if request.endpoint in contract_pages else '' }}" id="contractEmpMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'contract.contract_detail' %}active{% endif %}"
+                   href="{{ url_for('contract.contract_detail', contract_id=current_user.id) }}">
+                    <i class="fas fa-eye me-2"></i> Xem Hợp đồng
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'contract.renewal_request' %}active{% endif %}"
+                   href="{{ url_for('contract.renewal_request') }}">
+                    <i class="fas fa-pen me-2"></i> Yêu cầu Gia hạn
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>
 
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'resignation' %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-box-arrow-left"></i>
-        <span>Thôi việc</span>
+{# --- Thôi việc --- #}
+<li class="nav-header text-uppercase text-muted px-3 mt-3" style="font-size:0.7rem;">Thôi việc</li>
+<li class="nav-item">
+    <a class="nav-link d-flex justify-content-between align-items-center {% if request.endpoint in resignation_pages %}active{% endif %}"
+       data-bs-toggle="collapse" href="#resignationEmpMenu" role="button"
+       aria-expanded="{{ 'true' if request.endpoint in resignation_pages else 'false' }}"
+       aria-controls="resignationEmpMenu">
+        <span><i class="fas fa-sign-out-alt me-2"></i> Thôi việc</span>
+        <i class="fas fa-chevron-down small"></i>
     </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'resignation' %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint == 'resignation.render_submit_form' %}active{% endif %}">
-            <a href="{{ url_for('resignation.render_submit_form') }}">Nộp đơn nghỉ việc</a>
-        </li>
-        <li class="submenu-item {% if request.endpoint == 'resignation.render_my_list' %}active{% endif %}">
-            <a href="{{ url_for('resignation.render_my_list') }}">Xem đơn của tôi</a>
-        </li>
-    </ul>
-</li>
-<li class="sidebar-item has-sub {% if request.endpoint.split('.')[0] == 'payroll' %}active{% endif %}">
-    <a href="#" class='sidebar-link'>
-        <i class="bi bi-wallet2"></i>
-        <span>Phiếu lương</span>
-    </a>
-    <ul class="submenu {% if request.endpoint.split('.')[0] == 'payroll' %}active{% endif %}">
-        <li class="submenu-item {% if request.endpoint in ['payroll.render_my_payslips_page', 'payroll.render_salary_slip'] %}active{% endif %}">
-            <a href="{{ url_for('payroll.render_my_payslips_page') }}">Phiếu lương của tôi</a>
-        </li>
-    </ul>
+    <div class="collapse {{ 'show' if request.endpoint in resignation_pages else '' }}" id="resignationEmpMenu">
+        <ul class="nav flex-column ms-3">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'resignation.render_submit_form' %}active{% endif %}"
+                   href="{{ url_for('resignation.render_submit_form') }}">
+                    <i class="fas fa-file-alt me-2"></i> Nộp đơn nghỉ việc
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'resignation.render_my_list' %}active{% endif %}"
+                   href="{{ url_for('resignation.render_my_list') }}">
+                    <i class="fas fa-list me-2"></i> Xem đơn của tôi
+                </a>
+            </li>
+        </ul>
+    </div>
 </li>

@@ -1,92 +1,83 @@
 <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('home.home') }}">
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topNavbar" aria-controls="topNavbar" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topNavbar"
+            aria-controls="topNavbar" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
     </button>
-    
-    <div class="collapse navbar-collapse" id="topNavbar">
-        <!-- Các mục điều hướng bên trái (nếu có) -->
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <!-- Có thể thêm các mục menu chính ở đây -->
-        </ul>
 
-        <!-- Các mục điều hướng bên phải: Thông báo & Profile -->
+    <div class="collapse navbar-collapse" id="topNavbar">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0"></ul>
+
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
-            
+
             <!-- Dropdown Thông báo -->
             <li class="nav-item dropdown me-2">
-                <a class="nav-link" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <a class="nav-link position-relative" href="#" id="notificationDropdown" role="button"
+                   data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="bi bi-bell" style="font-size: 1.2rem;"></i>
-                    <!-- Badge đếm số thông báo chưa đọc -->
-                    <span class="badge bg-danger rounded-pill position-absolute top-0 start-50 translate-middle-y" id="unread-count" style="display: none;"></span>
+                    <span class="badge bg-danger rounded-pill position-absolute top-0 start-50 translate-middle-y"
+                          id="unread-count" style="display: none;"></span>
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="notificationDropdown" id="notification-list-dropdown" style="min-width: 350px;">
-                    <!-- Header -->
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2"
+                    aria-labelledby="notificationDropdown"
+                    id="notification-list-dropdown" style="min-width: 350px;">
                     <li class="d-flex justify-content-between align-items-center px-3 py-2">
                         <h6 class="dropdown-header mb-0 p-0">Thông báo</h6>
                         <a href="#" class="small text-primary" id="mark-all-as-read-link">Đánh dấu đã đọc tất cả</a>
                     </li>
                     <li><hr class="dropdown-divider my-0"></li>
-
-                    <!-- Danh sách thông báo (sẽ được JS chèn vào) -->
                     <div id="notification-items-container" style="max-height: 400px; overflow-y: auto;">
                         <li class="px-3 py-4 text-center text-muted">Đang tải...</li>
                     </div>
-
                     <li><hr class="dropdown-divider my-0"></li>
-                    <!-- Footer -->
                     <li class="text-center py-2">
-                        <a class="dropdown-item fw-bold" href="{{ url_for('notification.render_notification_center') }}">Xem tất cả thông báo</a>
+                        <a class="dropdown-item fw-bold"
+                           href="{{ url_for('notification.render_notification_center') }}">Xem tất cả thông báo</a>
                     </li>
                 </ul>
             </li>
 
-            <!-- Dropdown Profile người dùng -->
+            <!-- Dropdown Profile -->
             <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
+                   data-bs-toggle="dropdown" aria-expanded="false">
                     <div class="d-flex align-items-center">
                         <div class="avatar avatar-sm me-2">
-                            <img src="{{ g.user.avatar_url or url_for('static', filename='images/avatars/default.png') }}" alt="Avatar">
+                            <img src="{{ g.user.avatar_url or url_for('static', filename='images/avatars/default.png') }}"
+                                 alt="Avatar">
                         </div>
                         <span class="d-none d-lg-inline">{{ g.user.full_name }}</span>
                     </div>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                    <li><a class="dropdown-item" href="{{ url_for('personnel.get_my_profile') }}"><i class="bi bi-person me-2"></i>Hồ sơ của tôi</a></li>
-                    <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Cài đặt</a></li>
+                    <li>
+                        <a class="dropdown-item"
+                           href="{{ url_for('personnel.render_employee_profile', employee_id=session.get('user_id')) }}">
+                            <i class="bi bi-person me-2"></i>Hồ sơ của tôi
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('personnel.render_activity_history') }}">
+                            <i class="bi bi-clock-history me-2"></i>Lịch sử hoạt động
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('personnel.render_change_password') }}">
+                            <i class="bi bi-shield-lock me-2"></i>Đổi mật khẩu
+                        </a>
+                    </li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>Đăng xuất</a></li>
+                    <li>
+                        <form action="{{ url_for('auth.logout') }}" method="POST" style="display:inline;">
+                            <button type="submit" class="dropdown-item">
+                                <i class="bi bi-box-arrow-right me-2"></i>Đăng xuất
+                            </button>
+                        </form>
+                    </li>
                 </ul>
             </li>
+
         </ul>
     </div>
 </div>
-
-
-<!-- Dropdown Profile người dùng -->
-<li class="nav-item dropdown">
-    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-        <div class="d-flex align-items-center">
-            <div class="avatar avatar-sm me-2">
-                <img src="{{ g.user.avatar_url or url_for('static', filename='images/avatars/default.png') }}" alt="Avatar">
-            </div>
-            <span class="d-none d-lg-inline">{{ g.user.full_name }}</span>
-        </div>
-    </a>
-    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-        <li><a class="dropdown-item" href="{{ url_for('personnel.render_employee_profile', employee_id=session.get('user_id')) }}">
-    <i class="bi bi-person me-2"></i>Hồ sơ của tôi
-</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('personnel.render_activity_history') }}"><i class="bi bi-clock-history me-2"></i>Lịch sử hoạt động</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('personnel.render_change_password') }}"><i class="bi bi-shield-lock me-2"></i>Đổi mật khẩu</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li>
-    <form action="{{ url_for('auth.logout') }}" method="POST" style="display:inline;">
-        <button type="submit" class="dropdown-item">
-            <i class="bi bi-box-arrow-right me-2"></i>Đăng xuất
-        </button>
-    </form>
-</li>
-    </ul>
-</li>
