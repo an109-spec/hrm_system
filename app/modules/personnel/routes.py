@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template, abort, Blueprint
 
 from app.modules.personnel import personnel_bp
 from app.modules.personnel.profile_service import ProfileService
@@ -29,13 +29,23 @@ def get_my_profile():
     Lấy thông tin hồ sơ cá nhân của chính mình.
     Tất cả actor đều có quyền truy cập.
     """
+    wants_json = 'application/json' in request.accept_mimetypes
     try:
         profile = ProfileService.get_profile(user_id=g.user.id)
-        return jsonify({"data": profile}), 200
+        if wants_json:
+            return jsonify({"data": profile}), 200
+        else:
+            return render_template("modules/personnel/profile.html", title="Hồ sơ của tôi", profile=profile)
     except NotFoundError as e:
-        return swal_error(title="Không tìm thấy", message=str(e), status_code=404)
+        if wants_json:
+            return swal_error(title="Không tìm thấy", message=str(e), status_code=404)
+        else:
+            abort(404, description=str(e))
     except Exception as e:
-        return swal_error(message=str(e), status_code=500)
+        if wants_json:
+            return swal_error(message=str(e), status_code=500)
+        else:
+            abort(500, description=str(e))
 
 
 @personnel_bp.route("/profile/<int:employee_id>", methods=["GET"])
@@ -411,20 +421,12 @@ def delete_dependent_by_id(employee_id, dependent_id):
     except Exception as e:
         return swal_error(message=str(e), status_code=500)
     
-from flask import Blueprint, g, jsonify, render_template
-from app.common.security.decorators import auth_required
-
-@personnel_bp.route("/profile")
+@personnel_bp.route("/profile/edit/<int:employee_id>") # Cập nhật route để nhận ID
 @auth_required
-def render_my_profile():
-    """Render trang hồ sơ cá nhân của người dùng đang đăng nhập."""
-    return render_template("modules/personnel/profile.html", title="Hồ sơ của tôi")
-
-@personnel_bp.route("/profile/edit")
-@auth_required
-def render_edit_profile():
-    """Render trang chỉnh sửa hồ sơ cá nhân."""
-    return render_template("modules/personnel/edit_profile.html", title="Chỉnh sửa hồ sơ")
+def render_edit_profile(employee_id):
+    return render_template("modules/personnel/edit_profile.html", 
+                           title="Chỉnh sửa hồ sơ", 
+                           employee_id=employee_id)
 
 @personnel_bp.route("/profile/change-password")
 @auth_required
@@ -456,6 +458,21 @@ def render_employee_list():
     return render_template("modules/personnel/employee_list.html", title="Danh sách nhân viên")
 
 @personnel_bp.route("/employees/<int:employee_id>")
+@auth_required # Nên thêm decorator này để đảm bảo chỉ người đã đăng nhập mới xem được
 def render_employee_profile(employee_id):
     """Render trang hồ sơ của một nhân viên cụ thể."""
-    return render_template("modules/personnel/profile.html", title="Hồ sơ nhân viên", employee_id=employee_id)
+    try:
+        # Gọi service để lấy dữ liệu profile
+        profile = ProfileService.get_profile(employee_id=employee_id)
+        
+        # Truyền biến profile vào template
+        return render_template(
+            "modules/personnel/profile.html", 
+            title="Hồ sơ nhân viên", 
+            employee_id=employee_id, 
+            profile=profile
+        )
+    except NotFoundError:
+        abort(404, description="Không tìm thấy nhân viên này.")
+    except Exception as e:
+        abort(500, description=str(e))

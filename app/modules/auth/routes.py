@@ -130,19 +130,8 @@ def dashboard_redirect():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """Xóa JWT cookie, hủy phiên làm việc và chuyển hướng về trang đăng nhập."""
     session.clear()
-    response = make_response(
-        jsonify({
-            "swal": {
-                "icon": "success",
-                "title": "Đã đăng xuất",
-                "text": "Hẹn gặp lại bạn!",
-            },
-            "redirect_url": url_for("auth.login_page"),
-        }),
-        200,
-    )
+    response = make_response(redirect(url_for("auth.login_page")))
     unset_jwt_cookies(response)
     return response
 

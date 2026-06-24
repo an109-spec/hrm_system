@@ -17,7 +17,6 @@
 {% block content %}
 <nav aria-label="breadcrumb" class="breadcrumb-nav mb-3">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="{{ url_for('personnel.get_my_profile') }}">Hồ sơ</a></li>
     <li class="breadcrumb-item active">Chỉnh sửa</li>
   </ol>
 </nav>
@@ -93,9 +92,9 @@
 
   <!-- Actions -->
   <div class="d-flex gap-3 justify-content-end">
-    <a href="{{ url_for('personnel.get_my_profile') }}" class="btn btn-outline-secondary px-4">
-      <i class="fas fa-arrow-left me-1"></i>Quay lại
-    </a>
+<a href="{{ url_for('personnel.render_employee_profile', employee_id=employee_id) }}" class="btn btn-outline-secondary px-4">
+    Quay lại hồ sơ
+</a>
     <button type="submit" class="btn btn-primary btn-save" id="btnSave">
       <i class="fas fa-save me-1"></i>Lưu thay đổi
     </button>
