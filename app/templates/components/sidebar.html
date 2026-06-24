@@ -11,10 +11,10 @@
         {# Hiển thị menu theo role — dùng g.user thay vì current_user #}
         {% if g.user and g.user.role %}
 
-            {% if g.user.role.name == 'Employee' %}
+            {% if g.user.role.name == 'EMPLOYEE' %}
                 {% include 'components/sidebars/_sidebar_employee.html' %}
 
-            {% elif g.user.role.name == 'Manager' %}
+            {% elif g.user.role.name == 'MANAGER' %}
                 {% include 'components/sidebars/_sidebar_manager.html' %}
 
             {% elif g.user.role.name == 'HR' %}
