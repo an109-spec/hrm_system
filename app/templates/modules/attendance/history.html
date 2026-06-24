@@ -19,7 +19,7 @@
     <!-- Filter Bar -->
     <div class="att-filter-bar">
         <!-- HR / Manager: co the loc theo nhan vien -->
-        {% if current_user and current_user.role.name in ['HR', 'ADMIN', 'MANAGER'] %}
+        {% if current_user.is_authenticated and current_user.role.name in ['HR', 'ADMIN', 'MANAGER'] %}
         <div>
             <label class="form-label small mb-1 fw-semibold">Ma nhan vien</label>
             <input type="number" id="employee_id_filter" class="form-control form-control-sm"

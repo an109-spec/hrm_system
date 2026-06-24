@@ -539,11 +539,15 @@ def render_detail(request_id):
     return render_template("modules/resignation/detail.html", title="Chi tiết đơn nghỉ việc", request_id=request_id)
 
 @resignation_bp.route("/propose")
+@auth_required
+@role_required(RoleName.MANAGER)
 def render_propose_form():
     """Render form cho Manager đề xuất cho nhân viên nghỉ việc."""
     return render_template("modules/resignation/propose_form.html", title="Đề xuất cho nhân viên nghỉ việc")
 
 @resignation_bp.route("/all-requests")
+@auth_required
+@role_required(RoleName.MANAGER, RoleName.HR, RoleName.ADMIN)
 def render_list_all():
     """Render trang quản lý tất cả các đơn xin nghỉ việc cho HR/Admin."""
     return render_template("modules/resignation/list_all.html", title="Quản lý đơn thôi việc")

@@ -16,7 +16,7 @@
         </h4>
         <p class="text-muted mb-0 small">Quản lý toàn bộ hợp đồng lao động trong hệ thống</p>
     </div>
-    {% if current_user.role.name == 'ADMIN' %}
+    {% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContractModal">
         <i class="fas fa-plus me-1"></i>Tạo hợp đồng
     </button>
@@ -151,7 +151,7 @@
 </div>
 
 {# ── Create Modal (Admin only) ── #}
-{% if current_user.role.name == 'ADMIN' %}
+{% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}
 <div class="modal fade" id="createContractModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -206,7 +206,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+{% if current_user.is_authenticated %}<script>document.body.dataset.role = "{{ current_user.role.name }}";</script>{% endif %}
 <script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/modules/contract/Contract_list.js') }}"></script>
 {% endblock %}

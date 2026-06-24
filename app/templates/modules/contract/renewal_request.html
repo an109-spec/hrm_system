@@ -168,7 +168,7 @@
             </div>
             <div class="d-flex gap-3">
                 <div>
-                    <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;color:#6b7280;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem">3</div>
+                    <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;color:#6b7280;display:flex;align-items-center;justify-content:center;font-weight:700;font-size:.85rem">3</div>
                 </div>
                 <div>
                     <div class="fw-semibold small text-muted">Thông báo kết quả</div>
@@ -187,7 +187,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% if current_user.is_authenticated %}
 <script>document.body.dataset.role = "{{ current_user.role.name }}";</script>
+{% endif %}
 <script src="{{ url_for('static', filename='js/modules/contract/Contract_api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/modules/contract/Renewal_request.js') }}"></script>
 {% endblock %}

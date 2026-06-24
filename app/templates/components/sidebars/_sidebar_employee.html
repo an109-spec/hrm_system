@@ -136,12 +136,14 @@
     </a>
     <div class="collapse {{ 'show' if request.endpoint in contract_pages else '' }}" id="contractEmpMenu">
         <ul class="nav flex-column ms-3">
+            {% if current_user.is_authenticated %}
             <li class="nav-item">
                 <a class="nav-link {% if request.endpoint == 'contract.contract_detail' %}active{% endif %}"
                    href="{{ url_for('contract.contract_detail', contract_id=current_user.id) }}">
                     <i class="fas fa-eye me-2"></i> Xem Hợp đồng
                 </a>
             </li>
+            {% endif %}
             <li class="nav-item">
                 <a class="nav-link {% if request.endpoint == 'contract.renewal_request' %}active{% endif %}"
                    href="{{ url_for('contract.renewal_request') }}">
